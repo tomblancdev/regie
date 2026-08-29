@@ -99,13 +99,34 @@ class FakeHA(HomeAssistant):
                 # + a section of advanced options: a required key, even empty
                 # (Home Assistant 2026.8's broker form, read live 2026-08-29)
                 "data_schema": [{"name": f} for f in fields]
-                + [{"name": "other_settings", "type": "expandable", "schema": []}],
+                + [{"name": "protocol", "required": True, "default": "5"}]
+                + [
+                    {
+                        "name": "other_settings",
+                        "type": "expandable",
+                        "required": True,
+                        "schema": [
+                            {"name": "set_client_cert", "required": True},
+                            {"name": "set_ca_cert", "required": True},
+                            {"name": "transport", "required": True, "default": "tcp"},
+                            {"name": "client_id", "optional": True},
+                        ],
+                    }
+                ],
             }
         if path.startswith("/api/config/config_entries/flow/"):
             fid = path.rsplit("/", 1)[1]
             domain = self.flows[fid]["handler"]
-            if "other_settings" not in body:
+            section = body.get("other_settings")
+            if section is None or body.get("protocol") is None:
                 return 400, {"errors": {"other_settings": "required key not provided"}}
+            missing = [
+                k for k in ("set_client_cert", "set_ca_cert", "transport") if k not in section
+            ]
+            if missing:
+                return 400, {
+                    "errors": {"base": [f"required key not provided @ {k}" for k in missing]}
+                }
             if body.get("broker") != "127.0.0.1":
                 return 200, {"type": "form", "flow_id": fid, "errors": {"base": "cannot_connect"}}
             self.entries.setdefault(domain, []).append({"domain": domain, "data": body})
@@ -212,7 +233,13 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     }
     hall = next(a for a in ha.areas if a["aliases"] == ["hall"])
     assert hall["name"] == "Entrée" and hall["floor_id"] == ha.floors[0]["floor_id"]
-    assert ha.entries["mqtt"][0]["data"]["username"] == "home"
+    entry = ha.entries["mqtt"][0]["data"]
+    assert entry["username"] == "home" and entry["protocol"] == "5"
+    assert entry["other_settings"] == {
+        "set_client_cert": False,
+        "set_ca_cert": "off",
+        "transport": "tcp",
+    }
     assert ha.backup_cfg["schedule"] == {"recurrence": "daily", "time": "04:00", "days": []}
     assert ha.backup_cfg["create_backup"]["password"] == "example-backup-password"
     assert summary(steps, False) == f"apply: {len(steps)} changed, 0 ok"

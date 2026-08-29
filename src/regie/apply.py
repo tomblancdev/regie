@@ -33,6 +33,23 @@ class Step:
         return f"  {mark} {self.name}: {self.detail}"
 
 
+def _fill_form(schema: list[dict], answers: dict) -> dict:
+    """A form's body: the answers for the fields it asks, the form's own
+    `default` for what is not answered, and every SECTION (an expandable block
+    of advanced options - a required key even when nothing in it is) filled
+    the same way from its own schema."""
+    body: dict = {}
+    for f in schema:
+        name = f["name"]
+        if f.get("type") == "expandable":
+            body[name] = _fill_form(f.get("schema", []), answers.get(name) or {})
+        elif name in answers:
+            body[name] = answers[name]
+        elif "default" in f:
+            body[name] = f["default"]
+    return body
+
+
 class Conductor:
     def __init__(
         self, house: House, secrets: dict, root: Path, ha: HomeAssistant, check: bool = False
@@ -287,14 +304,9 @@ class Conductor:
                 break
             schema = flow.get("data_schema") or []
             fields = [f["name"] for f in schema]
-            body = {k: v for k, v in answers.items() if k in fields}
-            if fields and not body:
+            body = _fill_form(schema, answers)
+            if fields and not any(k in answers for k in fields):
                 raise HouseError(f"{domain}: its form asks {fields}; nothing in home.yml answers")
-            # a SECTION of the form (an expandable block of advanced options)
-            # is a required key even when nothing in it is: sent empty
-            for f in schema:
-                if f.get("type") == "expandable" and f["name"] not in body:
-                    body[f["name"]] = {}
             status, flow = self.ha.post(f"/api/config/config_entries/flow/{flow['flow_id']}", body)
             if status != 200:
                 raise HouseError(f"{domain}: {status} {flow} — the form asked {fields}")
@@ -314,6 +326,9 @@ class Conductor:
                 "port": mqtt.get("port", 1883),
                 "username": "home",
                 "password": self.secrets["mqtt_password_home"],
+                # the form's advanced section, the two keys it requires with no
+                # default (Home Assistant 2026.8): no client certificate, no CA
+                "other_settings": {"set_client_cert": False, "set_ca_cert": "off"},
             },
             "the broker on the loopback, user home",
         )
