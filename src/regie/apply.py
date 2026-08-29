@@ -218,10 +218,30 @@ class Conductor:
                     level=f.get("level"),
                 )
                 floor_ids[f["id"]] = made["floor_id"]
-        areas = {a: r for r in ws.call("config/area_registry/list") for a in r.get("aliases", [])}
+        live_areas = ws.call("config/area_registry/list")
+        areas = {a: r for r in live_areas for a in r.get("aliases", [])}
+        # Home Assistant's own first-boot areas (Salon, Cuisine, Chambre in
+        # French...) carry no alias: one whose name matches a house area is
+        # ADOPTED - aliased and floored - never duplicated by name
+        unnamed = {r["name"].casefold(): r for r in live_areas if not r.get("aliases")}
+        house_ids = {a["id"] for a in self.house.areas}
         for a in self.house.areas:
             live = areas.get(a["id"])
             floor_id = floor_ids.get(a.get("floor") or "")
+            if not live and a["label"].casefold() in unnamed:
+                found = unnamed.pop(a["label"].casefold())
+                self.step(
+                    f"area {a['id']}", "changed", f"adopt {found['name']} ({found['area_id']})"
+                )
+                if not self.check:
+                    ws.call(
+                        "config/area_registry/update",
+                        area_id=found["area_id"],
+                        name=a["label"],
+                        aliases=[a["id"]],
+                        floor_id=floor_id,
+                    )
+                continue
             if live:
                 if live["name"] != a["label"] or (live.get("floor_id") or None) != floor_id:
                     self.step(f"area {a['id']}", "changed", f"update {a['label']}")
@@ -241,6 +261,13 @@ class Conductor:
                 if floor_id:
                     payload["floor_id"] = floor_id
                 ws.call("config/area_registry/create", **payload)
+        # what the brain has that the house does not name: reported, never removed
+        for r in live_areas:
+            alias = next((x for x in r.get("aliases", []) if x in house_ids), None)
+            if alias is None:
+                self.step(
+                    f"area ({r['area_id']})", "ok", f"{r['name']} — not in home.yml, left alone"
+                )
 
     def config_entry(self, domain: str, answers: dict, label: str) -> None:
         status, entries = self.ha.get(f"/api/config/config_entries/entry?domain={domain}")

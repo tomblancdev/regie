@@ -274,3 +274,20 @@ def test_a_form_the_house_cannot_answer_is_a_fault(witness, secrets, tmp_path):
 def test_missing_secrets_are_named(witness, tmp_path):
     with pytest.raises(HouseError, match="owner_password"):
         apply(witness, {}, tmp_path, FakeHA(), check=False)
+
+
+def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, tmp_path):
+    ha = FakeHA()
+    # what a French first boot leaves behind: three areas, no alias
+    for name in ("Salon", "Cuisine", "Chambre"):
+        ha.areas.append({"area_id": name.lower(), "name": name, "aliases": [], "floor_id": None})
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["area living"] == "changed"
+    living = next(a for a in ha.areas if a["area_id"] == "salon")
+    assert living["aliases"] == ["living"] and living["name"] == "Salon"
+    assert living["floor_id"] == ha.floors[0]["floor_id"]
+    assert [a for a in ha.areas if a["name"] == "Salon"] == [living]  # adopted, not duplicated
+    assert st["area (cuisine)"] == "ok" and st["area (chambre)"] == "ok"  # reported, left alone
+    again = apply(witness, secrets, tmp_path, ha, check=False)
+    assert set(states(again).values()) == {"ok"}
