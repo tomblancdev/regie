@@ -1,12 +1,18 @@
 # The config tree every profile renders — the same brain whatever the host.
-# `each` renders one file per item (coordinators | areas); `keep` writes a
-# file once and never overwrites it (the UI's sketchpad); `mode` is for the
+# `each` renders one file per item (coordinators | areas); `mode` is for the
 # files that hold a secret.
+#
+# automations.yaml / scenes.yaml / scripts.yaml are the files Home Assistant's
+# UI editor writes into. They are rendered EMPTY at every render: an
+# automation is a package (a file from home.yml or a pack), which the UI shows
+# read-only by Home Assistant's own rule; a draft saved in the UI works until
+# the next render, then it is gone. The rule with no exception, and no button
+# to remove.
 templates:
   - { src: home-assistant/configuration.yaml.j2, dst: home-assistant/configuration.yaml }
-  - { src: home-assistant/automations.yaml.j2, dst: home-assistant/automations.yaml, keep: true }
-  - { src: home-assistant/scenes.yaml.j2, dst: home-assistant/scenes.yaml, keep: true }
-  - { src: home-assistant/scripts.yaml.j2, dst: home-assistant/scripts.yaml, keep: true }
+  - { src: home-assistant/automations.yaml.j2, dst: home-assistant/automations.yaml }
+  - { src: home-assistant/scenes.yaml.j2, dst: home-assistant/scenes.yaml }
+  - { src: home-assistant/scripts.yaml.j2, dst: home-assistant/scripts.yaml }
   - { src: home-assistant/secrets.yaml.j2, dst: home-assistant/secrets.yaml, mode: "0600" }
   - { src: home-assistant/dashboards/phone.yaml.j2, dst: home-assistant/dashboards/phone.yaml }
   - { src: mosquitto/mosquitto.conf.j2, dst: mosquitto/config/mosquitto.conf }
@@ -16,3 +22,14 @@ templates:
   - { src: zigbee2mqtt/devices.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/devices.yaml", each: coordinators }
   - { src: zigbee2mqtt/groups.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/groups.yaml", each: coordinators }
   - { src: zigbee2mqtt/secret.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/secret.yaml", each: coordinators, mode: "0600" }
+
+# Custom components the brain needs, pinned by tag AND digest: `regie up`
+# fetches one when the house asks for it (the OIDC door -> auth_oidc) and
+# lays it under home-assistant/custom_components/<domain>. A bump here is a
+# release of the product; a house never edits this.
+components:
+  auth_oidc:
+    when: oidc                       # the home.yml block that asks for it
+    version: v1.2.1
+    url: "https://github.com/christiaangoossens/hass-oidc-auth/releases/download/{version}/hass-oidc-auth.zip"
+    sha256: e5badaaacaa63cfd6fe733924a05e76d75058836190398598fb24de57cd47ccd

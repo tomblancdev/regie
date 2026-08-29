@@ -15,6 +15,13 @@ profile: ct
 packs: [lighting, chalet]
 paths:
   house_packs: packs
+# the brain's own owner: the break-glass login, created by `regie apply` at
+# the first boot (its password is the secret owner_password)
+owner: { username: gardien, label: Gardien }
+# Home Assistant's own backup, scheduled by `regie apply` (encrypted with backup_password)
+backup: { time: "04:00", copies: 7 }
+# long-lived tokens the house's machines need (minted once, kept root-only on the brain)
+tokens: [scraper]
 proxy:
   trusted: [192.0.2.2]
 oidc:
@@ -28,6 +35,9 @@ zigbee:
     - { id: main, thing: coordinator_main, port: 6638, adapter: zstack }
 mqtt:
   host: 192.0.2.5
+floors:
+  - { id: ground, label: Rez-de-chaussée, level: 0 }
+  - { id: upstairs, label: Étage, level: 1 }
 areas:
   - { id: hall, label: Entrée, floor: ground }
   - { id: living, label: Salon, floor: ground }

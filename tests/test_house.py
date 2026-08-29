@@ -47,6 +47,8 @@ def test_mqtt_users_and_secret_names(witness):
     assert users["zigbee2mqtt_main"] == ["zigbee2mqtt/#", "homeassistant/#"]
     assert users["kitchen_energy"] == ["kitchen_energy/#", "homeassistant/+/kitchen_energy/#"]
     assert set(witness.secret_names()) == {
+        "owner_password",
+        "backup_password",
         "mqtt_password_home",
         "mqtt_password_zigbee2mqtt_main",
         "mqtt_password_kitchen_energy",

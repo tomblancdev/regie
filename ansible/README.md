@@ -8,7 +8,7 @@ Those are the fleet's own roles, beside these.
 | Role | Does | Status |
 |---|---|---|
 | [`engine`](roles/engine) | installs the CLI on the brain's host, in a venv, from this collection's own tag | 0.1 |
-| [`brain`](roles/brain) | hands `home.yml` + the secret values to the engine on the host: `check` → `render` into the root → `up` → `apply` | contract; lands with 0.2 |
+| [`brain`](roles/brain) | hands `home.yml` (+ the house's own files) + the secret values to the engine on the host: `check` → `render` into the root → `up` → `apply`; `changed` read from the engine's counts, no secret logged | 0.2 |
 
 ```yaml
 - hosts: home

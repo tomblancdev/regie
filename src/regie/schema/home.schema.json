@@ -94,8 +94,63 @@
         "house_packs": {
           "type": "string",
           "description": "a directory of the house's own packs, relative to home.yml"
+        },
+        "units_dir": {
+          "type": "string",
+          "description": "where the host's units go (`regie up`); the profile's default otherwise"
         }
       }
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the brain's own owner account — the break-glass login that needs no provider; its password is the secret `owner_password`. Created by `regie apply` at the first boot (Home Assistant's onboarding), never by a person at a screen.",
+      "properties": {
+        "username": {
+          "type": "string",
+          "default": "owner"
+        },
+        "label": {
+          "type": "string",
+          "default": "Owner"
+        }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Home Assistant's own backup, scheduled by `regie apply` (encrypted with the secret `backup_password`)",
+      "properties": {
+        "time": {
+          "type": "string",
+          "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+          "default": "04:00",
+          "description": "local time of the nightly backup"
+        },
+        "copies": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 7,
+          "description": "how many to keep"
+        }
+      }
+    },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "long-lived access tokens the house's own machines need (a scraper, an automation that calls the API) — minted once by `regie apply`, kept root-only under <root>/.regie/tokens/<name>, never printed"
+    },
+    "floors": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/floor"
+      },
+      "description": "the floors the areas name (optional: a floor an area names without a line here is created with its id as its name)"
     },
     "pins": {
       "type": "object",
@@ -159,6 +214,14 @@
               "description": "the provider's group that lets a person in"
             }
           }
+        },
+        "features": {
+          "type": "object",
+          "description": "the component's `features:` block, passed as is (automatic_person_creation, include_groups_scope, default_redirect, ...)"
+        },
+        "claims": {
+          "type": "object",
+          "description": "the component's `claims:` block, passed as is (display_name, username, groups)"
         }
       }
     },
@@ -234,6 +297,26 @@
     "mac": {
       "type": "string",
       "pattern": "^([0-9a-f]{2}:){5}[0-9a-f]{2}$"
+    },
+    "floor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "description": "0 = the ground floor; the UI sorts by it"
+        }
+      }
     },
     "area": {
       "type": "object",

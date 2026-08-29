@@ -38,9 +38,9 @@ prints in the family's words in any house.
 | `regie render home.yml --out DIR` | writes the units (the profile's) and the config tree (the base's and the packs'): Home Assistant's `configuration.yaml`, packages and dashboard, Mosquitto's conf/ACL/passwd, one Zigbee2MQTT instance per radio with its devices and room groups. Marks what it writes, prunes what the house no longer names, never touches what it did not write; files that hold a secret are `0600` | 0.1 |
 | `regie mint home.yml` | writes every secret the house needs and does not have yet (a Zigbee network key, the broker's passwords…) — into *your* store, whatever it is | 0.1 |
 | `regie init DIR` | a starter house and its secrets, in an empty directory | 0.1 |
-| `regie up` | starts the rendered brain on this host (the profile's runtime) | 0.2 |
-| `regie apply` | **the conductor**: what only the APIs can set — onboarding, tokens, the integrations' config entries, the registries, Zigbee names/groups/bindings, the backup schedule. Declarative, idempotent, keyed on IEEE/MAC/unique_id; a plan under `--check` | 0.2 |
-| `regie backup` / `restore` / `doctor` | Home Assistant's own backup through its API; the brain's health, the pins against the tested ones, what drifted | 0.2 |
+| `regie up home.yml` | the rendered brain running on this host (the profile's runtime): units placed, images pulled when absent, a service restarted when its unit or its files changed, the pinned custom components fetched and verified by digest; `--check` prints the plan | 0.2 |
+| `regie apply home.yml` | **the conductor**: what only the API can set — the first boot (the owner, analytics off), the long-lived tokens the house names, floors and areas, the MQTT integration, the backup schedule. Declarative, idempotent, keyed on names that survive a rebuild; `--check` prints the plan. Zigbee names/groups/bindings and the things' integrations land with the walk | 0.2 |
+| `regie backup` / `restore` / `doctor` | Home Assistant's own backup through its API; the brain's health, the pins against the tested ones, what drifted | 0.3 |
 | `regie pair --room <area>` | **the walk**: open the join window, reset each thing in the room, watch its row appear — the room is the session, the kind is the thing's own interview, the name is generated, the room's remotes bind to the room's group | 0.3 |
 | `regie suggest` | the mesh's opinion on rooms, from link quality — suggests, never assigns | 0.3 |
 
@@ -51,7 +51,7 @@ manager, a `.env` — the house's business.
 ## Try it on the witness house
 
 ```sh
-pip install git+https://github.com/tomblancdev/regie@v0.1.0
+pip install git+https://github.com/tomblancdev/regie@v0.2.0
 regie check  examples/maison-temoin/home.yml --secrets examples/maison-temoin/secrets.example.yml
 regie render examples/maison-temoin/home.yml --secrets examples/maison-temoin/secrets.example.yml --out /tmp/brain
 ```
@@ -72,27 +72,28 @@ documentation reserves: it describes nowhere.
 
 1. `regie init` (or copy the witness), edit `home.yml`: the rooms, the
    people, the radio's address, the door (`oidc:` if you have a provider —
-   without it, Home Assistant's own login), the packs.
+   without it, Home Assistant's own login), the owner account, the packs.
 2. `regie mint` → put the secrets in your store.
 3. `regie render --out /srv/home` on the host, `regie up` → an empty brain
    with its units, its broker, its Zigbee instance. `regie apply` → its
    people, its integrations, its dashboards.
 4. `regie pair --room living` → walk the room; the rows appear; the lights
    are back.
-5. Every later change is a line in `home.yml`, a `render`, an `apply`.
-   Drafts made in the UI live in `automations.yaml`, which the engine wrote
-   once and never touches; what is worth keeping becomes a package.
+5. Every later change is a line in `home.yml`, a `render`, an `up`, an
+   `apply`. Automations are packages, read-only in the UI by Home
+   Assistant's own rule; `automations.yaml` is rendered empty every time —
+   a draft saved there from the UI lives until the next render.
 
 A **fleet** runs the same verbs from a converge through the ansible
 collection [`tomblancdev.regie`](ansible) — role `engine` installs the CLI
-from this tag, role `brain` (0.2) hands the house over. Both paths go
+from this tag, role `brain` hands the house over and runs the verbs. Both paths go
 through the same code, so the fleet never has a feature the house lacks.
 
 ## Layout
 
 | Part | What | Where |
 |---|---|---|
-| the engine | `check` · `render` · `mint` · `init` — and the verbs declared for 0.2 / 0.3 | [`src/regie/`](src/regie) |
+| the engine | `check` · `render` · `up` · `apply` · `mint` · `init` — and the verbs declared for 0.3 | [`src/regie/`](src/regie) |
 | the schema | the contract every house writes to | [`src/regie/schema/`](src/regie/schema) |
 | the base | the config tree every profile renders | [`src/regie/base/`](src/regie/base) |
 | profiles | `ct` — Quadlet units, host networking | [`src/regie/profiles/`](src/regie/profiles) |

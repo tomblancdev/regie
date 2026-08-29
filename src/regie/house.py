@@ -112,6 +112,34 @@ class House:
     def root(self) -> str:
         return self.data.get("paths", {}).get("root") or self.profile.root
 
+    def units_dir(self) -> str:
+        return self.data.get("paths", {}).get("units_dir") or self.profile.units_dir
+
+    def owner(self) -> dict:
+        """The brain's own owner — the break-glass account `regie apply` creates at
+        the first boot; its password is the secret `owner_password`."""
+        o = self.data.get("owner", {})
+        return {"username": o.get("username", "owner"), "label": o.get("label", "Owner")}
+
+    def backup(self) -> dict:
+        b = self.data.get("backup", {})
+        return {"time": b.get("time", "04:00"), "copies": b.get("copies", 7)}
+
+    @property
+    def tokens(self) -> list[str]:
+        return list(self.data.get("tokens", []))
+
+    def floors(self) -> list[dict]:
+        """The floors declared, plus the ones the areas name without a line."""
+        out = [dict(f) for f in self.data.get("floors", [])]
+        known = {f["id"] for f in out}
+        for a in self.areas:
+            f = a.get("floor")
+            if f and f not in known:
+                out.append({"id": f, "label": f.replace("_", " ").capitalize()})
+                known.add(f)
+        return out
+
     def coordinators(self) -> list[dict]:
         """The radios, resolved: an address, a port, an adapter, a base topic,
         the paired things on each and one Zigbee group per room of lights."""
@@ -169,7 +197,8 @@ class House:
         return users
 
     def secret_names(self) -> list[str]:
-        names = [f"mqtt_password_{u['name']}" for u in self.mqtt_users()]
+        names = ["owner_password", "backup_password"]
+        names += [f"mqtt_password_{u['name']}" for u in self.mqtt_users()]
         for c in self.coordinators():
             names += [
                 f"zigbee_{c['id']}_network_key",
@@ -238,6 +267,16 @@ def _cross_check(house: House) -> list[str]:
         if t["via"] == "zigbee" and not t.get("ieee"):
             warnings.append(
                 f"{t['id']}: via zigbee, no ieee — not paired yet (the walk fills it in)"
+            )
+
+    floor_ids = {f["id"] for f in data.get("floors", [])}
+    dup = [i for i, n in Counter(f["id"] for f in data.get("floors", [])).items() if n > 1]
+    if dup:
+        errors.append(f"floor ids used twice: {', '.join(sorted(dup))}")
+    for a in house.areas:
+        if floor_ids and a.get("floor") and a["floor"] not in floor_ids:
+            warnings.append(
+                f"{a['id']}: floor {a['floor']!r} has no line under floors — created by its id"
             )
 
     zigbee_things = [t for t in house.things if t["via"] == "zigbee"]

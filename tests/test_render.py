@@ -150,12 +150,15 @@ def test_render_is_idempotent(witness, secrets, tmp_path):
     assert len(second.unchanged) + len(second.kept) == len(EXPECTED)
 
 
-def test_kept_files_are_written_once(witness, secrets, tmp_path):
+def test_the_sketchpad_is_put_back_empty(witness, secrets, tmp_path):
     render(witness, tmp_path, secrets)
-    sketch = tmp_path / "home-assistant/automations.yaml"
-    sketch.write_text("- id: drafted_in_the_ui\n")
+    for name in ("automations", "scenes", "scripts"):
+        sketch = tmp_path / f"home-assistant/{name}.yaml"
+        assert sketch.read_text().rstrip().endswith("[]")
+        sketch.write_text("- id: drafted_in_the_ui\n")
     result = render(witness, tmp_path, secrets)
-    assert sketch in result.kept and sketch.read_text() == "- id: drafted_in_the_ui\n"
+    assert len(result.written) == 3 and result.kept == []
+    assert (tmp_path / "home-assistant/automations.yaml").read_text().rstrip().endswith("[]")
 
 
 def test_a_render_removes_what_the_house_no_longer_names(house_with, secrets, tmp_path):

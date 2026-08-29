@@ -42,6 +42,11 @@ def base_plan() -> list[dict]:
     return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8"))["templates"]
 
 
+def base_components() -> dict:
+    """The custom components the product pins (base.yml), by domain."""
+    return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8")).get("components", {})
+
+
 def make_env(house: House) -> Environment:
     loaders = {
         "base": FileSystemLoader(str(BASE / "templates")),

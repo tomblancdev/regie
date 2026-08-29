@@ -1,7 +1,7 @@
 # rendered by La Régie {{ version }} — edit home.yml, not this file.
 # What is NOT here is on purpose: integrations (mqtt, the things' own) are
 # config entries, set through the API by `regie apply`; automations are the
-# packages' (packages/) — automations.yaml is the UI's sketchpad.
+# packages' (packages/) — automations.yaml is rendered empty (base.yml).
 homeassistant:
   name: {{ data.house.label | to_yaml }}
   time_zone: {{ data.house.timezone | default('UTC') }}
@@ -68,6 +68,12 @@ auth_oidc:
     {{ role }}: {{ group }}
 {% endfor %}
 {% endif %}
+{% for block in ['features', 'claims'] if data.oidc[block] is defined %}
+  {{ block }}:
+{% for k, v in data.oidc[block].items() %}
+    {{ k }}: {{ v | to_yaml }}
+{% endfor %}
+{% endfor %}
 
 {% endif %}
 logger:

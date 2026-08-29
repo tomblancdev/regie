@@ -1,12 +1,27 @@
-# brain — the contract for 0.2. The role hands the house to the engine on the
-# host and runs its verbs; it decides nothing the engine does not.
+# brain — the house handed to the engine on its host, then the verbs:
+#   check -> render into the root -> up -> apply
+# The role decides nothing the engine does not; everything here is a fleet's
+# to set. Secrets are VALUES (name: value) passed through the environment as
+# REGIE_SECRET_<NAME> — the role logs none of it; the engine prints none.
 
-# the house: a home.yml on the controller (copied to the host at converge)
+# the house: a home.yml on the controller, copied to regie_home_dir/home.yml.
+# Empty = the file is already on the host (a fleet may template it there
+# itself, before this role runs)
 regie_home_yml: ""
-# the secret values (name: value) — from the fleet's store; the role passes
-# them through the environment and logs none of it
+regie_home_dir: /etc/regie
+# more of the house beside it (a house's own packs, packages...): copied
+# from the controller as {src, dest} - dest relative to regie_home_dir
+regie_house_files: []
+# the secret values (name: value) from the fleet's store
 regie_secrets: {}
-# the brain's root on the host — empty: the profile's default
+# the brain's root on the host - empty: the house's (paths.root) or the profile's
 regie_root: ""
-# where the units land — empty: the profile's default
+# where the units land - empty: the house's (paths.units_dir) or the profile's
 regie_units_dir: ""
+# the brain's own address, for the conductor
+regie_url: "http://127.0.0.1:8123"
+# run the conductor after up (false = the files half only)
+regie_apply: true
+# seconds `up` waits for a (re)started service to answer
+regie_up_timeout: 300
+regie_bin: /usr/local/bin/regie

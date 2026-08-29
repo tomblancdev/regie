@@ -1,6 +1,7 @@
-"""regie — the one CLI. `check` and `render` are the files half, built;
-`mint` and `init` get a house started; the rest are declared here so the
-shape is fixed from the first release, and each says which release builds it."""
+"""regie — the one CLI. `check` and `render` are the files half; `up` runs
+it on the host; `apply` is the API half (the conductor); `mint` and `init`
+get a house started. The rest are declared here so the shape is fixed from
+the first release, and each says which release builds it."""
 
 from __future__ import annotations
 
@@ -20,18 +21,11 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 
 # verb → (what it will do, the release that builds it)
 NOT_YET = {
-    "up": ("start the rendered brain on this host (the profile's runtime)", "0.2 — the brain"),
-    "apply": (
-        "the conductor — what only the APIs can set: onboarding, tokens, the integrations' "
-        "config entries, the registries (areas, names), Zigbee names, groups and bindings, "
-        "the backup schedule; a plan under --check",
-        "0.2 — the brain",
-    ),
-    "backup": ("Home Assistant's own backup, through its API", "0.2 — the brain"),
-    "restore": ("Home Assistant's own backup file, restored through its API", "0.2 — the brain"),
+    "backup": ("Home Assistant's own backup, now, through its API", "0.3 — the walk"),
+    "restore": ("Home Assistant's own backup file, restored through its API", "0.3 — the walk"),
     "doctor": (
         "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.2 — the brain",
+        "0.3 — the walk",
     ),
     "pair": (
         "the walk — `pair --room <area>`: open the join window, turn each interview into a row "
@@ -101,17 +95,53 @@ def report(house: House, secrets: dict) -> None:
 def cmd_render(args) -> int:
     house = load_house(args.home)
     secrets = load_secrets(args.secrets)
-    result = render(house, args.out, secrets)
+    out = Path(args.out) if args.out else Path(house.root())
+    result = render(house, out, secrets)
     print(
-        f"rendered {args.out}: {len(result.written)} written, {len(result.unchanged)} unchanged, "
+        f"rendered {out}: {len(result.written)} written, {len(result.unchanged)} unchanged, "
         f"{len(result.kept)} kept, {len(result.removed)} removed"
     )
     for p in result.written:
-        print(f"  + {p.relative_to(args.out)}")
+        print(f"  + {p.relative_to(out)}")
     for p in result.removed:
-        print(f"  - {p.relative_to(args.out)}")
+        print(f"  - {p.relative_to(out)}")
     for w in house.warnings:
         print(f"  ! {w}")
+    return 0
+
+
+def cmd_up(args) -> int:
+    from .host import Runner
+    from .up import up
+
+    house = load_house(args.home)
+    root = Path(args.root) if args.root else Path(house.root())
+    units_dir = Path(args.units_dir) if args.units_dir else Path(house.units_dir())
+    result = up(house, root, units_dir, Runner(check=args.check), timeout=args.timeout)
+    print(result.summary())
+    for what, items in (
+        ("placed", result.placed),
+        ("removed", result.removed),
+        ("pulled", result.pulled),
+        ("restarted", result.restarted),
+        ("started", result.started),
+    ):
+        for i in items:
+            print(f"  {what}: {i}")
+    return 0
+
+
+def cmd_apply(args) -> int:
+    from .apply import apply, summary
+    from .ha import HomeAssistant
+
+    house = load_house(args.home)
+    secrets = load_secrets(args.secrets)
+    root = Path(args.root) if args.root else Path(house.root())
+    steps = apply(house, secrets, root, HomeAssistant(args.url), args.check)
+    for st in steps:
+        print(st.line())
+    print(summary(steps, args.check))
     return 0
 
 
@@ -208,10 +238,34 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("render", help="write the units and the config tree into a directory")
     s.add_argument("home", type=Path)
     s.add_argument(
-        "--out", type=Path, required=True, help="the directory (the brain's root, or a staging one)"
+        "--out", type=Path, help="the directory (default: the house's root; or a staging one)"
     )
     _secrets_arg(s)
     s.set_defaults(func=cmd_render)
+
+    s = sub.add_parser(
+        "up", help="the rendered brain running on this host: units placed, images pulled, started"
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("--root", type=Path, help="where render wrote (default: the house's root)")
+    s.add_argument("--units-dir", type=Path, help="where the units go (default: the profile's)")
+    s.add_argument("--check", action="store_true", help="print the plan, change nothing")
+    s.add_argument(
+        "--timeout", type=int, default=300, help="seconds to wait for a (re)started service"
+    )
+    s.set_defaults(func=cmd_up)
+
+    s = sub.add_parser(
+        "apply",
+        help="the conductor: onboarding, tokens, floors and areas, the MQTT integration, "
+        "the backup schedule — what only the API can set",
+    )
+    s.add_argument("home", type=Path)
+    _secrets_arg(s)
+    s.add_argument("--root", type=Path, help="the brain's root (tokens live under it)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.add_argument("--check", action="store_true", help="print the plan, change nothing")
+    s.set_defaults(func=cmd_apply)
 
     s = sub.add_parser("mint", help="write every secret the house needs and does not have yet")
     s.add_argument("home", type=Path)

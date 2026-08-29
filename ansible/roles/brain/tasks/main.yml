@@ -1,6 +1,84 @@
 ---
-# brain — hand home.yml + the secrets to the engine on the host, then
-#   check → render into the root → up → apply
-# Lands with 0.2. The contract is in defaults/main.yml; installing the
-# collection before the role exists is the point: the pin and the data land
-# first, the tasks fill in with the release that builds the verbs.
+# brain — hand home.yml (+ the house's files) to the engine on the host, then
+#   check -> render into the root -> up -> apply
+# Every verb is the engine's; `changed` is read from what the engine prints.
+- name: brain — the house's directory
+  ansible.builtin.file:
+    path: "{{ regie_home_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: brain — home.yml from the controller
+  ansible.builtin.copy:
+    src: "{{ regie_home_yml }}"
+    dest: "{{ regie_home_dir }}/home.yml"
+    mode: "0640"
+  when: regie_home_yml | length > 0
+
+- name: brain — the house's own files beside it
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ regie_home_dir }}/{{ item.dest }}"
+    mode: "0640"
+  loop: "{{ regie_house_files }}"
+  loop_control: { label: "{{ item.dest }}" }
+
+- name: brain — the secrets as the engine's environment (values only, never logged)
+  ansible.builtin.set_fact:
+    regie_env: >-
+      {{ dict(regie_secrets.keys() | map('upper') | map('regex_replace', '^', 'REGIE_SECRET_')
+              | zip(regie_secrets.values() | map('to_json') | list)) }}
+  no_log: true
+
+- name: brain — the root argument
+  ansible.builtin.set_fact:
+    regie_root_arg: "{{ ('--root ' ~ regie_root) if regie_root else '' }}"
+    regie_units_arg: "{{ ('--units-dir ' ~ regie_units_dir) if regie_units_dir else '' }}"
+
+- name: brain — check (the schema, the references, the secrets it needs)
+  ansible.builtin.command:
+    cmd: "{{ regie_bin }} check {{ regie_home_dir }}/home.yml"
+  environment: "{{ regie_env }}"
+  register: regie_check
+  changed_when: false
+  no_log: true
+
+- name: brain — the plan, as the engine reads it
+  ansible.builtin.debug:
+    msg: "{{ regie_check.stdout_lines }}"
+
+- name: brain — render into the root
+  ansible.builtin.command:
+    cmd: "{{ regie_bin }} render {{ regie_home_dir }}/home.yml {{ ('--out ' ~ regie_root) if regie_root else '' }}"
+  environment: "{{ regie_env }}"
+  register: regie_render
+  changed_when: "' 0 written, ' not in regie_render.stdout or ' 0 removed' not in regie_render.stdout"
+  no_log: true
+
+- name: brain — what render did
+  ansible.builtin.debug:
+    msg: "{{ regie_render.stdout_lines }}"
+
+- name: brain — up (units placed, images pulled, services (re)started)
+  ansible.builtin.command:
+    cmd: "{{ regie_bin }} up {{ regie_home_dir }}/home.yml {{ regie_root_arg }} {{ regie_units_arg }} --timeout {{ regie_up_timeout }}"
+  register: regie_up
+  changed_when: "'nothing to do' not in regie_up.stdout"
+
+- name: brain — what up did
+  ansible.builtin.debug:
+    msg: "{{ regie_up.stdout_lines }}"
+
+- name: brain — apply (the conductor)
+  ansible.builtin.command:
+    cmd: "{{ regie_bin }} apply {{ regie_home_dir }}/home.yml {{ regie_root_arg }} --url {{ regie_url }}"
+  environment: "{{ regie_env }}"
+  register: regie_apply_run
+  changed_when: "'apply: 0 changed' not in regie_apply_run.stdout"
+  no_log: true
+  when: regie_apply | bool
+
+- name: brain — what apply did
+  ansible.builtin.debug:
+    msg: "{{ regie_apply_run.stdout_lines }}"
+  when: regie_apply | bool

@@ -14,13 +14,13 @@ def test_check_reports_and_passes(witness_path, capsys):
     assert (
         "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 16 paired, 5 room groups" in out
     )
-    assert "secrets: 7 needed, all present" in out
+    assert "secrets: 9 needed, all present" in out
     assert "not paired yet" in out and out.rstrip().endswith("ok")
 
 
 def test_check_without_secrets_names_them_and_strict_fails_on_warnings(witness_path, capsys):
     assert main(["check", str(witness_path)]) == 0
-    assert "7 needed, 7 missing" in capsys.readouterr().out
+    assert "9 needed, 9 missing" in capsys.readouterr().out
     assert main(["check", str(witness_path), "--strict"]) == 1
 
 
@@ -49,8 +49,8 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
 
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
-    assert main(["apply", str(witness_path)]) == 2
-    assert "lands in 0.2 — the brain" in capsys.readouterr().err
+    assert main(["doctor", str(witness_path)]) == 2
+    assert "lands in 0.3 — the walk" in capsys.readouterr().err
     assert main(["pair", "--room", "living"]) == 2
     assert "lands in 0.3 — the walk" in capsys.readouterr().err
 
@@ -59,9 +59,9 @@ def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):
     out = tmp_path / "secrets.yml"
     out.write_text("mqtt_password_home: keep-me\n")
     assert main(["mint", str(witness_path), "--secrets", str(out)]) == 0
-    assert "6 minted" in capsys.readouterr().out
+    assert "8 minted" in capsys.readouterr().out
     values = yaml.safe_load(out.read_text())
-    assert values["mqtt_password_home"] == "keep-me" and len(values) == 7
+    assert values["mqtt_password_home"] == "keep-me" and len(values) == 9
     assert len(values["zigbee_main_network_key"]) == 16
 
 
@@ -71,7 +71,7 @@ def test_init_writes_a_house_that_checks(tmp_path, capsys):
         main(["init", str(target), "--name", "chalet", "--label", "Le chalet", "--lang", "fr"]) == 0
     )
     assert main(["check", str(target / "home.yml"), "--secrets", str(target / "secrets.yml")]) == 0
-    assert "secrets: 5 needed, all present" in capsys.readouterr().out
+    assert "secrets: 7 needed, all present" in capsys.readouterr().out
     assert main(["init", str(target)]) == 1
 
 
