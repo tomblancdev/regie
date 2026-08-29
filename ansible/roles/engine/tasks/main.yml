@@ -14,8 +14,10 @@
 
 # keyed on the REF, not the version: a moved ref (a sha, a re-cut tag) with
 # the same version number is a different package - ansible's pip module
-# would compare 0.2.0 to 0.2.0 and leave the old one in place (found at
-# the first converge, 2026-08-29)
+# compares 0.2.0 to 0.2.0 and leaves the old one in place, and pip itself
+# answers "already satisfied" to a VCS URL at a new commit unless forced
+# (both found at the first converge, 2026-08-29: direct_url.json kept the
+# old commit). So: force-reinstall, exactly when the marker differs.
 - name: engine — the ref installed last time
   ansible.builtin.slurp:
     src: "{{ regie_venv }}/.ref"
@@ -24,7 +26,7 @@
 
 - name: engine — the package, from the ref
   ansible.builtin.command:
-    cmd: "{{ regie_venv }}/bin/pip install --quiet --upgrade git+{{ regie_repo }}@{{ regie_version }}"
+    cmd: "{{ regie_venv }}/bin/pip install --quiet --upgrade --force-reinstall git+{{ regie_repo }}@{{ regie_version }}"
   when: (regie_engine_ref.content | default('') | b64decode | trim) != regie_version
   register: regie_engine_install
 
