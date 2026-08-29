@@ -12,8 +12,11 @@ conductor back in and mints it again — nothing is typed at a screen."""
 from __future__ import annotations
 
 import ipaddress
+import socket
+import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,15 +30,36 @@ CLIENT_NAME = "regie"
 HTTP_META = ("created_at", "error", "error_message")
 
 
-def probe(url: str) -> int:
+def probe(url: str, via: str | None = None) -> int:
     """The status a URL answers (0 = unreachable) - how the conductor proves a
-    door before promoting the config that opens it."""
+    door before promoting the config that opens it. `via` = the proxy's
+    address to connect to, with the door's name as SNI and Host: on the brain
+    itself the door's name may resolve to the brain (a host file), which is
+    not the way a person comes in."""
+    if not via:
+        try:
+            with urllib.request.urlopen(url, timeout=10) as r:  # noqa: S310
+                return r.status
+        except urllib.error.HTTPError as exc:
+            return exc.code
+        except (urllib.error.URLError, OSError):
+            return 0
+    parts = urllib.parse.urlsplit(url)
+    host, path = parts.hostname or "", parts.path or "/"
+    tls = parts.scheme == "https"
+    port = parts.port or (443 if tls else 80)
     try:
-        with urllib.request.urlopen(url, timeout=10) as r:  # noqa: S310
-            return r.status
-    except urllib.error.HTTPError as exc:
-        return exc.code
-    except (urllib.error.URLError, OSError):
+        sock = socket.create_connection((via, port), timeout=10)
+        if tls:
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+        with sock:
+            sock.sendall(
+                f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n"
+                f"User-Agent: regie\r\n\r\n".encode()
+            )
+            line = sock.recv(64).decode("ascii", "replace").split("\r\n", 1)[0]
+        return int(line.split()[1]) if line.startswith("HTTP/") else 0
+    except (OSError, ValueError, IndexError):
         return 0
 
 
@@ -248,6 +272,22 @@ class Conductor:
             conf.get("trusted_proxies")
         ) == _networks(trusted)
 
+    def proxy_via(self) -> str | None:
+        """The proxy's address the brain proves its door through: `proxy.via`, or
+        the one trusted proxy when it is a single host."""
+        proxy = self.house.data.get("proxy", {})
+        if proxy.get("via"):
+            return proxy["via"]
+        trusted = proxy.get("trusted") or []
+        if len(trusted) == 1:
+            try:
+                net = ipaddress.ip_network(trusted[0], strict=False)
+            except ValueError:
+                return None
+            if net.num_addresses == 1:
+                return str(net.network_address)
+        return None
+
     def http(self, ws) -> None:
         """Home Assistant's HTTP config (the reverse proxy it trusts) is stored,
         not read from YAML any more: a new config is a TRIAL - configure, Home
@@ -274,7 +314,7 @@ class Conductor:
                 return
             url = self.house.data["house"].get("url")
             if url:
-                status = probe(f"{url.rstrip('/')}/manifest.json")
+                status = probe(f"{url.rstrip('/')}/manifest.json", via=self.proxy_via())
                 if status != 200:
                     raise HouseError(
                         f"the door through the proxy answers {status}, not 200 - the trial is not "

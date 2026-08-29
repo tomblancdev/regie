@@ -179,6 +179,10 @@
             "type": "string"
           },
           "description": "its addresses or networks (X-Forwarded-For is trusted from these)"
+        },
+        "via": {
+          "type": "string",
+          "description": "the proxy's address the brain proves its door through before promoting the HTTP config (default: the one trusted proxy when it is a single host) - on the brain the door's name may resolve to the brain itself"
         }
       }
     },

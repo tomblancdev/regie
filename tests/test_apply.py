@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 
 from regie.apply import Conductor, apply, summary
+from regie.apply import probe as real_probe  # bound before the fixture below stubs it
 from regie.errors import HouseError
 from regie.ha import HomeAssistant
 
@@ -252,7 +253,7 @@ def states(steps):
 @pytest.fixture(autouse=True)
 def _door_answers(monkeypatch):
     """The witness's door (https://home.example.com) answers 200 through the proxy."""
-    monkeypatch.setattr("regie.apply.probe", lambda url: 200)
+    monkeypatch.setattr("regie.apply.probe", lambda url, via=None: 200)
     monkeypatch.setattr("regie.apply.time.sleep", lambda s: None)
 
 
@@ -380,7 +381,7 @@ def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, t
 
 def test_a_trial_that_fails_at_the_door_is_not_promoted(witness, secrets, tmp_path, monkeypatch):
     ha = FakeHA()
-    monkeypatch.setattr("regie.apply.probe", lambda url: 400)
+    monkeypatch.setattr("regie.apply.probe", lambda url, via=None: 400)
     with pytest.raises(HouseError, match="answers 400"):
         apply(witness, secrets, tmp_path, ha, check=False)
     assert ha.http["pending"] is not None and ha.http["stable"]["trusted_proxies"] == []
@@ -409,3 +410,39 @@ def test_a_failed_pending_is_ignored_and_a_fresh_trial_configured(witness, secre
     }
     steps = apply(witness, secrets, tmp_path, ha, check=False)
     assert states(steps)["http"] == "changed" and ha.restarts == 1 and ha.http["pending"] is None
+
+
+def test_the_door_is_proven_through_the_proxy(witness, secrets, tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(
+        "regie.apply.probe", lambda url, via=None: seen.update(url=url, via=via) or 200
+    )
+    apply(witness, secrets, tmp_path, FakeHA(), check=False)
+    assert seen == {"url": "https://home.example.com/manifest.json", "via": "192.0.2.2"}
+
+
+def test_probe_speaks_http_through_a_given_address(monkeypatch):
+    import socket as _socket
+
+    sent = {}
+
+    class FakeSock:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def sendall(self, data):
+            sent["req"] = data.decode()
+
+        def recv(self, n):
+            return b"HTTP/1.1 200 OK\r\nContent-Type: x\r\n\r\n"
+
+    monkeypatch.setattr(
+        _socket,
+        "create_connection",
+        lambda addr, timeout=None: sent.update(addr=addr) or FakeSock(),
+    )
+    assert real_probe("http://door.example.com/manifest.json", via="192.0.2.2") == 200
+    assert sent["addr"] == ("192.0.2.2", 80) and "Host: door.example.com" in sent["req"]
