@@ -38,17 +38,9 @@ lovelace:
       filename: dashboards/phone.yaml
       show_in_sidebar: true
 
-http:
-{% if data.proxy is defined and data.proxy.trusted %}
-  use_x_forwarded_for: true
-  trusted_proxies:
-{% for p in data.proxy.trusted %}
-    - {{ p }}
-{% endfor %}
-{% else %}
-  use_x_forwarded_for: false
-{% endif %}
-
+# no `http:` block: since 2026.x Home Assistant keeps the HTTP config in its
+# store (YAML is migrated once, then ignored) - the reverse proxy it trusts
+# (home.yml `proxy.trusted`) is set by `regie apply`, as a trial it promotes
 # every entity's state as a metric on /api/prometheus (a long-lived token)
 prometheus:
 

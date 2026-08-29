@@ -46,6 +46,14 @@ class FakeHA(HomeAssistant):
         }
         self.n = 0
         self.log: list[str] = []
+        default = {"server_port": 8123, "use_x_forwarded_for": False, "trusted_proxies": []}
+        self.http = {
+            "stable": dict(default),
+            "pending": None,
+            "active": "stable",
+            "default": default,
+        }
+        self.restarts = 0
 
     # --- REST ---
     def _authed(self):
@@ -199,6 +207,30 @@ class FakeHA(HomeAssistant):
                 if a["area_id"] == payload["area_id"]:
                     a.update({k: v for k, v in payload.items() if k != "area_id"})
                     return a
+        if type_ == "http/config":
+            h = self.http
+            return {
+                "stable": h["stable"],
+                "pending": h["pending"],
+                "active_config_type": h["active"],
+                "default": h["default"],
+                "revert_at": None,
+            }
+        if type_ == "http/config/configure":
+            conf = dict(payload["config"])
+            assert "server_port" in conf, "the whole config, not a patch"
+            changed = conf != self.http["pending"]
+            self.http["pending"] = conf
+            if changed:
+                self.restarts += 1
+                self.http["active"] = "pending"  # the restart, instantly
+            return {"restart": changed}
+        if type_ == "http/config/promote":
+            assert self.http["pending"] and self.http["active"] == "pending"
+            self.http["stable"] = self.http["pending"]
+            self.http["pending"] = None
+            self.http["active"] = "stable"
+            return None
         if type_ == "backup/config/info":
             return {"config": self.backup_cfg}
         if type_ == "backup/config/update":
@@ -213,6 +245,13 @@ class FakeHA(HomeAssistant):
 
 def states(steps):
     return {s.name: s.state for s in steps}
+
+
+@pytest.fixture(autouse=True)
+def _door_answers(monkeypatch):
+    """The witness's door (https://home.example.com) answers 200 through the proxy."""
+    monkeypatch.setattr("regie.apply.probe", lambda url: 200)
+    monkeypatch.setattr("regie.apply.time.sleep", lambda s: None)
 
 
 def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
@@ -244,6 +283,13 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     }
     assert ha.backup_cfg["schedule"] == {"recurrence": "daily", "time": "04:00", "days": []}
     assert ha.backup_cfg["create_backup"]["password"] == "example-backup-password"
+    # the reverse proxy: configured (a restart), then promoted in the same run
+    assert st["http"] == "changed" and ha.restarts == 1
+    assert ha.http["stable"]["trusted_proxies"] == ["192.0.2.2"] and ha.http["pending"] is None
+    assert (
+        ha.http["stable"]["use_x_forwarded_for"] is True
+        and ha.http["stable"]["server_port"] == 8123
+    )
     assert summary(steps, False) == f"apply: {len(steps)} changed, 0 ok"
 
     again = apply(witness, secrets, tmp_path, ha, check=False)
@@ -328,3 +374,36 @@ def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, t
     )  # Chambre reported, left alone
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert set(states(again).values()) == {"ok"}
+
+
+def test_a_trial_that_fails_at_the_door_is_not_promoted(witness, secrets, tmp_path, monkeypatch):
+    ha = FakeHA()
+    monkeypatch.setattr("regie.apply.probe", lambda url: 400)
+    with pytest.raises(HouseError, match="answers 400"):
+        apply(witness, secrets, tmp_path, ha, check=False)
+    assert ha.http["pending"] is not None and ha.http["stable"]["trusted_proxies"] == []
+
+
+def test_a_pending_trial_left_running_is_promoted_on_the_next_run(witness, secrets, tmp_path):
+    ha = FakeHA()
+    ha.http["pending"] = {
+        **ha.http["default"],
+        "use_x_forwarded_for": True,
+        "trusted_proxies": ["192.0.2.2/32"],
+    }
+    ha.http["active"] = "pending"
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["http"] == "changed" and ha.restarts == 0
+    assert ha.http["stable"]["trusted_proxies"] == ["192.0.2.2/32"]
+
+
+def test_a_failed_pending_is_ignored_and_a_fresh_trial_configured(witness, secrets, tmp_path):
+    ha = FakeHA()
+    ha.http["pending"] = {
+        **ha.http["default"],
+        "use_x_forwarded_for": True,
+        "trusted_proxies": ["192.0.2.2"],
+        "error": "not_promoted",
+    }
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["http"] == "changed" and ha.restarts == 1 and ha.http["pending"] is None

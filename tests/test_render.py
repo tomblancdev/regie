@@ -67,7 +67,7 @@ def test_home_assistant_configuration(rendered):
     text = (rendered / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
     assert "packages: !include_dir_named packages" in text
     assert "automation: !include automations.yaml" in text
-    assert "trusted_proxies:\n    - 192.0.2.2" in text
+    assert "trusted_proxies" not in text  # the reverse proxy is the conductor's (stored config)
     assert "client_secret: !secret oidc_client_secret" in text
     assert "    admin: admins\n    user: household" in text
     assert "internal_url: https://home.example.com" in text

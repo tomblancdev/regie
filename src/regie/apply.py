@@ -11,6 +11,10 @@ conductor back in and mints it again — nothing is typed at a screen."""
 
 from __future__ import annotations
 
+import ipaddress
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +24,29 @@ from .host import STATE
 from .house import House
 
 CLIENT_NAME = "regie"
+HTTP_META = ("created_at", "error", "error_message")
+
+
+def probe(url: str) -> int:
+    """The status a URL answers (0 = unreachable) - how the conductor proves a
+    door before promoting the config that opens it."""
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:  # noqa: S310
+            return r.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+    except (urllib.error.URLError, OSError):
+        return 0
+
+
+def _networks(values: list[str] | None) -> set[str]:
+    out = set()
+    for v in values or []:
+        try:
+            out.add(str(ipaddress.ip_network(v, strict=False)))
+        except ValueError:
+            out.add(v)
+    return out
 
 
 @dataclass
@@ -60,6 +87,7 @@ class Conductor:
         self.ha = ha
         self.check = check
         self.steps: list[Step] = []
+        self.restarting = False  # a configure asked Home Assistant to restart
         self.client_id = ha.url + "/"  # Home Assistant wants a URL as a client id
         self.tokens_dir = self.root / STATE / "tokens"
 
@@ -210,6 +238,74 @@ class Conductor:
             self.save_token(name, token)
             if name == CLIENT_NAME:
                 self.ha.token = token
+
+    # --- the reverse proxy: an API-managed HTTP config since 2026.x ---------------
+    def _http_matches(self, conf: dict | None) -> bool:
+        trusted = self.house.data.get("proxy", {}).get("trusted") or []
+        if not conf:
+            return False
+        return bool(conf.get("use_x_forwarded_for", False)) == bool(trusted) and _networks(
+            conf.get("trusted_proxies")
+        ) == _networks(trusted)
+
+    def http(self, ws) -> None:
+        """Home Assistant's HTTP config (the reverse proxy it trusts) is stored,
+        not read from YAML any more: a new config is a TRIAL - configure, Home
+        Assistant restarts with it pending, and it reverts in five minutes
+        unless promoted. The conductor configures, waits, proves the door
+        through the proxy, promotes."""
+        trusted = self.house.data.get("proxy", {}).get("trusted") or []
+        cfg = ws.call("http/config")
+        stable, pending, active = (
+            cfg.get("stable"),
+            cfg.get("pending"),
+            cfg.get("active_config_type"),
+        )
+        label = f"reverse proxy trusted: {', '.join(trusted) or 'none'}"
+        pending_ok = (
+            pending is not None and not pending.get("error") and self._http_matches(pending)
+        )
+        if self._http_matches(stable) and not pending_ok:
+            self.step("http", "ok", label)
+            return
+        if active == "pending" and pending_ok:
+            self.step("http", "changed", f"promote the trial ({label})")
+            if self.check:
+                return
+            url = self.house.data["house"].get("url")
+            if url:
+                status = probe(f"{url.rstrip('/')}/manifest.json")
+                if status != 200:
+                    raise HouseError(
+                        f"the door through the proxy answers {status}, not 200 - the trial is not "
+                        "promoted (Home Assistant reverts it by itself)"
+                    )
+            ws.call("http/config/promote")
+            return
+        base = {k: v for k, v in (stable or cfg.get("default") or {}).items() if k not in HTTP_META}
+        wanted = {**base, "use_x_forwarded_for": bool(trusted), "trusted_proxies": list(trusted)}
+        self.step("http", "changed", f"configure ({label}) - Home Assistant restarts to try it")
+        if self.check:
+            return
+        result = ws.call("http/config/configure", config=wanted)
+        self.restarting = bool((result or {}).get("restart", True))
+
+    def wait_for_trial(self, timeout: int = 300) -> None:
+        """Home Assistant restarts with the pending config: wait until the running
+        server says so (the socket goes away and comes back in between)."""
+        deadline = time.monotonic() + timeout
+        time.sleep(5)
+        while time.monotonic() < deadline:
+            try:
+                with self.ha.ws() as ws:
+                    if ws.call("http/config").get("active_config_type") == "pending":
+                        return
+            except HouseError:
+                pass
+            time.sleep(5)
+        raise HouseError(
+            f"Home Assistant did not come back with the trial config within {timeout}s"
+        )
 
     def registries(self, ws) -> None:
         """Floors and areas, keyed on the house's id kept as an alias (Home
@@ -383,6 +479,12 @@ class Conductor:
             return self.steps
         with self.ha.ws() as ws:
             self.tokens(ws)
+            self.http(ws)
+        if self.restarting:
+            self.wait_for_trial()
+            with self.ha.ws() as ws:
+                self.http(ws)  # the trial is running: prove the door, promote
+        with self.ha.ws() as ws:
             self.registries(ws)
             self.backup(ws)
         self.integrations()
