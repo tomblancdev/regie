@@ -290,6 +290,21 @@ class Conductor:
         result = ws.call("http/config/configure", config=wanted)
         self.restarting = bool((result or {}).get("restart", True))
 
+    def wait_for_running(self, timeout: int = 300) -> None:
+        """The HTTP server answers before the core has finished starting; what
+        the conductor sets needs a RUNNING core (a config change restarts it)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                with self.ha.ws() as ws:
+                    state = (ws.call("get_config") or {}).get("state")
+                    if state == "RUNNING":
+                        return
+            except HouseError:
+                pass
+            time.sleep(5)
+        raise HouseError(f"Home Assistant's core is not RUNNING after {timeout}s")
+
     def wait_for_trial(self, timeout: int = 300) -> None:
         """Home Assistant restarts with the pending config: wait until the running
         server says so (the socket goes away and comes back in between)."""
@@ -477,11 +492,13 @@ class Conductor:
     def run(self) -> list[Step]:
         if not self.onboarding():
             return self.steps
+        self.wait_for_running()
         with self.ha.ws() as ws:
             self.tokens(ws)
             self.http(ws)
         if self.restarting:
             self.wait_for_trial()
+            self.wait_for_running()
             with self.ha.ws() as ws:
                 self.http(ws)  # the trial is running: prove the door, promote
         with self.ha.ws() as ws:

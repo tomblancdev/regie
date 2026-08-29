@@ -207,6 +207,8 @@ class FakeHA(HomeAssistant):
                 if a["area_id"] == payload["area_id"]:
                     a.update({k: v for k, v in payload.items() if k != "area_id"})
                     return a
+        if type_ == "get_config":
+            return {"state": "RUNNING", "version": "2026.8.3"}
         if type_ == "http/config":
             h = self.http
             return {
