@@ -7,6 +7,7 @@ write."""
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -120,6 +121,20 @@ def _render_cards(env: Environment, house: House, ctx: dict) -> list[str]:
     return cards
 
 
+def _owner_uid(house: House, t: dict) -> int | None:
+    """The uid a template's `owner` resolves to - only when the engine can chown
+    (root on the host); elsewhere (tests, a staging render) the file stays ours."""
+    name = t.get("owner")
+    if not name or os.geteuid() != 0:
+        return None
+    uid = house.profile.users.get(name)
+    if uid is None:
+        raise HouseError(
+            f"{t['dst']}: owner {name!r} is not a user profile {house.profile.name} names"
+        )
+    return int(uid)
+
+
 def plan(house: House) -> list[tuple[str, dict]]:
     items = [("base", t) for t in base_plan()]
     items += [("profile", t) for t in house.profile.templates]
@@ -160,16 +175,20 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
                 result.kept.append(target)
                 continue
             mode = int(t.get("mode", "0644"), 8)
+            uid = _owner_uid(house, t)
             if (
                 target.exists()
                 and target.read_text(encoding="utf-8") == text
                 and (target.stat().st_mode & 0o777) == mode
+                and (uid is None or target.stat().st_uid == uid)
             ):
                 result.unchanged.append(target)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8")
             target.chmod(mode)
+            if uid is not None:
+                os.chown(target, uid, uid)
             result.written.append(target)
 
     for rel in sorted(previous - current):

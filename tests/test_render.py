@@ -187,3 +187,24 @@ def test_missing_secrets_are_named_before_anything_is_written(witness, secrets, 
     with pytest.raises(HouseError, match="missing secrets: zigbee_main_pan_id"):
         render(witness, tmp_path, partial)
     assert files(tmp_path) == set()
+
+
+def test_the_brokers_files_name_their_owner(witness):
+    from regie.render import base_plan
+
+    owners = {t["dst"]: t.get("owner") for t in base_plan()}
+    assert owners["mosquitto/config/passwd"] == "mosquitto"
+    assert witness.profile.users["mosquitto"] == 1883
+
+
+def test_owner_is_chowned_only_as_root(witness, secrets, tmp_path, monkeypatch):
+    import os
+
+    import regie.render as r
+
+    calls = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "chown", lambda p, u, g: calls.append((p.name, u, g)))
+    r.render(witness, tmp_path, secrets)
+    assert ("passwd", 1883, 1883) in calls and ("acl", 1883, 1883) in calls
+    assert not [c for c in calls if c[0] == "configuration.yaml"]

@@ -41,6 +41,11 @@ class Profile:
         return dict(self.data.get("images", {}))
 
     @property
+    def users(self) -> dict:
+        """The uid an image runs as, by name (a rendered file it must read is chowned to it)."""
+        return dict(self.data.get("users", {}))
+
+    @property
     def root(self) -> str:
         return self.data.get("root", "/srv/home")
 

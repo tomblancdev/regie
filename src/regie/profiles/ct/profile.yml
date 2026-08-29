@@ -19,6 +19,11 @@ images:
   home_assistant: ghcr.io/home-assistant/home-assistant
   mosquitto: docker.io/library/eclipse-mosquitto
   zigbee2mqtt: docker.io/koenkk/zigbee2mqtt
+# the uid an image drops to: a rendered file it must read (base.yml `owner`)
+# is chowned to it when the engine runs as root - the broker's image refuses
+# a root-only password file on its read-only config mount
+users:
+  mosquitto: 1883
 
 # the units — the half that differs between profiles (a `docker` profile
 # renders a compose file here instead)
