@@ -96,11 +96,16 @@ class FakeHA(HomeAssistant):
                 "type": "form",
                 "flow_id": fid,
                 "step_id": "broker",
-                "data_schema": [{"name": f} for f in fields],
+                # + a section of advanced options: a required key, even empty
+                # (Home Assistant 2026.8's broker form, read live 2026-08-29)
+                "data_schema": [{"name": f} for f in fields]
+                + [{"name": "other_settings", "type": "expandable", "schema": []}],
             }
         if path.startswith("/api/config/config_entries/flow/"):
             fid = path.rsplit("/", 1)[1]
             domain = self.flows[fid]["handler"]
+            if "other_settings" not in body:
+                return 400, {"errors": {"other_settings": "required key not provided"}}
             if body.get("broker") != "127.0.0.1":
                 return 200, {"type": "form", "flow_id": fid, "errors": {"base": "cannot_connect"}}
             self.entries.setdefault(domain, []).append({"domain": domain, "data": body})
@@ -288,6 +293,9 @@ def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, t
     assert living["aliases"] == ["living"] and living["name"] == "Salon"
     assert living["floor_id"] == ha.floors[0]["floor_id"]
     assert [a for a in ha.areas if a["name"] == "Salon"] == [living]  # adopted, not duplicated
-    assert st["area (cuisine)"] == "ok" and st["area (chambre)"] == "ok"  # reported, left alone
+    assert st["area kitchen"] == "changed"  # Cuisine adopted by the witness's kitchen too
+    assert (
+        st["area (chambre)"] == "ok" and "area (cuisine)" not in st
+    )  # Chambre reported, left alone
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert set(states(again).values()) == {"ok"}

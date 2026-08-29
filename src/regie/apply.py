@@ -285,13 +285,19 @@ class Conductor:
         for _ in range(8):
             if flow.get("type") != "form":
                 break
-            fields = [f["name"] for f in flow.get("data_schema") or []]
+            schema = flow.get("data_schema") or []
+            fields = [f["name"] for f in schema]
             body = {k: v for k, v in answers.items() if k in fields}
             if fields and not body:
                 raise HouseError(f"{domain}: its form asks {fields}; nothing in home.yml answers")
+            # a SECTION of the form (an expandable block of advanced options)
+            # is a required key even when nothing in it is: sent empty
+            for f in schema:
+                if f.get("type") == "expandable" and f["name"] not in body:
+                    body[f["name"]] = {}
             status, flow = self.ha.post(f"/api/config/config_entries/flow/{flow['flow_id']}", body)
             if status != 200:
-                raise HouseError(f"{domain}: {status} {flow}")
+                raise HouseError(f"{domain}: {status} {flow} — the form asked {fields}")
             if flow.get("errors"):
                 raise HouseError(f"{domain}: the form came back with {flow['errors']}")
         if flow.get("type") != "create_entry":
