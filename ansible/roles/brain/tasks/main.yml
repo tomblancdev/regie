@@ -40,13 +40,22 @@
     regie_root_arg: "{{ ('--root ' ~ regie_root) if regie_root else '' }}"
     regie_units_arg: "{{ ('--units-dir ' ~ regie_units_dir) if regie_units_dir else '' }}"
 
+# the engine's calls carry the secrets in their environment, so the task is
+# no_log; what the engine PRINTS never holds a value (names, paths, counts),
+# so a failure is shown from the registered result instead of censored
 - name: brain — check (the schema, the references, the secrets it needs)
   ansible.builtin.command:
     cmd: "{{ regie_bin }} check {{ regie_home_dir }}/home.yml"
   environment: "{{ regie_env }}"
   register: regie_check
   changed_when: false
+  failed_when: false
   no_log: true
+
+- name: brain — check failed
+  ansible.builtin.fail:
+    msg: "{{ regie_check.stdout_lines + regie_check.stderr_lines }}"
+  when: regie_check.rc != 0
 
 - name: brain — the plan, as the engine reads it
   ansible.builtin.debug:
@@ -58,7 +67,13 @@
   environment: "{{ regie_env }}"
   register: regie_render
   changed_when: "' 0 written, ' not in regie_render.stdout or ' 0 removed' not in regie_render.stdout"
+  failed_when: false
   no_log: true
+
+- name: brain — render failed
+  ansible.builtin.fail:
+    msg: "{{ regie_render.stdout_lines + regie_render.stderr_lines }}"
+  when: regie_render.rc != 0
 
 - name: brain — what render did
   ansible.builtin.debug:
@@ -80,8 +95,14 @@
   environment: "{{ regie_env }}"
   register: regie_apply_run
   changed_when: "'apply: 0 changed' not in regie_apply_run.stdout"
+  failed_when: false
   no_log: true
   when: regie_apply | bool
+
+- name: brain — apply failed
+  ansible.builtin.fail:
+    msg: "{{ regie_apply_run.stdout_lines + regie_apply_run.stderr_lines }}"
+  when: regie_apply | bool and regie_apply_run.rc != 0
 
 - name: brain — what apply did
   ansible.builtin.debug:

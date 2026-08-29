@@ -12,11 +12,27 @@
     cmd: python3 -m venv {{ regie_venv }}
     creates: "{{ regie_venv }}/bin/pip"
 
-- name: engine — the package, from the tag
-  ansible.builtin.pip:
-    name: "git+{{ regie_repo }}@{{ regie_version }}"
-    virtualenv: "{{ regie_venv }}"
+# keyed on the REF, not the version: a moved ref (a sha, a re-cut tag) with
+# the same version number is a different package - ansible's pip module
+# would compare 0.2.0 to 0.2.0 and leave the old one in place (found at
+# the first converge, 2026-08-29)
+- name: engine — the ref installed last time
+  ansible.builtin.slurp:
+    src: "{{ regie_venv }}/.ref"
+  register: regie_engine_ref
+  failed_when: false
+
+- name: engine — the package, from the ref
+  ansible.builtin.command:
+    cmd: "{{ regie_venv }}/bin/pip install --quiet --upgrade git+{{ regie_repo }}@{{ regie_version }}"
+  when: (regie_engine_ref.content | default('') | b64decode | trim) != regie_version
   register: regie_engine_install
+
+- name: engine — the ref, remembered
+  ansible.builtin.copy:
+    content: "{{ regie_version }}\n"
+    dest: "{{ regie_venv }}/.ref"
+    mode: "0644"
 
 - name: engine — on the PATH
   ansible.builtin.file:
@@ -32,4 +48,4 @@
 
 - name: engine — say it
   ansible.builtin.debug:
-    msg: "{{ regie_engine_version.stdout }}"
+    msg: "{{ regie_engine_version.stdout }} ({{ regie_version }})"
