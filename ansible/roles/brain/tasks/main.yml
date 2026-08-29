@@ -23,11 +23,16 @@
   loop: "{{ regie_house_files }}"
   loop_control: { label: "{{ item.dest }}" }
 
+# a string is passed as is; a list or a number (a Zigbee key, a pan id) as
+# JSON, which the engine reads back as YAML - its own contract (secrets.py)
 - name: brain — the secrets as the engine's environment (values only, never logged)
   ansible.builtin.set_fact:
     regie_env: >-
-      {{ dict(regie_secrets.keys() | map('upper') | map('regex_replace', '^', 'REGIE_SECRET_')
-              | zip(regie_secrets.values() | map('to_json') | list)) }}
+      {%- set out = {} -%}
+      {%- for k, v in regie_secrets.items() -%}
+      {%-   set _ = out.update({'REGIE_SECRET_' ~ (k | upper): (v if v is string else (v | to_json))}) -%}
+      {%- endfor -%}
+      {{ out }}
   no_log: true
 
 - name: brain — the root argument
