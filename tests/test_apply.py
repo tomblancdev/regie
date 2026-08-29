@@ -54,6 +54,8 @@ class FakeHA(HomeAssistant):
     def get(self, path, auth=True):
         self.log.append(f"GET {path}")
         if path == "/api/onboarding":
+            if all(self.onboarded.values()):
+                return 404, "404: Not Found"  # the views are gone once every step is done
             return 200, [{"step": k, "done": v} for k, v in self.onboarded.items()]
         if auth and not self._authed():
             return 401, {"message": "Unauthorized"}

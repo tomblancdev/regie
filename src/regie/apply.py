@@ -124,7 +124,13 @@ class Conductor:
         brain that has no owner yet: there is no token to plan with)."""
         owner = self.house.owner()
         status, steps = self.ha.get("/api/onboarding", auth=False)
-        if status != 200 or not isinstance(steps, list):
+        if status == 404:
+            # the onboarding views are gone once every step is done: 404 IS onboarded
+            steps = [
+                {"step": k, "done": True}
+                for k in ("user", "core_config", "analytics", "integration")
+            ]
+        elif status != 200 or not isinstance(steps, list):
             raise HouseError(f"/api/onboarding: {status} {steps}")
         done = {s["step"]: s["done"] for s in steps}
         if not done.get("user"):
