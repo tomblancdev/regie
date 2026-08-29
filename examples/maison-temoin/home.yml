@@ -1,0 +1,73 @@
+# La maison témoin — the witness house: two floors, five rooms, one thing of
+# every kind, two people, the product's pack and one of the house's own. It is
+# rendered and validated on every commit; it is the documentation and the
+# smoke test at once. Nothing here is anybody's: the addresses are the RFC
+# documentation reserves, the names are made up.
+schema: 1
+house:
+  name: maison_temoin
+  label: Maison témoin
+  lang: fr
+  timezone: Europe/Paris
+  url: https://home.example.com
+  country: FR
+profile: ct
+packs: [lighting, chalet]
+paths:
+  house_packs: packs
+proxy:
+  trusted: [192.0.2.2]
+oidc:
+  client_id: home
+  discovery_url: https://auth.example.com/application/o/home/.well-known/openid-configuration
+  display_name: Maison témoin
+  roles: { admin: admins, user: household }
+zigbee:
+  channel: 25
+  coordinators:
+    - { id: main, thing: coordinator_main, port: 6638, adapter: zstack }
+mqtt:
+  host: 192.0.2.5
+areas:
+  - { id: hall, label: Entrée, floor: ground }
+  - { id: living, label: Salon, floor: ground }
+  - { id: kitchen, label: Cuisine, floor: ground }
+  - { id: bedroom_a, label: Chambre A, floor: upstairs }
+  - { id: bedroom_b, label: Chambre B, floor: upstairs }
+people:
+  - { id: alice, label: Alice, admin: true }
+  - { id: bob, label: Bob }
+things:
+  # the radio itself is a thing: it has an address, a reservation, a check
+  - { id: coordinator_main, area: living, kind: coordinator, via: lan, vendor: SMLIGHT, model: SLZB-MR1U, host: 192.0.2.10, mac: "00:00:5e:00:53:10" }
+  # the living room — Zigbee lights, a remote bound to the room, the screen things
+  - { id: living_ceiling, area: living, kind: light, via: zigbee, vendor: IKEA, model: LED1836G9, ieee: "0x000d6ffffe000001", options: { dim: true } }
+  - { id: living_lamp, area: living, kind: light, via: zigbee, label: Lampadaire, ieee: "0x000d6ffffe000002" }
+  - { id: living_remote, area: living, kind: remote, via: zigbee, vendor: IKEA, model: E2001, ieee: "0x000d6ffffe000003", bind: [living] }
+  - { id: living_thermostat, area: living, kind: thermostat, via: zigbee, ieee: "0x000d6ffffe000004" }
+  - { id: living_tv, area: living, kind: tv, via: wifi, integration: androidtv_remote, host: 192.0.2.20, mac: "00:00:5e:00:53:20" }
+  - { id: living_cast, area: living, kind: cast, via: wifi, integration: cast, mac: "00:00:5e:00:53:21" }
+  - { id: living_speaker, area: living, kind: speaker, via: wifi, integration: sonos, mac: "00:00:5e:00:53:22" }
+  - { id: living_satellite, area: living, kind: satellite, via: wifi, integration: wyoming, host: 192.0.2.23 }
+  # the hall — a motion light at night, the door, the lock, a camera
+  - { id: hall_ceiling, area: hall, kind: light, via: zigbee, ieee: "0x000d6ffffe000010" }
+  - { id: hall_motion, area: hall, kind: motion, via: zigbee, ieee: "0x000d6ffffe000011", options: { lights: [hall_ceiling], off_after: "00:03:00", only_at_night: true } }
+  - { id: hall_door, area: hall, kind: door, via: zigbee, ieee: "0x000d6ffffe000012" }
+  - { id: hall_lock, area: hall, kind: lock, via: zigbee, ieee: "0x000d6ffffe000013" }
+  - { id: hall_camera, area: hall, kind: camera, via: wifi, integration: generic, host: 192.0.2.30 }
+  # the kitchen — a Wi-Fi plug, a sensor, a valve, the printer, a thing that PUSHES over MQTT
+  - { id: kitchen_ceiling, area: kitchen, kind: light, via: zigbee, ieee: "0x000d6ffffe000020" }
+  - { id: kitchen_plug, area: kitchen, kind: plug, via: wifi, label: Cafetière, integration: tplink, host: 192.0.2.31, mac: "00:00:5e:00:53:31" }
+  - { id: kitchen_temperature, area: kitchen, kind: sensor, via: zigbee, ieee: "0x000d6ffffe000021" }
+  - { id: kitchen_valve, area: kitchen, kind: valve, via: zigbee, ieee: "0x000d6ffffe000022" }
+  - { id: kitchen_printer, area: kitchen, kind: printer, via: wifi, integration: ipp, host: 192.0.2.32 }
+  - { id: kitchen_hood, area: kitchen, kind: switch, via: zigbee, label: Hotte, ieee: "0x000d6ffffe000023" }
+  - { id: kitchen_energy, area: kitchen, kind: sensor, via: mqtt, label: Compteur }
+  # upstairs — a wall switch bound straight to its bulb, a cover, a Bluetooth proxy
+  - { id: bedroom_a_ceiling, area: bedroom_a, kind: light, via: zigbee, ieee: "0x000d6ffffe000030" }
+  - { id: bedroom_a_cover, area: bedroom_a, kind: cover, via: zigbee, ieee: "0x000d6ffffe000031" }
+  - { id: bedroom_a_wall, area: bedroom_a, kind: remote, via: zigbee, ieee: "0x000d6ffffe000032", bind: [bedroom_a_ceiling] }
+  - { id: bedroom_b_ceiling, area: bedroom_b, kind: light, via: zigbee, ieee: "0x000d6ffffe000040" }
+  - { id: bedroom_b_proxy, area: bedroom_b, kind: proxy, via: esphome, host: 192.0.2.40 }
+  # a thing the walk has not reached yet: no address, so it renders nowhere and check says so
+  - { id: bedroom_b_lamp, area: bedroom_b, kind: light, via: zigbee }

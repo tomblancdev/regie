@@ -1,0 +1,74 @@
+# rendered by La Régie {{ version }} — edit home.yml, not this file.
+# What is NOT here is on purpose: integrations (mqtt, the things' own) are
+# config entries, set through the API by `regie apply`; automations are the
+# packages' (packages/) — automations.yaml is the UI's sketchpad.
+homeassistant:
+  name: {{ data.house.label | to_yaml }}
+  time_zone: {{ data.house.timezone | default('UTC') }}
+  unit_system: {{ data.house.unit_system | default('metric') }}
+{% if data.house.country is defined %}
+  country: {{ data.house.country }}
+{% endif %}
+{% if data.house.latitude is defined %}
+  latitude: {{ data.house.latitude }}
+  longitude: {{ data.house.longitude }}
+{% endif %}
+{% if data.house.elevation is defined %}
+  elevation: {{ data.house.elevation }}
+{% endif %}
+{% if data.house.url is defined %}
+  internal_url: {{ data.house.url }}
+  external_url: {{ data.house.url }}
+{% endif %}
+  packages: !include_dir_named packages
+
+default_config:
+
+automation: !include automations.yaml
+scene: !include scenes.yaml
+script: !include scripts.yaml
+
+lovelace:
+  mode: storage
+  dashboards:
+    regie-phone:
+      mode: yaml
+      title: {{ labels.ui.home }}
+      icon: mdi:home
+      filename: dashboards/phone.yaml
+      show_in_sidebar: true
+
+http:
+{% if data.proxy is defined and data.proxy.trusted %}
+  use_x_forwarded_for: true
+  trusted_proxies:
+{% for p in data.proxy.trusted %}
+    - {{ p }}
+{% endfor %}
+{% else %}
+  use_x_forwarded_for: false
+{% endif %}
+
+# every entity's state as a metric on /api/prometheus (a long-lived token)
+prometheus:
+
+{% if data.oidc is defined %}
+# the door: an OpenID Connect client (hass-oidc-auth, a custom component the
+# `engine` role installs pinned); roles from the provider's groups
+auth_oidc:
+  client_id: {{ data.oidc.client_id | to_yaml }}
+  client_secret: !secret oidc_client_secret
+  discovery_url: {{ data.oidc.discovery_url }}
+{% if data.oidc.display_name is defined %}
+  display_name: {{ data.oidc.display_name | to_yaml }}
+{% endif %}
+{% if data.oidc.roles is defined %}
+  roles:
+{% for role, group in data.oidc.roles.items() %}
+    {{ role }}: {{ group }}
+{% endfor %}
+{% endif %}
+
+{% endif %}
+logger:
+  default: warning

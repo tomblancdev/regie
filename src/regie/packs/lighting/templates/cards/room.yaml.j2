@@ -1,0 +1,15 @@
+{% set shown = area_things | selectattr('kind', 'in', ['light', 'plug', 'switch']) | list %}
+{% if shown %}
+- type: entities
+  title: {{ area.label | to_yaml }}
+  state_color: true
+  entities:
+{% if kinds.get('light', []) %}
+    - entity: light.{{ area.id }}_lights
+      name: {{ labels.ui.lights | to_yaml }}
+{% endif %}
+{% for t in shown %}
+    - entity: {{ entity(t) }}
+      name: {{ (t.label | default(labels.kind(t.kind))) | to_yaml }}
+{% endfor %}
+{% endif %}

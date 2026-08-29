@@ -1,0 +1,28 @@
+# Profile `ct` — a Debian-like host with podman + systemd: an LXC container,
+# a VM, a mini-PC. Quadlet units on host networking; the brain's tree under
+# one root. The engine assumes nothing else about the host: no lane, no
+# gateway, no log shipper, no backup server — those are the house's, outside.
+name: ct
+summary: a Debian-like host with podman + systemd — Quadlet units, host networking, one root
+runtime: quadlet
+network: host
+root: /srv/home
+units_dir: /etc/containers/systemd
+
+# what this release of the product was tested against (a house may pin its
+# own under `pins:` — `doctor` will say it did)
+pins:
+  home_assistant: "2026.8.3"
+  mosquitto: "2.0.22"
+  zigbee2mqtt: "2.13.0"
+images:
+  home_assistant: ghcr.io/home-assistant/home-assistant
+  mosquitto: docker.io/library/eclipse-mosquitto
+  zigbee2mqtt: docker.io/koenkk/zigbee2mqtt
+
+# the units — the half that differs between profiles (a `docker` profile
+# renders a compose file here instead)
+templates:
+  - { src: units/home-assistant.container.j2, dst: units/home-assistant.container }
+  - { src: units/mosquitto.container.j2, dst: units/mosquitto.container }
+  - { src: units/zigbee2mqtt.container.j2, dst: "units/zigbee2mqtt-{{ coordinator.id }}.container", each: coordinators }

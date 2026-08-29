@@ -1,0 +1,14 @@
+# Pack `lighting` — the lights, the plugs, the wall controls, the motion
+# lights, and the room cards on the phone. It brings no service (the base
+# already has Zigbee2MQTT); it instantiates from the things.
+name: lighting
+summary: room light groups, motion lights, "thing went silent", the phone's room cards
+kinds: [light, plug, switch, remote, motion]
+services: []
+schema: schema.json
+templates:
+  # one package per room that has a light: the room's light group, the
+  # motion lights, the silent alert
+  - { src: packages/lighting.yaml.j2, dst: "home-assistant/packages/lighting_{{ area.id }}.yaml", each: areas }
+cards:
+  - { src: cards/room.yaml.j2, each: areas }

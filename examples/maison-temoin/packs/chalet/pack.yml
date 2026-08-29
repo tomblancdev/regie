@@ -1,0 +1,10 @@
+# A house's own pack — the seam for what must never enter the public product:
+# a private button, a private URL, the house's own rules. It is loaded from
+# `paths.house_packs`, exactly like a product pack. This one adds a card.
+name: chalet
+summary: the witness house's own pack — one markdown card, to prove the seam
+kinds: []
+services: []
+templates: []
+cards:
+  - { src: cards/note.yaml.j2, each: areas }

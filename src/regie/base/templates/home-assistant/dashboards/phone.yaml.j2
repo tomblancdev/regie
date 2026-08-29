@@ -1,0 +1,9 @@
+# rendered by La Régie {{ version }} — the phone dashboard: one card per room, from the packs
+title: {{ labels.ui.home }}
+views:
+  - title: {{ labels.ui.rooms }}
+    path: rooms
+    cards:
+{% for card in cards %}
+{{ card | indent(6, first=True) }}
+{% endfor %}

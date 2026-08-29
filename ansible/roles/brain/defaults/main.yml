@@ -1,0 +1,12 @@
+# brain — the contract for 0.2. The role hands the house to the engine on the
+# host and runs its verbs; it decides nothing the engine does not.
+
+# the house: a home.yml on the controller (copied to the host at converge)
+regie_home_yml: ""
+# the secret values (name: value) — from the fleet's store; the role passes
+# them through the environment and logs none of it
+regie_secrets: {}
+# the brain's root on the host — empty: the profile's default
+regie_root: ""
+# where the units land — empty: the profile's default
+regie_units_dir: ""

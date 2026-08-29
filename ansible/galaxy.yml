@@ -1,0 +1,32 @@
+# The collection `tomblancdev.regie` — the fleet driver: roles that lay a
+# host down, install the engine and run its verbs. A house with a shell runs
+# the verbs itself; a fleet runs them from a converge; both go through the
+# same engine, so the fleet never has a feature the house lacks. A lab pins
+# it by tag:
+#   collections:
+#     - name: https://github.com/tomblancdev/regie.git#/ansible/
+#       type: git
+#       version: v0.1.0
+namespace: tomblancdev
+name: regie
+version: 0.1.0
+readme: README.md
+authors:
+  - Tom Blanc <dev@tomblanc.fr>   # no-environment: ok — the author, not a network
+description: "La Régie — a smart home as files: the ansible driver for the engine that lays a Home Assistant brain (Home Assistant, Mosquitto, Zigbee2MQTT) down from one schema-validated home.yml"
+license:
+  - MIT
+tags:
+  - homeassistant
+  - zigbee2mqtt
+  - mosquitto
+  - podman
+  - quadlet
+  - homelab
+  - smarthome
+repository: https://github.com/tomblancdev/regie
+documentation: https://github.com/tomblancdev/regie/tree/main/ansible
+homepage: https://github.com/tomblancdev/regie
+issues: https://github.com/tomblancdev/regie/issues
+build_ignore:
+  - "*.tar.gz"

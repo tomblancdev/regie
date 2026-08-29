@@ -1,0 +1,35 @@
+---
+# engine — the CLI on the brain's host, from the product's tag
+- name: engine — the host's packages
+  ansible.builtin.apt:
+    name: "{{ regie_engine_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: engine — the venv
+  ansible.builtin.command:
+    cmd: python3 -m venv {{ regie_venv }}
+    creates: "{{ regie_venv }}/bin/pip"
+
+- name: engine — the package, from the tag
+  ansible.builtin.pip:
+    name: "git+{{ regie_repo }}@{{ regie_version }}"
+    virtualenv: "{{ regie_venv }}"
+  register: regie_engine_install
+
+- name: engine — on the PATH
+  ansible.builtin.file:
+    src: "{{ regie_venv }}/bin/regie"
+    dest: "{{ regie_bin }}"
+    state: link
+
+- name: engine — the version it answers
+  ansible.builtin.command:
+    cmd: "{{ regie_bin }} --version"
+  changed_when: false
+  register: regie_engine_version
+
+- name: engine — say it
+  ansible.builtin.debug:
+    msg: "{{ regie_engine_version.stdout }}"

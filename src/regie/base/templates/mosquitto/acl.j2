@@ -1,0 +1,8 @@
+# rendered by La Régie {{ version }} — one user per client, each on its own topics
+{% for u in mqtt_users %}
+user {{ u.name }}
+{% for t in u.topics %}
+topic readwrite {{ t }}
+{% endfor %}
+
+{% endfor %}

@@ -1,0 +1,9 @@
+# rendered by La Régie {{ version }} — the things on this radio, by address; the friendly name IS the thing's id
+{% for t in coordinator.things %}
+'{{ t.ieee }}':
+  friendly_name: {{ t.id }}
+  description: {{ ((t.label | default(labels.kind(t.kind))) ~ ' — ' ~ house.area(t.area).label) | to_yaml }}
+{% endfor %}
+{% if not coordinator.things %}
+{}
+{% endif %}

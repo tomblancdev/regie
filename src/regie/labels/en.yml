@@ -1,0 +1,36 @@
+kinds:
+  light: Light
+  plug: Plug
+  switch: Switch
+  sensor: Sensor
+  remote: Remote
+  cover: Cover
+  door: Door
+  motion: Motion
+  cast: Cast
+  tv: TV
+  speaker: Speaker
+  satellite: Satellite
+  camera: Camera
+  lock: Lock
+  thermostat: Thermostat
+  valve: Valve
+  printer: Printer
+  coordinator: Coordinator
+  proxy: Proxy
+via:
+  zigbee: Zigbee
+  wifi: Wi-Fi
+  lan: Ethernet
+  mqtt: MQTT
+  ble: Bluetooth
+  matter: Matter
+  thread: Thread
+  esphome: ESPHome
+ui:
+  home: Home
+  rooms: Rooms
+  lights: lights
+  all_off: All off
+  silent: went silent
+  floor: Floor

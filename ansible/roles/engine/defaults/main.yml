@@ -1,0 +1,11 @@
+# engine — the CLI on the brain's host. Everything here is a fleet's to set;
+# none of it is a secret.
+
+# the tag to install; the collection's own version by default, so the pin in
+# a fleet's requirements bumps the roles and the engine together
+regie_version: "v0.1.0"
+regie_repo: https://github.com/tomblancdev/regie.git
+regie_venv: /opt/regie
+regie_bin: /usr/local/bin/regie
+# what the host needs first (Debian-like: python3 with venv, git for pip)
+regie_engine_packages: [python3, python3-venv, git]

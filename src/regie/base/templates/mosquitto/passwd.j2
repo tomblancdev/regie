@@ -1,0 +1,3 @@
+{% for u in mqtt_users %}
+{{ u.name }}:{{ secrets['mqtt_password_' ~ u.name] | mosquitto_hash(u.name) }}
+{% endfor %}

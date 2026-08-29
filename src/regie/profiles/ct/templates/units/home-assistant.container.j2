@@ -1,0 +1,20 @@
+# rendered by La Régie {{ version }} — edit home.yml, not this file
+[Unit]
+Description=Home Assistant — the brain
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Container]
+Image={{ images.home_assistant }}:{{ pins.home_assistant }}
+ContainerName=home-assistant
+Network=host
+Volume={{ root }}/home-assistant:/config:Z
+Volume=/etc/localtime:/etc/localtime:ro
+Environment=TZ={{ data.house.timezone | default('UTC') }}
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target default.target

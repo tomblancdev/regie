@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+/build/
+/dist/
+*.egg-info/
+/.venv/
+/.pytest_cache/
+/.ruff_cache/
+# ansible-galaxy collection build output
+*.tar.gz
+# a rendered brain, when you try the engine locally
+/out/

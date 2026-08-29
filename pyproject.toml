@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "regie"
+version = "0.1.0"
+description = "La Régie — a smart home as files: one engine lays a Home Assistant brain down from a schema-validated home.yml"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Tom Blanc", email = "dev@tomblanc.fr" }]   # no-environment: ok — the author, not a network
+dependencies = [
+  "pyyaml>=6",
+  "jsonschema>=4.18",
+  "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/tomblancdev/regie"
+Issues = "https://github.com/tomblancdev/regie/issues"
+
+[project.scripts]
+regie = "regie.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+regie = ["schema/*.json", "base/templates/**/*", "profiles/**/*", "packs/**/*", "labels/*.yml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src/regie/packs"]

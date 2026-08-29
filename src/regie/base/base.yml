@@ -1,0 +1,18 @@
+# The config tree every profile renders — the same brain whatever the host.
+# `each` renders one file per item (coordinators | areas); `keep` writes a
+# file once and never overwrites it (the UI's sketchpad); `mode` is for the
+# files that hold a secret.
+templates:
+  - { src: home-assistant/configuration.yaml.j2, dst: home-assistant/configuration.yaml }
+  - { src: home-assistant/automations.yaml.j2, dst: home-assistant/automations.yaml, keep: true }
+  - { src: home-assistant/scenes.yaml.j2, dst: home-assistant/scenes.yaml, keep: true }
+  - { src: home-assistant/scripts.yaml.j2, dst: home-assistant/scripts.yaml, keep: true }
+  - { src: home-assistant/secrets.yaml.j2, dst: home-assistant/secrets.yaml, mode: "0600" }
+  - { src: home-assistant/dashboards/phone.yaml.j2, dst: home-assistant/dashboards/phone.yaml }
+  - { src: mosquitto/mosquitto.conf.j2, dst: mosquitto/config/mosquitto.conf }
+  - { src: mosquitto/acl.j2, dst: mosquitto/config/acl }
+  - { src: mosquitto/passwd.j2, dst: mosquitto/config/passwd, mode: "0600" }
+  - { src: zigbee2mqtt/configuration.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/configuration.yaml", each: coordinators }
+  - { src: zigbee2mqtt/devices.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/devices.yaml", each: coordinators }
+  - { src: zigbee2mqtt/groups.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/groups.yaml", each: coordinators }
+  - { src: zigbee2mqtt/secret.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/secret.yaml", each: coordinators, mode: "0600" }

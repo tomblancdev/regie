@@ -1,0 +1,18 @@
+# rendered by La Régie {{ version }} — edit home.yml, not this file
+[Unit]
+Description=Mosquitto — the broker the things talk to
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image={{ images.mosquitto }}:{{ pins.mosquitto }}
+ContainerName=mosquitto
+Network=host
+Volume={{ root }}/mosquitto/config:/mosquitto/config:ro,Z
+Volume={{ root }}/mosquitto/data:/mosquitto/data:Z
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target default.target

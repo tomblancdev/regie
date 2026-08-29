@@ -1,0 +1,9 @@
+{
+  "kinds": ["light", "plug", "switch", "remote", "motion"],
+  "options_properties": {
+    "lights": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }, "description": "motion: the lights it turns on (the room's group otherwise)" },
+    "off_after": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}:[0-9]{2}$", "description": "motion: how long after the last movement (HH:MM:SS, 00:05:00)" },
+    "only_at_night": { "type": "boolean", "description": "motion: between sunset and sunrise only" },
+    "dim": { "type": "boolean", "description": "light: dimmable (the card shows a slider)" }
+  }
+}

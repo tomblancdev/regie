@@ -1,0 +1,19 @@
+# rendered by La Régie {{ version }} — edit home.yml, not this file
+[Unit]
+Description=Zigbee2MQTT — the Zigbee mesh ({{ coordinator.id }}: {{ coordinator.host }}:{{ coordinator.port }})
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Container]
+Image={{ images.zigbee2mqtt }}:{{ pins.zigbee2mqtt }}
+ContainerName=zigbee2mqtt-{{ coordinator.id }}
+Network=host
+Volume={{ root }}/zigbee2mqtt/{{ coordinator.id }}:/app/data:Z
+Environment=TZ={{ data.house.timezone | default('UTC') }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target default.target

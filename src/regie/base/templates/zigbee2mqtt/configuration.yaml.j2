@@ -1,0 +1,29 @@
+# rendered by La Régie {{ version }} — edit home.yml, not this file.
+# Zigbee2MQTT writes this file too (a pairing, a rename in its UI): a render
+# puts it back, and `regie check` shows what drifted in between.
+version: 4
+homeassistant:
+  enabled: true
+frontend:
+  enabled: true
+  host: 127.0.0.1
+  port: {{ 8080 + index }}
+mqtt:
+  base_topic: {{ coordinator.base_topic }}
+  server: mqtt://127.0.0.1:{{ data.mqtt.port | default(1883) }}
+  user: zigbee2mqtt_{{ coordinator.id }}
+  password: !secret mqtt_password
+serial:
+  port: tcp://{{ coordinator.host }}:{{ coordinator.port }}
+  adapter: {{ coordinator.adapter }}
+advanced:
+  channel: {{ data.zigbee.channel | default(25) }}
+  network_key: !secret network_key
+  pan_id: !secret pan_id
+  ext_pan_id: !secret ext_pan_id
+  last_seen: ISO_8601
+  log_level: info
+availability:
+  enabled: true
+devices: devices.yaml
+groups: groups.yaml

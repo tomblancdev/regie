@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tomblancdev/regie/schema/home.schema.json",
+  "title": "home.yml — a house, for La Régie (schema 1)",
+  "description": "The contract every house writes to. Things are data: an id, a room, a kind, how it is reached. Packs add fields to a thing (their schema fragment is merged before validation); kinds and via are OPEN vocabularies — an unknown value is a warning, never an error, so a new use case is a pack, not a schema bump.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "house",
+    "profile",
+    "areas",
+    "things"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1,
+      "description": "the schema version this file is written to; `regie migrate` moves a file forward"
+    },
+    "house": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "label"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id",
+          "description": "an id for the house (paths, topics)"
+        },
+        "label": {
+          "type": "string",
+          "description": "what the family calls it"
+        },
+        "lang": {
+          "type": "string",
+          "pattern": "^[a-z]{2}$",
+          "default": "en",
+          "description": "the labels' language (labels/<lang>.yml)"
+        },
+        "timezone": {
+          "type": "string",
+          "default": "UTC"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "the brain's URL for the phones (internal and external are the same door)"
+        },
+        "country": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        },
+        "elevation": {
+          "type": "integer"
+        },
+        "unit_system": {
+          "enum": [
+            "metric",
+            "us_customary"
+          ],
+          "default": "metric"
+        }
+      }
+    },
+    "profile": {
+      "$ref": "#/$defs/id",
+      "description": "where the brain runs: a folder under profiles/ (ct, and later pi, vm, docker)"
+    },
+    "packs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "the use cases enabled: product packs (packs/) and the house's own (paths.house_packs)"
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "the brain's tree on its host; the profile's default otherwise"
+        },
+        "house_packs": {
+          "type": "string",
+          "description": "a directory of the house's own packs, relative to home.yml"
+        }
+      }
+    },
+    "pins": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the images' tags; the profile carries the versions this release was tested against, a house may override (doctor says so)",
+      "properties": {
+        "home_assistant": {
+          "type": "string"
+        },
+        "mosquitto": {
+          "type": "string"
+        },
+        "zigbee2mqtt": {
+          "type": "string"
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "a reverse proxy in front of the brain (optional)",
+      "properties": {
+        "trusted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "its addresses or networks (X-Forwarded-For is trusted from these)"
+        }
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client_id",
+        "discovery_url"
+      ],
+      "description": "an OpenID Connect door (optional — without it, Home Assistant's own login). The client secret is the secret `oidc_client_secret`.",
+      "properties": {
+        "client_id": {
+          "type": "string"
+        },
+        "discovery_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "admin": {
+              "type": "string",
+              "description": "the provider's group that makes an admin"
+            },
+            "user": {
+              "type": "string",
+              "description": "the provider's group that lets a person in"
+            }
+          }
+        }
+      }
+    },
+    "zigbee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coordinators"
+      ],
+      "properties": {
+        "channel": {
+          "type": "integer",
+          "minimum": 11,
+          "maximum": 26,
+          "default": 25,
+          "description": "fixed before the first pairing; changing it re-pairs the mesh"
+        },
+        "coordinators": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/coordinator"
+          }
+        }
+      }
+    },
+    "mqtt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "where the things reach the broker; the brain itself uses the loopback"
+        },
+        "port": {
+          "type": "integer",
+          "default": 1883
+        }
+      }
+    },
+    "areas": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/area"
+      }
+    },
+    "people": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/person"
+      }
+    },
+    "things": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/thing"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "ieee": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{16}$"
+    },
+    "mac": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{2}:){5}[0-9a-f]{2}$"
+    },
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string"
+        },
+        "floor": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "person": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string"
+        },
+        "admin": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "coordinator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "description": "one Zigbee radio = one Zigbee2MQTT instance; reached over TCP. Its address comes from the thing it names (kind: coordinator) or from `host`.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "thing": {
+          "$ref": "#/$defs/id",
+          "description": "the thing (kind: coordinator) whose `host` is the radio's address"
+        },
+        "host": {
+          "type": "string",
+          "description": "the radio's address, when it is not a thing"
+        },
+        "port": {
+          "type": "integer",
+          "default": 6638
+        },
+        "adapter": {
+          "type": "string",
+          "default": "zstack",
+          "description": "zstack (TI CC26x2), ember (Silicon Labs), deconz, zigate, zboss"
+        },
+        "base_topic": {
+          "type": "string",
+          "description": "the instance's MQTT root; `zigbee2mqtt` for the first coordinator, `zigbee2mqtt_<id>` for the others"
+        }
+      }
+    },
+    "thing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "area",
+        "kind",
+        "via"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "one name, three systems: the Zigbee2MQTT friendly name, the MQTT topic, the entity's object id"
+        },
+        "area": {
+          "$ref": "#/$defs/id",
+          "description": "the room"
+        },
+        "kind": {
+          "$ref": "#/$defs/id",
+          "description": "what it is (x-known.kinds + the packs'); open"
+        },
+        "via": {
+          "$ref": "#/$defs/id",
+          "description": "how it is reached (x-known.via + the packs'); open"
+        },
+        "label": {
+          "type": "string",
+          "description": "the family's word for this one; the kind's label otherwise"
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "ieee": {
+          "$ref": "#/$defs/ieee",
+          "description": "a Zigbee thing's address — filled by the pairing walk"
+        },
+        "coordinator": {
+          "$ref": "#/$defs/id",
+          "description": "the radio a Zigbee thing is on; the first coordinator otherwise"
+        },
+        "mac": {
+          "$ref": "#/$defs/mac",
+          "description": "a network thing's hardware address (a reservation, a row)"
+        },
+        "host": {
+          "type": "string",
+          "description": "a network thing's address"
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z_]+\\.[a-z0-9_]+$",
+          "description": "the entity id when it cannot be derived from the kind and the id"
+        },
+        "integration": {
+          "$ref": "#/$defs/id",
+          "description": "the Home Assistant integration that reaches it (a config entry — the conductor's business)"
+        },
+        "bind": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "description": "a control bound inside the mesh to things or areas (an area = its Zigbee group)"
+        },
+        "options": {
+          "type": "object",
+          "description": "what a pack reads on a thing of its kinds; each pack documents its own"
+        }
+      }
+    }
+  },
+  "x-known": {
+    "kinds": [
+      "light",
+      "plug",
+      "switch",
+      "sensor",
+      "remote",
+      "cover",
+      "door",
+      "motion",
+      "cast",
+      "tv",
+      "speaker",
+      "satellite",
+      "camera",
+      "lock",
+      "thermostat",
+      "valve",
+      "printer",
+      "coordinator",
+      "proxy"
+    ],
+    "via": [
+      "zigbee",
+      "wifi",
+      "lan",
+      "mqtt",
+      "ble",
+      "matter",
+      "thread",
+      "esphome"
+    ]
+  }
+}

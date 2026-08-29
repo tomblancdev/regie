@@ -1,0 +1,80 @@
+{% set lights = kinds.get('light', []) %}
+{% set motions = kinds.get('motion', []) %}
+{% set watched = area_things | selectattr('kind', 'in', ['light', 'plug', 'switch', 'remote', 'motion']) | list %}
+{% if lights %}
+# rendered by La Régie {{ version }} — {{ area.label }}: lighting (pack lighting)
+homeassistant:
+  customize:
+    light.{{ area.id }}_lights:
+      friendly_name: {{ (area.label ~ ' — ' ~ labels.ui.lights) | to_yaml }}
+
+light:
+  - platform: group
+    name: {{ area.id }}_lights
+    unique_id: regie_{{ area.id }}_lights
+    entities:
+{% for t in lights %}
+      - {{ entity(t) }}
+{% endfor %}
+
+automation:
+{% for m in motions %}
+{% set targets = m.options.lights | default([]) %}
+  - id: regie_{{ area.id }}_{{ m.id }}_motion_light
+    alias: {{ (area.label ~ ' — ' ~ (m.label | default(labels.kind('motion'))) ~ ' → ' ~ labels.ui.lights) | to_yaml }}
+    description: a motion light (La Régie, pack lighting — home.yml, not the UI)
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: {{ entity(m) }}
+        to: "on"
+{% if m.options.only_at_night | default(false) %}
+    conditions:
+      - condition: sun
+        after: sunset
+        before: sunrise
+{% else %}
+    conditions: []
+{% endif %}
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id:
+{% for id in targets %}
+            - {{ entity(house.thing(id)) }}
+{% else %}
+            - light.{{ area.id }}_lights
+{% endfor %}
+      - wait_for_trigger:
+          - trigger: state
+            entity_id: {{ entity(m) }}
+            to: "off"
+      - delay: {{ m.options.off_after | default('00:05:00') | to_yaml }}
+      - action: light.turn_off
+        target:
+          entity_id:
+{% for id in targets %}
+            - {{ entity(house.thing(id)) }}
+{% else %}
+            - light.{{ area.id }}_lights
+{% endfor %}
+{% endfor %}
+  - id: regie_{{ area.id }}_silent
+    alias: {{ (area.label ~ ' — ' ~ labels.ui.silent) | to_yaml }}
+    description: a thing of this room unavailable for an hour (La Régie, pack lighting)
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id:
+{% for t in watched if entity(t) %}
+          - {{ entity(t) }}
+{% endfor %}
+        to: unavailable
+        for: "01:00:00"
+    actions:
+      - action: persistent_notification.create
+        data:
+          notification_id: {% raw %}"regie_silent_{{ trigger.entity_id }}"{% endraw %}
+          title: {{ area.label | to_yaml }}
+          message: {% raw %}"{{ trigger.to_state.name }} {% endraw %}{{ labels.ui.silent }}"
+{% endif %}

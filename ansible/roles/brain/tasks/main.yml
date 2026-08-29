@@ -1,0 +1,6 @@
+---
+# brain — hand home.yml + the secrets to the engine on the host, then
+#   check → render into the root → up → apply
+# Lands with 0.2. The contract is in defaults/main.yml; installing the
+# collection before the role exists is the point: the pin and the data land
+# first, the tasks fill in with the release that builds the verbs.

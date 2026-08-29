@@ -1,0 +1,40 @@
+# The family's words. A kind is an English id everywhere (the thing's id, the
+# topic, the entity); its LABEL is what a dashboard prints. Add a language by
+# adding a file; add a kind by adding a line — an unknown kind falls back to
+# its id, never to an error.
+kinds:
+  light: Lumière
+  plug: Prise
+  switch: Interrupteur
+  sensor: Capteur
+  remote: Télécommande
+  cover: Volet
+  door: Porte
+  motion: Mouvement
+  cast: Cast
+  tv: Télé
+  speaker: Enceinte
+  satellite: Satellite
+  camera: Caméra
+  lock: Serrure
+  thermostat: Thermostat
+  valve: Vanne
+  printer: Imprimante
+  coordinator: Coordinateur
+  proxy: Proxy
+via:
+  zigbee: Zigbee
+  wifi: Wi-Fi
+  lan: Ethernet
+  mqtt: MQTT
+  ble: Bluetooth
+  matter: Matter
+  thread: Thread
+  esphome: ESPHome
+ui:
+  home: Maison
+  rooms: Pièces
+  lights: lumières
+  all_off: Tout éteindre
+  silent: ne répond plus
+  floor: Étage
