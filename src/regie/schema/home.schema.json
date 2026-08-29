@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$comment": "no-environment: ok — the standard, not a network",
   "$id": "https://github.com/tomblancdev/regie/schema/home.schema.json",
   "title": "home.yml — a house, for La Régie (schema 1)",
   "description": "The contract every house writes to. Things are data: an id, a room, a kind, how it is reached. Packs add fields to a thing (their schema fragment is merged before validation); kinds and via are OPEN vocabularies — an unknown value is a warning, never an error, so a new use case is a pack, not a schema bump.",

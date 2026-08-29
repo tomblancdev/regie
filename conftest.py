@@ -8,7 +8,7 @@ from regie.house import load_house
 from regie.render import render
 from regie.secrets import load_secrets
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parent
 WITNESS = ROOT / "examples" / "maison-temoin"
 
 
@@ -37,8 +37,11 @@ def rendered(tmp_path, witness, secrets):
 def house_with(tmp_path):
     """A copy of the witness (its packs too), mutated; returns the home.yml path."""
 
+    calls = []
+
     def make(mutate):
-        target = tmp_path / "house"
+        calls.append(1)
+        target = tmp_path / f"house{len(calls)}"
         shutil.copytree(WITNESS, target)
         data = yaml.safe_load((target / "home.yml").read_text(encoding="utf-8"))
         mutate(data)

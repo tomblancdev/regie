@@ -230,7 +230,8 @@ def _cross_check(house: House) -> list[str]:
             errors.append(f"{t['id']}: coordinator {t['coordinator']!r} does not exist")
         if t["kind"] not in house.known_kinds:
             warnings.append(
-                f"{t['id']}: kind {t['kind']!r} is not one the product or a pack knows — it is kept, labelled by its id"
+                f"{t['id']}: kind {t['kind']!r} is not one the product or a pack knows "
+                "— it is kept, labelled by its id"
             )
         if t["via"] not in house.known_via:
             warnings.append(f"{t['id']}: via {t['via']!r} is not one the product or a pack knows")
@@ -253,7 +254,8 @@ def _cross_check(house: House) -> list[str]:
 
     if not house.labels.found:
         warnings.append(
-            f"no labels for lang {house.labels.lang!r} (known: {', '.join(Labels.known())}) — English used"
+            f"no labels for lang {house.labels.lang!r} "
+            f"(known: {', '.join(Labels.known())}) — English used"
         )
     if errors:
         raise HouseError(f"{house.path}:\n  " + "\n  ".join(errors))

@@ -74,7 +74,7 @@ automation:
     actions:
       - action: persistent_notification.create
         data:
-          notification_id: {% raw %}"regie_silent_{{ trigger.entity_id }}"{% endraw %}
+          notification_id: "regie_silent_{{ '{{ trigger.entity_id }}' }}"
           title: {{ area.label | to_yaml }}
-          message: {% raw %}"{{ trigger.to_state.name }} {% endraw %}{{ labels.ui.silent }}"
+          message: "{{ '{{ trigger.to_state.name }}' }} {{ labels.ui.silent }}"
 {% endif %}

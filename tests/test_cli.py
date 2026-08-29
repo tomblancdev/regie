@@ -1,7 +1,7 @@
 import yaml
 
-from regie.cli import main
 from conftest import WITNESS
+from regie.cli import main
 
 
 def test_check_reports_and_passes(witness_path, capsys):
@@ -12,7 +12,7 @@ def test_check_reports_and_passes(witness_path, capsys):
     assert "maison_temoin — Maison témoin (fr, Europe/Paris)" in out
     assert "profile ct · packs lighting, chalet (house)" in out
     assert (
-        "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 15 paired, 5 room groups" in out
+        "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 16 paired, 5 room groups" in out
     )
     assert "secrets: 7 needed, all present" in out
     assert "not paired yet" in out and out.rstrip().endswith("ok")

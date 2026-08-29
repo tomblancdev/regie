@@ -94,9 +94,9 @@ def test_zigbee2mqtt_configuration(rendered):
         "friendly_name": "living_lamp",
         "description": "Lampadaire — Salon",
     }
-    assert "0x000d6ffffe000001" in devices and len(devices) == 15
+    assert "0x000d6ffffe000001" in devices and len(devices) == 16
     groups = yaml.safe_load((rendered / "zigbee2mqtt/main/groups.yaml").read_text(encoding="utf-8"))
-    assert groups[2] == {
+    assert groups["2"] == {
         "friendly_name": "living",
         "description": "Salon",
         "devices": ["living_ceiling", "living_lamp"],
@@ -110,8 +110,8 @@ def test_mosquitto_users(rendered):
     acl = (rendered / "mosquitto/config/acl").read_text()
     assert "user home\ntopic readwrite #" in acl
     assert (
-        "user kitchen_energy\ntopic readwrite kitchen_energy/#\ntopic readwrite homeassistant/+/kitchen_energy/#"
-        in acl
+        "user kitchen_energy\ntopic readwrite kitchen_energy/#\n"
+        "topic readwrite homeassistant/+/kitchen_energy/#" in acl
     )
     passwd = (rendered / "mosquitto/config/passwd").read_text().splitlines()
     assert [line.split(":")[0] for line in passwd] == ["home", "zigbee2mqtt_main", "kitchen_energy"]

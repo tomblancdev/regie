@@ -17,5 +17,5 @@ Those are the fleet's own roles, beside these.
     - role: tomblancdev.regie.brain
       vars:
         regie_home_yml: "{{ playbook_dir }}/home/home.yml"
-        regie_secrets: "{{ my_store.home }}"   # values — the store is yours
+        regie_secrets: "{{ my_store.brain }}"   # values — the store is yours
 ```

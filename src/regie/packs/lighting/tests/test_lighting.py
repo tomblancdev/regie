@@ -59,7 +59,11 @@ def test_a_motion_without_named_lights_drives_the_room(house_with, secrets, tmp_
 
 def test_a_room_without_lights_gets_no_package_and_no_card(house_with, secrets, tmp_path):
     path = house_with(
-        lambda d: d.update(things=[t for t in d["things"] if t["id"] != "bedroom_b_ceiling"])
+        lambda d: d.update(
+            things=[
+                t for t in d["things"] if not (t["area"] == "bedroom_b" and t["kind"] == "light")
+            ]
+        )
     )
     render(load_house(path), tmp_path, secrets)
     assert not (tmp_path / "home-assistant/packages/lighting_bedroom_b.yaml").exists()

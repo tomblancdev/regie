@@ -73,7 +73,8 @@ def report(house: House, secrets: dict) -> None:
     kinds = ", ".join(f"{k} {n}" for k, n in sorted(house.by_kind().items()))
     admins = sum(1 for p in house.people if p.get("admin"))
     print(
-        f"{len(house.areas)} areas · {len(house.things)} things ({kinds}) · {len(house.people)} people ({admins} admin)"
+        f"{len(house.areas)} areas · {len(house.things)} things ({kinds}) · "
+        f"{len(house.people)} people ({admins} admin)"
     )
     for c in house.coordinators():
         print(
@@ -244,7 +245,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args, rest = parser.parse_known_args(argv)
+    if rest and args.verb not in NOT_YET:
+        parser.error(f"unrecognized arguments: {' '.join(rest)}")
     try:
         return args.func(args)
     except HouseError as exc:

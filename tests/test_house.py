@@ -80,7 +80,7 @@ def test_pins_merge_house_over_profile(witness, house_with):
             "thing 'ghost' does not exist",
         ),
         (lambda d: d["zigbee"]["coordinators"][0].pop("thing"), "neither a thing nor a host"),
-        (lambda d: d.pop("zigbee"), "zigbee thing(s) but no zigbee.coordinators"),
+        (lambda d: d.pop("zigbee"), r"zigbee thing\(s\) but no zigbee.coordinators"),
     ],
 )
 def test_cross_checks_name_the_fault(house_with, mutate, expected):
