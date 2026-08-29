@@ -142,18 +142,20 @@ def wait_for(runner: Runner, unit: str, timeout: int) -> None:
         return
     deadline = time.monotonic() + timeout
     if unit == "home-assistant":
+        # /manifest.json answers 200 without a token - a probe on /api/ would
+        # write an "invalid authentication" line into the brain's security log
+        # at every converge
         while time.monotonic() < deadline:
             try:
-                urllib.request.urlopen(f"{HA_URL}/api/", timeout=5)  # noqa: S310
+                urllib.request.urlopen(f"{HA_URL}/manifest.json", timeout=5)  # noqa: S310
                 return
-            except urllib.error.HTTPError as exc:
-                if exc.code in (401, 403):
-                    return  # alive: it refuses us, which is the healthy answer
+            except urllib.error.HTTPError:
+                return  # alive: it answered, whatever it said
             except (urllib.error.URLError, OSError):
                 pass
             _failed(runner, unit)
             time.sleep(3)
-        raise HouseError(f"home-assistant: {HA_URL}/api/ did not answer within {timeout}s")
+        raise HouseError(f"home-assistant: {HA_URL}/manifest.json did not answer within {timeout}s")
     if unit == "mosquitto":
         while time.monotonic() < deadline:
             try:
