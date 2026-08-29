@@ -126,6 +126,17 @@ def install_component(
     return restart
 
 
+def _failed(runner: Runner, unit: str) -> None:
+    """A unit that gave up is a fault now, not after the timeout: say why."""
+    rc, _ = runner.query("systemctl", "is-failed", "--quiet", f"{unit}.service")
+    if rc != 0:
+        return
+    _, log = runner.query(
+        "journalctl", "-u", f"{unit}.service", "-n", "15", "-o", "cat", "--no-pager"
+    )
+    raise HouseError(f"{unit}.service failed — its journal's last lines:\n{log.strip()}")
+
+
 def wait_for(runner: Runner, unit: str, timeout: int) -> None:
     if runner.check:
         return
@@ -140,6 +151,7 @@ def wait_for(runner: Runner, unit: str, timeout: int) -> None:
                     return  # alive: it refuses us, which is the healthy answer
             except (urllib.error.URLError, OSError):
                 pass
+            _failed(runner, unit)
             time.sleep(3)
         raise HouseError(f"home-assistant: {HA_URL}/api/ did not answer within {timeout}s")
     if unit == "mosquitto":
@@ -148,6 +160,7 @@ def wait_for(runner: Runner, unit: str, timeout: int) -> None:
                 with socket.create_connection(("127.0.0.1", 1883), timeout=3):
                     return
             except OSError:
+                _failed(runner, unit)
                 time.sleep(2)
         raise HouseError(f"mosquitto: port 1883 did not open within {timeout}s")
 
