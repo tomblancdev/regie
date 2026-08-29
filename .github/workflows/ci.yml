@@ -37,6 +37,11 @@ jobs:
       - run: regie check examples/maison-temoin/home.yml --secrets examples/maison-temoin/secrets.example.yml
       - run: regie render examples/maison-temoin/home.yml --secrets examples/maison-temoin/secrets.example.yml --out /tmp/brain
       - run: find /tmp/brain -type f | sort
+      # the WHEEL, not the checkout: a host installs the package (a venv, pip
+      # from the tag) - every data file the engine reads must ship in it
+      # (base.yml did not, once: found at the first converge, 2026-08-29)
+      - run: python -m venv /tmp/wheel && /tmp/wheel/bin/pip install --quiet .
+      - run: cd /tmp && /tmp/wheel/bin/regie render $GITHUB_WORKSPACE/examples/maison-temoin/home.yml --secrets $GITHUB_WORKSPACE/examples/maison-temoin/secrets.example.yml --out /tmp/brain-wheel && /tmp/wheel/bin/regie up $GITHUB_WORKSPACE/examples/maison-temoin/home.yml --root /tmp/brain-wheel --units-dir /tmp/units-wheel --check
 
   collection:
     needs: [no-environment]
