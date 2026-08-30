@@ -865,6 +865,17 @@ def test_a_discovered_flow_that_may_not_be_this_row_is_left_alone(
     assert fid in ha.flows  # two rows, one discovered flow: whose? the UI's to say
 
 
+def test_a_discovered_thing_no_row_names_is_a_line_not_a_tile(witness, secrets, tmp_path):
+    ha = FakeHA()
+    fid = ha.discover("denonavr", "Denon X-1", "Denon X")
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    line = next(s for s in steps if s.name == "discovered (denonavr)")
+    assert (
+        line.state == "ok" and line.detail == "Denon X-1 (zeroconf) — not in home.yml, left alone"
+    )
+    assert fid in ha.flows and "denonavr" not in ha.entries  # left to the UI, or to a row
+
+
 def test_a_discovered_tv_is_the_rows_by_its_mac(witness, secrets, tmp_path):
     ha = FakeHA()
     apply(witness, secrets, tmp_path, ha, check=False)

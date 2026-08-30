@@ -608,6 +608,17 @@ class Conductor:
                     verb=f"regie link {t['id']}",
                 )
                 self.step(name, out.state, f"{domain}: {out.detail}{note}")
+        # what the brain discovered that the house does not name: a line, never a tile
+        for f in ws.call("config_entries/flow/progress") or []:
+            if f.get("handler") in by_domain:
+                continue
+            ctx = f.get("context") or {}
+            who = (ctx.get("title_placeholders") or {}).get("name") or ctx.get("unique_id") or ""
+            self.step(
+                f"discovered ({f.get('handler')})",
+                "ok",
+                f"{who} ({ctx.get('source')}) — not in home.yml, left alone",
+            )
 
     def mqtt(self) -> None:
         if self.domain_entries("mqtt"):
