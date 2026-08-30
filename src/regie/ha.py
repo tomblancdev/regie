@@ -5,9 +5,11 @@ methods is a whole fake Home Assistant for the tests."""
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -50,6 +52,9 @@ class HomeAssistant:
     def post(self, path: str, body: dict, auth: bool = True) -> tuple[int, Any]:
         data = json.dumps(body).encode("utf-8")
         return self._request("POST", path, data, {"Content-Type": "application/json"}, auth)
+
+    def delete(self, path: str) -> tuple[int, Any]:
+        return self._request("DELETE", path, None, {}, True)
 
     def post_form(self, path: str, fields: dict) -> tuple[int, Any]:
         data = urllib.parse.urlencode(fields).encode("utf-8")
@@ -97,3 +102,22 @@ class Ws:
                 err = reply.get("error", {})
                 raise HouseError(f"{type_}: {err.get('code')} — {err.get('message')}")
             return reply.get("result")
+
+    def subscribe(self, event_type: str) -> int:
+        """Subscribe to an event type; the subscription's id is returned."""
+        self.call("subscribe_events", event_type=event_type)
+        return self.n
+
+    def events(self, subscription: int, timeout: float) -> Iterator[dict]:
+        """The events of a subscription, until `timeout` seconds have passed."""
+        deadline = time.monotonic() + timeout
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return
+            try:
+                reply = json.loads(self.conn.recv(timeout=left))
+            except TimeoutError:
+                return
+            if reply.get("type") == "event" and reply.get("id") == subscription:
+                yield reply.get("event") or {}

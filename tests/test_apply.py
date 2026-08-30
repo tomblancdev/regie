@@ -1,24 +1,48 @@
 """The conductor against a fake Home Assistant: the few REST and websocket
 calls it makes, answered from an in-memory state that behaves like the
 real thing on the points that matter (onboarding refuses twice, registries
-key on aliases, a flow walks its form, the backup config compares)."""
+key on aliases, a flow walks its form, a discovered flow is continued, a
+consent is an external step, a PIN is a form, the backup config compares)."""
 
+import re
 from contextlib import contextmanager
 
 import pytest
 
-from regie.apply import Conductor, apply, summary
+from regie.apply import apply, link, summary
 from regie.apply import probe as real_probe  # bound before the fixture below stubs it
 from regie.errors import HouseError
+from regie.flows import walk
 from regie.ha import HomeAssistant
+from regie.house import load_house
+
+FLOWS = "/api/config/config_entries/flow"
+OAUTH = ("home_connect", "smartthings")
+IOT_CLASS = {
+    "home_connect": "cloud_push",
+    "smartthings": "cloud_push",
+    "ipp": "local_polling",
+    "mqtt": "local_push",
+}
 
 
 class FakeWs:
     def __init__(self, ha):
         self.ha = ha
+        self.subs: dict[int, str] = {}
 
     def call(self, type_, **payload):
         return self.ha.ws_call(type_, payload)
+
+    def subscribe(self, event_type):
+        self.ha.n += 1
+        self.subs[self.ha.n] = event_type
+        return self.ha.n
+
+    def events(self, subscription, timeout):
+        # what the brain fired since: the person acted while the walker printed
+        while self.ha.queue:
+            yield self.ha.queue.pop(0)
 
 
 class FakeHA(HomeAssistant):
@@ -38,6 +62,13 @@ class FakeHA(HomeAssistant):
         self.areas: list[dict] = []
         self.entries: dict[str, list] = {}
         self.flows: dict[str, dict] = {}
+        self.progress: list[dict] = []  # discovered flows (not started by a user)
+        self.credentials: list[dict] = []
+        self.consents: set[str] = set()
+        self.queue: list[dict] = []
+        self.off: set[str] = set()  # hosts that do not answer
+        self.pin = "1234"
+        self.pin_shown = 0
         self.backup_cfg = {
             "agents": {},
             "automatic_backups_configured": False,
@@ -56,6 +87,173 @@ class FakeHA(HomeAssistant):
         }
         self.restarts = 0
 
+    # --- the flows, per handler ---
+    def _entry(self, domain, title, data):
+        self.n += 1
+        e = {
+            "entry_id": f"e{self.n}",
+            "domain": domain,
+            "title": title,
+            "source": "user",
+            "state": "loaded",
+            "_data": data,
+        }
+        self.entries.setdefault(domain, []).append(e)
+        return e
+
+    def _create(self, fid, flow, title, data=None):
+        e = self._entry(flow["handler"], title, data or {})
+        self.flows.pop(fid, None)
+        self.progress = [p for p in self.progress if p["flow_id"] != fid]
+        return 200, {"type": "create_entry", "flow_id": fid, "title": title, "result": e}
+
+    def _form(self, fid, step, schema, errors=None):
+        return 200, {
+            "type": "form",
+            "flow_id": fid,
+            "step_id": step,
+            "data_schema": schema,
+            "errors": errors or {},
+        }
+
+    def _start(self, fid, flow):
+        d = flow["handler"]
+        if d == "mqtt":
+            fields = ["broker", "port", "username", "password"]
+            return self._form(
+                fid,
+                "broker",
+                [{"name": f, "required": True} for f in fields]
+                + [{"name": "protocol", "required": True, "default": "5"}]
+                + [
+                    {
+                        "name": "other_settings",
+                        "type": "expandable",
+                        "required": True,
+                        "schema": [
+                            {"name": "set_client_cert", "required": True},
+                            {"name": "set_ca_cert", "required": True},
+                            {"name": "transport", "required": True, "default": "tcp"},
+                            {"name": "client_id", "optional": True},
+                        ],
+                    }
+                ],
+            )
+        if d == "ipp":
+            return self._form(
+                fid,
+                "user",
+                [
+                    {"name": "host", "required": True},
+                    {"name": "port", "required": True, "default": 631},
+                    {"name": "base_path", "required": True, "default": "/ipp/print"},
+                    {"name": "ssl", "required": True, "default": False},
+                    {"name": "verify_ssl", "required": True, "default": False},
+                ],
+            )
+        if d == "heos":
+            if self.entries.get("heos"):
+                self.flows.pop(fid)
+                return 200, {"type": "abort", "flow_id": fid, "reason": "single_instance_allowed"}
+            return self._form(fid, "user", [{"name": "host", "required": True}])
+        if d == "androidtv_remote":
+            return self._form(fid, "user", [{"name": "host", "required": True}])
+        if d in OAUTH:
+            if d == "home_connect" and not [c for c in self.credentials if c["domain"] == d]:
+                self.flows.pop(fid)
+                return 200, {"type": "abort", "flow_id": fid, "reason": "missing_credentials"}
+            flow["step"] = "auth"
+            return 200, {
+                "type": "external",
+                "flow_id": fid,
+                "step_id": "auth",
+                "url": f"https://vendor.example/authorize?state={fid}",
+            }
+        return self._form(fid, "user", [])  # a confirm-only form
+
+    def _continue(self, fid, flow, body):
+        d = flow["handler"]
+        if flow.get("step") == "zeroconf_confirm":  # a discovered flow: confirm, no fields
+            return self._create(fid, flow, flow.get("title", d), {})
+        if d == "mqtt":
+            section = body.get("other_settings")
+            if section is None or body.get("protocol") is None:
+                return 400, {"errors": {"other_settings": "required key not provided"}}
+            missing = [
+                k for k in ("set_client_cert", "set_ca_cert", "transport") if k not in section
+            ]
+            if missing:
+                return 400, {
+                    "errors": {"base": [f"required key not provided @ {k}" for k in missing]}
+                }
+            if body.get("broker") != "127.0.0.1":
+                return self._form(fid, "broker", [], {"base": "cannot_connect"})
+            return self._create(fid, flow, body["broker"], body)
+        if d == "ipp":
+            if body.get("host") in self.off:
+                return self._form(
+                    fid, "user", [{"name": "host", "required": True}], {"base": "cannot_connect"}
+                )
+            return self._create(fid, flow, body["host"], body)
+        if d == "heos":
+            if body.get("host") in self.off:
+                return self._form(
+                    fid, "user", [{"name": "host", "required": True}], {"base": "cannot_connect"}
+                )
+            return self._create(fid, flow, "HEOS System", body)
+        if d == "androidtv_remote":
+            if flow.get("step") == "pair":
+                if body.get("pin") != self.pin:
+                    return self._form(
+                        fid, "pair", [{"name": "pin", "required": True}], {"base": "invalid_auth"}
+                    )
+                return self._create(fid, flow, "TV", flow.get("data"))
+            if body.get("host") in self.off:
+                return self._form(
+                    fid, "user", [{"name": "host", "required": True}], {"base": "cannot_connect"}
+                )
+            flow["step"] = "pair"
+            flow["data"] = body
+            self.pin_shown += 1  # the screen shows a PIN from here
+            return self._form(fid, "pair", [{"name": "pin", "required": True}])
+        return self._create(fid, flow, d, body)
+
+    def _external_state(self, fid, flow):
+        if fid in self.consents:
+            return self._create(fid, flow, "regie", {"token": "t"})
+        return 200, {
+            "type": "external",
+            "flow_id": fid,
+            "step_id": "auth",
+            "url": f"https://vendor.example/authorize?state={fid}",
+        }
+
+    def consent(self, fid):
+        """The person consented: the brain's callback marks the step done and
+        fires the event the frontend (and the walker) listens to."""
+        self.consents.add(fid)
+        self.queue.append(
+            {
+                "event_type": "data_entry_flow_progressed",
+                "data": {"handler": self.flows[fid]["handler"], "flow_id": fid, "refresh": True},
+            }
+        )
+
+    def discover(self, domain, unique_id, title, step="zeroconf_confirm"):
+        """A discovered flow, the way zeroconf leaves one waiting for a confirm."""
+        self.n += 1
+        fid = f"disc{self.n}"
+        self.flows[fid] = {"handler": domain, "step": step, "title": title}
+        self.progress.append(
+            {
+                "flow_id": fid,
+                "handler": domain,
+                "context": {"source": "zeroconf", "unique_id": unique_id},
+                "step_id": step,
+            }
+        )
+        return fid
+
     # --- REST ---
     def _authed(self):
         return self.token in self.tokens
@@ -71,7 +269,20 @@ class FakeHA(HomeAssistant):
         if path == "/api/":
             return 200, {"message": "API running."}
         if path.startswith("/api/config/config_entries/entry?domain="):
-            return 200, self.entries.get(path.split("=")[1], [])
+            return 200, [
+                {k: v for k, v in e.items() if k != "_data"}
+                for e in self.entries.get(path.split("=")[1], [])
+            ]
+        if path.startswith(FLOWS + "/"):
+            fid = path.rsplit("/", 1)[1]
+            if fid not in self.flows:
+                return 404, {"message": "Invalid flow specified"}
+            flow = self.flows[fid]
+            if flow.get("step") == "auth":
+                return self._external_state(fid, flow)
+            if flow.get("step") == "zeroconf_confirm":
+                return self._form(fid, "zeroconf_confirm", [])
+            return self._start(fid, flow)
         raise AssertionError(path)
 
     def post(self, path, body, auth=True):
@@ -98,51 +309,25 @@ class FakeHA(HomeAssistant):
                 return 403, {"message": "already done"}
             self.onboarded[step] = True
             return 200, {} if step != "integration" else {"auth_code": "x"}
-        if path == "/api/config/config_entries/flow":
+        if path == FLOWS:
             self.n += 1
             fid = f"flow{self.n}"
             self.flows[fid] = {"handler": body["handler"]}
-            fields = ["broker", "port", "username", "password"]
-            return 200, {
-                "type": "form",
-                "flow_id": fid,
-                "step_id": "broker",
-                # + a section of advanced options: a required key, even empty
-                # (Home Assistant 2026.8's broker form, read live 2026-08-29)
-                "data_schema": [{"name": f} for f in fields]
-                + [{"name": "protocol", "required": True, "default": "5"}]
-                + [
-                    {
-                        "name": "other_settings",
-                        "type": "expandable",
-                        "required": True,
-                        "schema": [
-                            {"name": "set_client_cert", "required": True},
-                            {"name": "set_ca_cert", "required": True},
-                            {"name": "transport", "required": True, "default": "tcp"},
-                            {"name": "client_id", "optional": True},
-                        ],
-                    }
-                ],
-            }
-        if path.startswith("/api/config/config_entries/flow/"):
+            return self._start(fid, self.flows[fid])
+        if path.startswith(FLOWS + "/"):
             fid = path.rsplit("/", 1)[1]
-            domain = self.flows[fid]["handler"]
-            section = body.get("other_settings")
-            if section is None or body.get("protocol") is None:
-                return 400, {"errors": {"other_settings": "required key not provided"}}
-            missing = [
-                k for k in ("set_client_cert", "set_ca_cert", "transport") if k not in section
-            ]
-            if missing:
-                return 400, {
-                    "errors": {"base": [f"required key not provided @ {k}" for k in missing]}
-                }
-            if body.get("broker") != "127.0.0.1":
-                return 200, {"type": "form", "flow_id": fid, "errors": {"base": "cannot_connect"}}
-            self.entries.setdefault(domain, []).append({"domain": domain, "data": body})
-            return 200, {"type": "create_entry", "flow_id": fid, "title": body["broker"]}
+            if fid not in self.flows:
+                return 404, {"message": "Invalid flow specified"}
+            return self._continue(fid, self.flows[fid], body)
         raise AssertionError(path)
+
+    def delete(self, path):
+        self.log.append(f"DELETE {path}")
+        fid = path.rsplit("/", 1)[1]
+        if self.flows.pop(fid, None) is None:
+            return 404, {"message": "Invalid flow specified"}
+        self.progress = [p for p in self.progress if p["flow_id"] != fid]
+        return 200, {"message": "Flow aborted"}
 
     def post_form(self, path, fields):
         assert path == "/auth/token" and fields["code"] in self.codes
@@ -243,6 +428,30 @@ class FakeHA(HomeAssistant):
                 else:
                     self.backup_cfg[k] = v
             return None
+        if type_ == "application_credentials/config":
+            return {"integrations": {d: {} for d in OAUTH}}
+        if type_ == "application_credentials/list":
+            return list(self.credentials)
+        if type_ == "application_credentials/create":
+            self.n += 1
+            item = {"id": f"c{self.n}", **payload}
+            self.credentials.append(item)
+            return item
+        if type_ == "frontend/get_translations":
+            (domain,) = payload["integration"]
+            res = {f"component.{domain}.config.step.user.data.host": "Host"}
+            if domain == "androidtv_remote":
+                res[f"component.{domain}.config.step.pair.data.pin"] = "PIN"
+            return {"resources": res}
+        if type_ == "manifest/get":
+            return {
+                "domain": payload["integration"],
+                "iot_class": IOT_CLASS.get(payload["integration"], "local_push"),
+            }
+        if type_ == "config_entries/flow/progress":
+            return list(self.progress)
+        if type_ == "subscribe_events":
+            return None
         raise AssertionError(type_)
 
 
@@ -250,11 +459,45 @@ def states(steps):
     return {s.name: s.state for s in steps}
 
 
+def entry_titles(ha, domain):
+    return [e["title"] for e in ha.entries.get(domain, [])]
+
+
 @pytest.fixture(autouse=True)
 def _door_answers(monkeypatch):
     """The witness's door (https://home.example.com) answers 200 through the proxy."""
     monkeypatch.setattr("regie.apply.probe", lambda url, via=None: 200)
     monkeypatch.setattr("regie.apply.time.sleep", lambda s: None)
+
+
+@pytest.fixture
+def with_oven(house_with):
+    """The witness plus a cloud oven (Home Connect) and a HEOS receiver."""
+
+    def add(d):
+        d["things"].append(
+            {
+                "id": "kitchen_oven",
+                "area": "kitchen",
+                "kind": "oven",
+                "via": "wifi",
+                "host": "192.0.2.33",
+                "mac": "00:00:5e:00:53:33",
+                "integration": "home_connect",
+            }
+        )
+        d["things"].append(
+            {
+                "id": "living_receiver",
+                "area": "living",
+                "kind": "receiver",
+                "via": "wifi",
+                "host": "192.0.2.24",
+                "integration": "heos",
+            }
+        )
+
+    return load_house(house_with(add))
 
 
 def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
@@ -277,7 +520,7 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     }
     hall = next(a for a in ha.areas if a["aliases"] == ["hall"])
     assert hall["name"] == "Entrée" and hall["floor_id"] == ha.floors[0]["floor_id"]
-    entry = ha.entries["mqtt"][0]["data"]
+    entry = ha.entries["mqtt"][0]["_data"]
     assert entry["username"] == "home" and entry["protocol"] == "5"
     assert entry["other_settings"] == {
         "set_client_cert": False,
@@ -293,11 +536,27 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
         ha.http["stable"]["use_x_forwarded_for"] is True
         and ha.http["stable"]["server_port"] == 8123
     )
-    assert summary(steps, False) == f"apply: {len(steps)} changed, 0 ok"
+    # the things' integrations: the printer's form answered from its row, the
+    # confirm-only ones confirmed, the TV's PIN left to a hand
+    assert st["entry kitchen_printer"] == "changed" and entry_titles(ha, "ipp") == ["192.0.2.32"]
+    assert ha.entries["ipp"][0]["_data"] == {
+        "host": "192.0.2.32",
+        "port": 631,
+        "base_path": "/ipp/print",
+        "ssl": False,
+        "verify_ssl": False,
+    }
+    assert st["entry living_cast"] == st["entry kitchen_plug"] == "changed"
+    assert st["entry living_tv"] == "hand" and ha.pin_shown == 0 and not ha.flows
+    tv = next(s for s in steps if s.name == "entry living_tv")
+    assert tv.detail == "androidtv_remote: a pin on its screen — regie link living_tv"
+    hand = sum(1 for s in steps if s.state == "hand")
+    assert summary(steps, False) == f"apply: {len(steps) - hand} changed, 0 ok, {hand} by hand"
 
     again = apply(witness, secrets, tmp_path, ha, check=False)
-    assert set(states(again).values()) == {"ok"}, states(again)
-    assert summary(again, False) == f"apply: 0 changed, {len(again)} ok"
+    assert set(states(again).values()) == {"ok", "hand"}, states(again)
+    assert states(again)["entry kitchen_printer"] == "ok"
+    assert len(ha.entries["ipp"]) == 1 and len(ha.entries["cast"]) == 1  # keyed on the domain
 
 
 def test_the_token_lost_on_disk_is_minted_again_by_password(witness, secrets, tmp_path):
@@ -328,8 +587,6 @@ def test_check_on_a_fresh_brain_stops_at_the_owner(witness, secrets, tmp_path):
 
 
 def test_check_on_a_furnished_brain_plans_a_relabel(witness, secrets, tmp_path, house_with):
-    from regie.house import load_house
-
     ha = FakeHA()
     apply(witness, secrets, tmp_path, ha, check=False)
 
@@ -347,11 +604,10 @@ def test_check_on_a_furnished_brain_plans_a_relabel(witness, secrets, tmp_path, 
 def test_a_form_the_house_cannot_answer_is_a_fault(witness, secrets, tmp_path):
     ha = FakeHA()
     apply(witness, secrets, tmp_path, ha, check=False)
-    ha.entries.clear()
-    c = Conductor(witness, secrets, tmp_path, ha)
-    c.ha.token = next(iter(ha.tokens))
+    ha.token = next(t for t, k in ha.tokens.items() if k == "llat")
     with pytest.raises(HouseError, match="asks"):
-        c.config_entry("mqtt", {"nothing": 1}, "x")
+        walk(ha, "mqtt", {"nothing": 1})
+    assert not ha.flows  # closed behind it
 
 
 def test_missing_secrets_are_named(witness, tmp_path):
@@ -376,7 +632,7 @@ def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, t
         st["area (chambre)"] == "ok" and "area (cuisine)" not in st
     )  # Chambre reported, left alone
     again = apply(witness, secrets, tmp_path, ha, check=False)
-    assert set(states(again).values()) == {"ok"}
+    assert set(states(again).values()) == {"ok", "hand"}
 
 
 def test_a_trial_that_fails_at_the_door_is_not_promoted(witness, secrets, tmp_path, monkeypatch):
@@ -446,3 +702,182 @@ def test_probe_speaks_http_through_a_given_address(monkeypatch):
     )
     assert real_probe("http://door.example.com/manifest.json", via="192.0.2.2") == 200
     assert sent["addr"] == ("192.0.2.2", 80) and "Host: door.example.com" in sent["req"]
+
+
+# --- the things' integrations (0.3) --------------------------------------------
+
+
+def test_check_plans_the_entries_without_starting_a_flow(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.entries = {"mqtt": ha.entries["mqtt"]}  # the things' entries gone (a rebuilt brain)
+    seen = len(ha.log)
+    steps = apply(witness, secrets, tmp_path, ha, check=True)
+    st = states(steps)
+    assert st["entry kitchen_printer"] == "would" and st["entry living_tv"] == "hand"
+    printer = next(s for s in steps if s.name == "entry kitchen_printer")
+    assert printer.detail == "set up ipp at 192.0.2.32"
+    assert not ha.flows and ha.pin_shown == 0 and "POST " + FLOWS not in ha.log[seen:]
+    assert summary(steps, True).startswith(
+        "apply: 6 would change"
+    )  # the witness: 7 rows, 1 by hand
+
+
+def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):
+    ha = FakeHA()
+    ha.off.add("192.0.2.32")  # the printer is off (or not at its reserved address yet)
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    printer = next(s for s in steps if s.name == "entry kitchen_printer")
+    assert printer.state == "waiting" and "192.0.2.32 does not answer" in printer.detail
+    assert "ipp" not in ha.entries and not ha.flows  # nothing made, nothing left open
+    assert ", 1 waiting" in summary(steps, False)
+    ha.off.clear()  # powered on: the next apply makes the entry
+    again = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(again)["entry kitchen_printer"] == "changed"
+
+
+def test_a_pin_is_a_hand_for_apply_and_typed_by_link(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    assert ha.pin_shown == 0
+    asked = []
+
+    def prompt(field, flow):
+        asked.append(field)
+        return "0000" if len(asked) == 1 else "1234"  # a typo first, then the right one
+
+    out = link(
+        witness,
+        {},
+        tmp_path,
+        ha,
+        "living_tv",
+        prompt=prompt,
+        on_url=lambda url: None,
+        wait_external=lambda fid: True,
+    )
+    assert out.state == "changed" and asked == ["pin", "pin"] and ha.pin_shown == 1
+    assert entry_titles(ha, "androidtv_remote") == ["TV"]
+    assert ha.entries["androidtv_remote"][0]["_data"]["host"] == "192.0.2.20"
+    again = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(again)["entry living_tv"] == "ok"
+
+
+def test_a_consent_needs_credentials_then_a_browser(with_oven, secrets, tmp_path):
+    ha = FakeHA()
+    steps = apply(with_oven, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert "credentials home_connect" not in st  # no secret, no credential: nothing to say
+    oven = next(s for s in steps if s.name == "entry kitchen_oven")
+    assert oven.state == "hand" and oven.detail == (
+        "home_connect: a consent in a browser — regie link kitchen_oven "
+        "[cloud_push: its control needs the internet]"
+    )
+    assert st["entry living_receiver"] == "changed" and entry_titles(ha, "heos") == ["HEOS System"]
+    # link without credentials: the brain says what it lacks
+    out = link(
+        with_oven,
+        {},
+        tmp_path,
+        ha,
+        "kitchen_oven",
+        prompt=lambda f, fl: "",
+        on_url=lambda u: None,
+        wait_external=lambda fid: True,
+    )
+    assert out.state == "hand" and "home_connect_client_id" in out.detail and not ha.flows
+    # the secrets carry the credentials: apply creates them, link walks the consent
+    with_creds = {**secrets, "home_connect_client_id": "id-1", "home_connect_client_secret": "s-1"}
+    steps = apply(with_oven, with_creds, tmp_path, ha, check=False)
+    assert states(steps)["credentials home_connect"] == "changed"
+    assert [(c["domain"], c["client_id"], c["name"]) for c in ha.credentials] == [
+        ("home_connect", "id-1", "regie")
+    ]
+    seen = {}
+
+    def on_url(url):
+        seen["url"] = url
+        ha.consent(
+            re.search(r"state=(\w+)", url).group(1)
+        )  # the person consents, the callback lands
+
+    out = link(
+        with_oven,
+        with_creds,
+        tmp_path,
+        ha,
+        "kitchen_oven",
+        prompt=lambda f, fl: "",
+        on_url=on_url,
+        wait_external=lambda fid: any(True for _ in FakeWs(ha).events(0, 1)),
+    )
+    assert out.state == "changed" and seen["url"].startswith("https://vendor.example/authorize")
+    assert entry_titles(ha, "home_connect") == ["regie"] and not ha.flows
+    again = apply(with_oven, with_creds, tmp_path, ha, check=False)
+    st = states(again)
+    assert st["credentials home_connect"] == "ok" and st["entry kitchen_oven"] == "ok"
+    assert len(ha.credentials) == 1
+
+
+def test_a_consent_that_never_comes_closes_the_flow(with_oven, secrets, tmp_path):
+    ha = FakeHA()
+    apply(with_oven, secrets, tmp_path, ha, check=False)
+    ha.token = next(t for t, k in ha.tokens.items() if k == "llat")
+    # smartthings consents through a cloud link: no credentials needed, a browser is
+    with pytest.raises(HouseError, match="no consent"):
+        walk(ha, "smartthings", {}, on_url=lambda u: None, wait_external=lambda fid: False)
+    assert not ha.flows
+
+
+def test_a_discovered_flow_of_a_listed_thing_is_continued(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    del ha.entries["ipp"]
+    fid = ha.discover("ipp", "urn:uuid:printer-1", "EPSON XP")  # zeroconf saw the printer
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    printer = next(s for s in steps if s.name == "entry kitchen_printer")
+    assert printer.state == "changed" and entry_titles(ha, "ipp") == ["EPSON XP"]
+    assert f"GET {FLOWS}/{fid}" in ha.log and not ha.progress  # continued, not started anew
+
+
+def test_a_discovered_flow_that_may_not_be_this_row_is_left_alone(
+    witness, secrets, tmp_path, house_with
+):
+    def two_printers(d):
+        d["things"].append(
+            {
+                "id": "hall_printer",
+                "area": "hall",
+                "kind": "printer",
+                "via": "wifi",
+                "host": "192.0.2.34",
+                "integration": "ipp",
+            }
+        )
+
+    house = load_house(house_with(two_printers))
+    ha = FakeHA()
+    fid = ha.discover("ipp", "urn:uuid:printer-1", "EPSON XP")
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["entry kitchen_printer"] == st["entry hall_printer"] == "changed"
+    assert sorted(entry_titles(ha, "ipp")) == ["192.0.2.32", "192.0.2.34"]
+    assert fid in ha.flows  # two rows, one discovered flow: whose? the UI's to say
+
+
+def test_a_discovered_tv_is_the_rows_by_its_mac(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    fid = ha.discover("androidtv_remote", "00:00:5e:00:53:20", "TV")
+    out = link(
+        witness,
+        {},
+        tmp_path,
+        ha,
+        "living_tv",
+        prompt=lambda f, fl: "1234",
+        on_url=lambda u: None,
+        wait_external=lambda fid: True,
+    )
+    assert out.state == "changed" and f"GET {FLOWS}/{fid}" in ha.log
+    assert entry_titles(ha, "androidtv_remote") == ["TV"]

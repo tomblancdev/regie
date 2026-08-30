@@ -21,20 +21,20 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 
 # verb → (what it will do, the release that builds it)
 NOT_YET = {
-    "backup": ("Home Assistant's own backup, now, through its API", "0.3 — the walk"),
-    "restore": ("Home Assistant's own backup file, restored through its API", "0.3 — the walk"),
+    "backup": ("Home Assistant's own backup, now, through its API", "0.4 — the walk"),
+    "restore": ("Home Assistant's own backup file, restored through its API", "0.4 — the walk"),
     "doctor": (
         "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.3 — the walk",
+        "0.4 — the walk",
     ),
     "pair": (
         "the walk — `pair --room <area>`: open the join window, turn each interview into a row "
         "(the room is the session, the kind is the thing's own, the name is generated)",
-        "0.3 — the walk",
+        "0.4 — the walk",
     ),
     "suggest": (
         "the mesh's opinion on rooms, from link quality — suggests, never assigns",
-        "0.3 — the walk",
+        "0.4 — the walk",
     ),
     "migrate": ("move a home.yml to the current schema", "with the first schema bump"),
 }
@@ -143,6 +143,51 @@ def cmd_apply(args) -> int:
         print(st.line())
     print(summary(steps, args.check))
     return 0
+
+
+def cmd_link(args) -> int:
+    """The flow walked with a person at hand: a PIN read off the screen, a
+    consent given in a browser (the address printed here; the brain's own
+    callback finishes it)."""
+    from .apply import Step, link
+    from .ha import HomeAssistant
+
+    house = load_house(args.home)
+    secrets = load_secrets(args.secrets)
+    root = Path(args.root) if args.root else Path(house.root())
+    ha = HomeAssistant(args.url)
+
+    def prompt(field: str, flow: dict) -> str:
+        name = (flow.get("description_placeholders") or {}).get("name") or args.thing
+        return input(f"{name} shows a {field.replace('_', ' ')} on its screen — type it: ").strip()
+
+    def on_url(url: str) -> None:
+        print(
+            "open this address in a browser, logged in with the vendor's account, and give "
+            f"the consent (the brain's callback finishes the flow, {args.timeout}s at most):\n"
+            f"  {url}"
+        )
+
+    def wait_external(flow_id: str) -> bool:
+        with ha.ws() as ws:
+            sub = ws.subscribe("data_entry_flow_progressed")
+            for event in ws.events(sub, args.timeout):
+                if (event.get("data") or {}).get("flow_id") == flow_id:
+                    return True
+        return False
+
+    out = link(
+        house,
+        secrets,
+        root,
+        ha,
+        args.thing,
+        prompt=prompt,
+        on_url=on_url,
+        wait_external=wait_external,
+    )
+    print(Step(f"entry {args.thing}", out.state, out.detail).line())
+    return 0 if out.state in ("changed", "ok") else 1
 
 
 def cmd_mint(args) -> int:
@@ -257,8 +302,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser(
         "apply",
-        help="the conductor: onboarding, tokens, floors and areas, the MQTT integration, "
-        "the backup schedule — what only the API can set",
+        help="the conductor: onboarding, tokens, the proxy, floors and areas, the backup "
+        "schedule, the things' integrations — what only the API can set",
     )
     s.add_argument("home", type=Path)
     _secrets_arg(s)
@@ -266,6 +311,21 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
     s.add_argument("--check", action="store_true", help="print the plan, change nothing")
     s.set_defaults(func=cmd_apply)
+
+    s = sub.add_parser(
+        "link",
+        help="a thing's integration set up with a person at hand: the PIN its screen shows, "
+        "the consent a browser gives — what apply reports as `by hand`",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("thing", help="the thing's id in home.yml")
+    _secrets_arg(s)
+    s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.add_argument(
+        "--timeout", type=int, default=600, help="seconds to wait for a consent's callback"
+    )
+    s.set_defaults(func=cmd_link)
 
     s = sub.add_parser("mint", help="write every secret the house needs and does not have yet")
     s.add_argument("home", type=Path)

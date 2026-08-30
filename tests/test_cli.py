@@ -50,9 +50,9 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
     assert main(["doctor", str(witness_path)]) == 2
-    assert "lands in 0.3 — the walk" in capsys.readouterr().err
+    assert "lands in 0.4 — the walk" in capsys.readouterr().err
     assert main(["pair", "--room", "living"]) == 2
-    assert "lands in 0.3 — the walk" in capsys.readouterr().err
+    assert "lands in 0.4 — the walk" in capsys.readouterr().err
 
 
 def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):
