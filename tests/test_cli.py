@@ -11,13 +11,14 @@ def test_check_reports_and_passes(witness_path, capsys):
     out = capsys.readouterr().out
     assert "maison_temoin — Maison témoin (fr, Europe/Paris)" in out
     assert (
-        "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, chalet (house)"
-        in out
+        "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, matter, "
+        "chalet (house)" in out
     )
     assert (
         "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 18 paired, 5 room groups" in out
     )
     assert "secrets: 9 needed, all present" in out
+    assert "matter: the server beside the brain (ws://localhost:5580/ws), 1 thing(s)" in out
     assert "not paired yet" in out and out.rstrip().endswith("ok")
 
 
@@ -47,15 +48,16 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "30 written, 0 unchanged, 0 kept, 0 removed" in out
+    assert "31 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
     assert main(["doctor", str(witness_path)]) == 2
-    assert "lands in 0.5 — the walk" in capsys.readouterr().err
-    assert main(["pair", "--room", "living"]) == 2
-    assert "lands in 0.5 — the walk" in capsys.readouterr().err
+    assert "lands in 0.6 — the Zigbee walk" in capsys.readouterr().err
+    # pair is built for Matter; its Zigbee half says when it lands
+    assert main(["pair", str(witness_path), "--room", "living"]) == 2
+    assert "lands in 0.6" in capsys.readouterr().err
 
 
 def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):

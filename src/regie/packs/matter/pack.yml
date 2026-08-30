@@ -1,0 +1,17 @@
+# Pack `matter` — the Matter server beside the brain: the fabric's controller
+# (matter.js) as a unit of the profile, the `matter` config entry the
+# conductor makes on the loopback, and `pair --matter` — a thing commissioned
+# by the phone (a fresh bulb: Bluetooth, the phone puts it on the Wi-Fi) or
+# by a code the engine hands the server (a device another controller
+# shares), then adopted into a proposed row keyed on its serial number. The
+# pack brings no package: a Matter light is a light to the lighting pack.
+# Matter runs over IPv6 on the brain's own link (link-local is enough for
+# Wi-Fi things; Thread brings its border router's prefix) and mDNS - the
+# host must let both through to the brain.
+name: matter
+summary: the Matter server (matter.js) beside the brain, its config entry, `pair --matter` — things commissioned by the phone or by code, keyed on their serial
+kinds: []
+via: [matter, thread]
+services: [matter-server]
+templates: []
+cards: []

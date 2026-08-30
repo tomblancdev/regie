@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.5.0 — the Matter pack, and the walk's Matter half (2026-08-31)
+
+A Matter thing over Wi-Fi needs no coordinator: the server beside the brain
+and a phone commission it, the engine adopts it. So the walk's Matter half
+lands before its Zigbee half (0.6), and with it the row every network thing
+was missing — its room.
+
+- **pack `matter`** — the Matter server (matter.js's `matterjs-server`, the
+  successor of python-matter-server, archived 2026-06) as a unit of profile
+  `ct`: host networking, `/data` under the root owned by the image's uid,
+  the websocket and the dashboard on the loopback only
+  (`LISTEN_ADDRESS=127.0.0.1` — the brain dials `ws://localhost:5580/ws`,
+  nobody else has a door; Matter itself binds the host's interfaces on its
+  own); pinned **1.3.3**, the line of the client library Home Assistant
+  2026.8 pins (`matter-python-client` 1.3.0). The brain's unit waits for it.
+  Matter runs over IPv6 on the brain's own link (link-local is enough for
+  Wi-Fi things) and mDNS: the host must let both reach the brain — the
+  engine cannot do that for it, `check` says so with the pack
+- **the conductor makes the `matter` entry** on the loopback, keyed on the
+  domain (one server); a server that does not answer is `waiting`, tried
+  again next time — never a fault
+- **`serial` on a thing's row** — a Matter thing's key: its BasicInformation
+  serial number, the one identifier that survives a rebuilt fabric (node
+  ids are the fabric's)
+- **a device's room** (`apply`, step `device <thing>`): a row's Home
+  Assistant device found by its serial (Matter) or its hardware address (a
+  `mac` — the TV, the receiver…) is placed in the row's area and named by
+  its label; the entity of the thing's own domain is renamed to the
+  house's id (`light.<thing>`) when the row is one device with one such
+  entity — so a scene or an effect written by role reaches a bulb the
+  moment its row exists. A box that is several devices to Home Assistant
+  (a TV: cast + remote) is roomed and named twice, renamed never. A row
+  whose device is not there yet is skipped in silence
+- **`regie pair home.yml --matter --room <area> [--role --at] [--code]`** —
+  the walk's Matter half. The commissioning is the phone's (a fresh thing:
+  Bluetooth, the phone puts it on the Wi-Fi, the brain's fabric takes it —
+  Home Assistant's own way) or the code's (`--code`: a thing another
+  controller shares, or one already on the network — the server
+  commissions it over IP, no phone). Then the freshest node the house does
+  not name is adopted: vendor, model, serial, its hardware address from the
+  node's diagnostics, its kind from its entities — into a **proposed row**
+  printed for the house file (`<room>_<role>[_<at>]`, else
+  `<room>_<kind>_<n>`). Nothing is written by the engine: the row goes
+  where the house keeps its rows, `apply` rooms and names from it. Two
+  fresh nodes: say which (`--serial`)
+- **profiles declare their `dirs`** (a path under the root, an `owner`
+  among the profile's users, a `when`) — `up` makes them before the first
+  start and chowns them when root; **`when: pack:<name>`** on a profile's
+  template or dir renders it only when the house carries that pack
+- the Zigbee walk (`pair --room` alone, `suggest`), `backup`, `restore`,
+  `doctor` move to 0.6
+
 ## 0.4.1 — effects that feel natural (2026-08-30)
 
 Tom, on 0.4.0's strike: *"2 secs for a stroke is really a lot … random

@@ -42,6 +42,7 @@ from .host import STATE
 from .house import House
 
 CLIENT_NAME = "regie"
+MATTER_URL = "ws://localhost:5580/ws"  # the server beside the brain (pack matter)
 HTTP_META = ("created_at", "error", "error_message")
 ENTRIES = "/api/config/config_entries/entry"
 MARKS = {"ok": "=", "changed": "+", "would": "?", "hand": "!", "waiting": "~"}
@@ -117,6 +118,7 @@ class Conductor:
         self.client_id = ha.url + "/"  # Home Assistant wants a URL as a client id
         self.tokens_dir = self.root / STATE / "tokens"
         self._cache: dict = {}
+        self.area_ids: dict[str, str] = {}  # the house's area id -> Home Assistant's, once read
         if house.data["house"].get("url") and not ha.frontend_base:
             ha.frontend_base = house.data["house"]["url"]
 
@@ -433,6 +435,7 @@ class Conductor:
                 ) or unnamed.pop(a["label"].casefold(), None)
                 if found:
                     taken.add(found["area_id"])
+                    self.area_ids[a["id"]] = found["area_id"]
                     self.step(
                         f"area {a['id']}", "changed", f"adopt {found['name']} ({found['area_id']})"
                     )
@@ -447,6 +450,7 @@ class Conductor:
                     continue
             if live:
                 taken.add(live["area_id"])
+                self.area_ids[a["id"]] = live["area_id"]
                 if (
                     live["name"] != a["label"]
                     or (live.get("floor_id") or None) != floor_id
@@ -469,7 +473,9 @@ class Conductor:
                 payload = {"name": a["label"], "aliases": wanted}
                 if floor_id:
                     payload["floor_id"] = floor_id
-                ws.call("config/area_registry/create", **payload)
+                made = ws.call("config/area_registry/create", **payload)
+                if isinstance(made, dict) and made.get("area_id"):
+                    self.area_ids[a["id"]] = made["area_id"]
         # what the brain has that the house does not name: reported, never removed
         for r in live_areas:
             if r["area_id"] in taken:
@@ -724,6 +730,119 @@ class Conductor:
         if out.state != "changed":
             raise HouseError(f"mqtt: {out.detail}")
 
+    def matter(self) -> None:
+        """The Matter server's config entry (pack matter): the brain dials the
+        server on its own loopback. Keyed on the domain — one server."""
+        if not self.house.has_pack("matter"):
+            return
+        if self.domain_entries("matter"):
+            self.step("entry matter", "ok", f"the server on the loopback ({MATTER_URL})")
+            return
+        if self.check:
+            self.step(
+                "entry matter", "changed", f"set up the server on the loopback ({MATTER_URL})"
+            )
+            return
+        out = walk(self.ha, "matter", {"url": MATTER_URL})
+        if out.state == "waiting":
+            self.step(
+                "entry matter",
+                "waiting",
+                "the server does not answer on the loopback (matter-server.service up?) "
+                "— tried again at the next apply",
+            )
+            return
+        if out.state != "changed":
+            raise HouseError(f"matter: {out.detail}")
+        self.step("entry matter", "changed", f"set up the server on the loopback ({MATTER_URL})")
+
+    @staticmethod
+    def device_of(devices: list[dict], thing: dict) -> list[dict]:
+        """The Home Assistant device(s) a row is: by its serial (Matter's
+        `serial_<sn>` identifier, or the device's own serial field), else by
+        its hardware address (a `mac` connection). Several devices for one
+        row = a box that is several things to Home Assistant."""
+        serial = thing.get("serial")
+        if serial:
+            for d in devices:
+                ids = {tuple(i) for i in d.get("identifiers", []) if len(i) == 2}
+                if ("matter", f"serial_{serial}") in ids or d.get("serial_number") == serial:
+                    return [d]
+            return []
+        mac = (thing.get("mac") or "").lower()
+        if not mac:
+            return []
+        return [
+            d
+            for d in devices
+            if ("mac", mac)
+            in {(c[0], str(c[1]).lower()) for c in d.get("connections", []) if len(c) == 2}
+        ]
+
+    def devices(self, ws) -> None:
+        """A row's device, roomed and named by the row (a device's room):
+        found by its serial (a Matter thing) or its hardware address (a
+        network thing); the entity of the thing's own domain renamed to the
+        house's id when the row is one device with one such entity. A row
+        whose device is not there yet is skipped in silence: the entry step
+        (or the walk) says what waits."""
+        rows = [t for t in self.house.things if t.get("serial") or t.get("mac")]
+        if not rows:
+            return
+        devices = ws.call("config/device_registry/list") or []
+        entities = ws.call("config/entity_registry/list") or []
+        for t in rows:
+            found = self.device_of(devices, t)
+            if not found:
+                continue
+            area_id = self.area_ids.get(t["area"])
+            label = t.get("label") or t["id"]
+            entity = self.house.entity(t)
+            for dev in found:
+                fields: dict = {}
+                if area_id and dev.get("area_id") != area_id:
+                    fields["area_id"] = area_id
+                if (dev.get("name_by_user") or dev.get("name")) != label:
+                    fields["name_by_user"] = label
+                rename = None
+                if entity and len(found) == 1:
+                    domain = entity.split(".", 1)[0]
+                    mine = [
+                        e
+                        for e in entities
+                        if e.get("device_id") == dev["id"]
+                        and e["entity_id"].split(".", 1)[0] == domain
+                        and not e.get("entity_category")
+                        and not e.get("disabled_by")
+                    ]
+                    if len(mine) == 1 and mine[0]["entity_id"] != entity:
+                        rename = (mine[0]["entity_id"], entity)
+                name = f"device {t['id']}" + (f" ({dev.get('name')})" if len(found) > 1 else "")
+                if not fields and not rename:
+                    where = f"{label} in {t['area']}" if area_id else label
+                    self.step(
+                        name, "ok", where + (f" · {entity}" if entity and len(found) == 1 else "")
+                    )
+                    continue
+                what = []
+                if "area_id" in fields:
+                    what.append(f"room {t['area']}")
+                if "name_by_user" in fields:
+                    what.append(f"name {label}")
+                if rename:
+                    what.append(f"{rename[0]} -> {rename[1]}")
+                self.step(name, "changed", " · ".join(what))
+                if self.check:
+                    continue
+                if fields:
+                    ws.call("config/device_registry/update", device_id=dev["id"], **fields)
+                if rename:
+                    ws.call(
+                        "config/entity_registry/update",
+                        entity_id=rename[0],
+                        new_entity_id=rename[1],
+                    )
+
     def backup(self, ws) -> None:
         want = self.house.backup()
         info = ws.call("backup/config/info")
@@ -785,9 +904,11 @@ class Conductor:
             self.backup(ws)
         self.knobs()
         self.mqtt()
+        self.matter()
         with self.ha.ws() as ws:
             self.credentials(ws)
             self.entries(ws)
+            self.devices(ws)
         return self.steps
 
 
@@ -841,6 +962,131 @@ def link(
         if last.state not in ("changed", "ok"):
             return last
     return last
+
+
+def matter_devices(ws) -> list[dict]:
+    """Home Assistant's devices that are Matter nodes (not bridged children)."""
+    out = []
+    for d in ws.call("config/device_registry/list") or []:
+        ids = [i for i in d.get("identifiers", []) if len(i) == 2 and i[0] == "matter"]
+        if ids and not d.get("via_device_id"):
+            out.append(d)
+    return out
+
+
+def pair_matter(
+    house: House,
+    secrets: dict,
+    root: Path,
+    ha: HomeAssistant,
+    *,
+    room: str,
+    role: str | None = None,
+    at: str | None = None,
+    code: str | None = None,
+    serial: str | None = None,
+    thing_id: str | None = None,
+) -> dict:
+    """`regie pair --matter` — the walk's Matter half. The commissioning
+    itself is the phone's (a fresh thing: Bluetooth, the phone puts it on the
+    Wi-Fi, the brain's fabric takes it) or the code's (`--code`: a thing
+    another controller shares, or already on the network — the server
+    commissions it over IP, no phone). Then the node is ADOPTED: read from
+    Home Assistant (vendor, model, serial, its hardware address from the
+    node's diagnostics) into a proposed row keyed on its serial — the room is
+    the session, the role and the place are the flags, the name is generated.
+    Nothing is written: the row is printed for the house file; `apply` rooms
+    and names the device from it."""
+    if not house.has_pack("matter"):
+        raise HouseError("the house carries no `matter` pack — add it to packs: first")
+    area = next((a for a in house.areas if a["id"] == room), None)
+    if area is None:
+        raise HouseError(f"room {room!r}: no such area in home.yml")
+    if at and not role:
+        raise HouseError("--at needs a --role (a place belongs to a role's layout)")
+    known = {t["serial"] for t in house.things if t.get("serial")}
+    c = Conductor(house, secrets, root, ha)
+    ha.token = c.session_token()
+    with ha.ws() as ws:
+        if code:
+            ws.call("matter/commission", code=code, network_only=True)
+        fresh = [d for d in matter_devices(ws) if d.get("serial_number") not in known]
+        if serial:
+            fresh = [d for d in fresh if d.get("serial_number") == serial]
+            if not fresh:
+                raise HouseError(f"no Matter device with serial {serial!r} in the brain")
+        if not fresh:
+            raise HouseError(
+                "no Matter device the house does not already name — commission one first "
+                "(the phone: Settings › Devices › Add device › Matter; or --code)"
+            )
+        if len(fresh) > 1:
+            lines = [
+                f"  {d.get('manufacturer')} {d.get('model')} serial {d.get('serial_number')!r}"
+                for d in sorted(fresh, key=lambda d: d.get("created_at") or 0)
+            ]
+            raise HouseError(
+                f"{len(fresh)} Matter devices the house does not name — say which: "
+                "--serial <serial>\n" + "\n".join(lines)
+            )
+        dev = fresh[0]
+        if not dev.get("serial_number"):
+            raise HouseError(
+                f"{dev.get('manufacturer')} {dev.get('model')}: no serial number — the row "
+                "cannot be keyed; this device is not one the engine can adopt"
+            )
+        entities = [
+            e
+            for e in (ws.call("config/entity_registry/list") or [])
+            if e.get("device_id") == dev["id"] and not e.get("entity_category")
+        ]
+        try:
+            diag = ws.call("matter/node_diagnostics", device_id=dev["id"]) or {}
+        except HouseError:
+            diag = {}
+    domains = {e["entity_id"].split(".", 1)[0] for e in entities}
+    kind = next((k for k, d in KIND_OF_DOMAIN.items() if d in domains), None) or "device"
+    row: dict = {}
+    if thing_id:
+        row["id"] = thing_id
+    elif role and at:
+        row["id"] = f"{room}_{role}_{at}"
+    elif role:
+        row["id"] = f"{room}_{role}"
+    else:
+        n = sum(1 for t in house.things if t["area"] == room and t["kind"] == kind) + 1
+        row["id"] = f"{room}_{kind}_{n}"
+    row.update({"area": room, "kind": kind, "via": "matter"})
+    if dev.get("manufacturer"):
+        row["vendor"] = dev["manufacturer"]
+    if dev.get("model"):
+        row["model"] = dev["model"]
+    row["serial"] = dev["serial_number"]
+    mac = diag.get("mac_address")
+    if mac:
+        row["mac"] = mac.lower()
+    if role:
+        row["role"] = role
+    if at:
+        row["at"] = at
+    row["_found"] = {
+        "device": dev.get("name_by_user") or dev.get("name"),
+        "entities": sorted(e["entity_id"] for e in entities),
+        "addresses": diag.get("ip_addresses") or diag.get("ip_adresses") or [],
+    }
+    return row
+
+
+# a thing's kind from the entities its device carries (the first that matches)
+KIND_OF_DOMAIN = {
+    "light": "light",
+    "switch": "plug",
+    "cover": "cover",
+    "lock": "lock",
+    "climate": "thermostat",
+    "binary_sensor": "sensor",
+    "sensor": "sensor",
+}
 
 
 def summary(steps: list[Step], check: bool) -> str:

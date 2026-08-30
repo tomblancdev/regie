@@ -90,14 +90,17 @@ def test_first_up_places_pulls_starts_then_nothing_to_do(witness, rendered, tmp_
     units_dir = tmp_path / "systemd"
     runner = FakeRunner()
     result = up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
-    assert result.units == ["home-assistant", "mosquitto", "zigbee2mqtt-main"]
+    assert result.units == ["home-assistant", "matter-server", "mosquitto", "zigbee2mqtt-main"]
     assert result.placed == [
         "home-assistant.container",
+        "matter-server.container",
         "mosquitto.container",
         "zigbee2mqtt-main.container",
     ]
-    assert len(result.pulled) == 3 and result.started == [
+    # the broker first, the Matter server before the brain that dials it, the radio last
+    assert len(result.pulled) == 4 and result.started == [
         "mosquitto",
+        "matter-server",
         "home-assistant",
         "zigbee2mqtt-main",
     ]
@@ -105,6 +108,7 @@ def test_first_up_places_pulls_starts_then_nothing_to_do(witness, rendered, tmp_
     assert (rendered / "home-assistant/custom_components/auth_oidc/manifest.json").is_file()
     assert (rendered / "home-assistant/custom_components/auth_oidc/config/schema.py").is_file()
     assert (rendered / "home-assistant/packages").is_dir()
+    assert (rendered / "matter-server").is_dir()  # the server's data, made before its first start
     assert (units_dir / "mosquitto.container").read_text() == (
         rendered / "units/mosquitto.container"
     ).read_text()
@@ -154,7 +158,7 @@ def test_check_plans_and_touches_nothing(witness, rendered, tmp_path, pinned):
     units_dir = tmp_path / "systemd"
     runner = FakeRunner(check=True)
     result = up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
-    assert result.check and "would place 3" in result.summary()
+    assert result.check and "would place 4" in result.summary()
     assert not units_dir.exists() and not runner.images
     assert not (rendered / "home-assistant/custom_components").exists()
 

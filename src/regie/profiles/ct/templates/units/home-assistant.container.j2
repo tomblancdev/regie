@@ -1,7 +1,7 @@
 # rendered by La Régie — edit home.yml, not this file
 [Unit]
 Description=Home Assistant — the brain
-After=network-online.target mosquitto.service
+After=network-online.target mosquitto.service{{ ' matter-server.service' if house.has_pack('matter') else '' }}
 Wants=network-online.target
 
 [Container]

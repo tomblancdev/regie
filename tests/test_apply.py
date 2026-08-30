@@ -10,7 +10,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from regie.apply import apply, link, summary
+from regie.apply import apply, link, pair_matter, summary
 from regie.apply import probe as real_probe  # bound before the fixture below stubs it
 from regie.errors import HouseError
 from regie.flows import walk
@@ -78,6 +78,11 @@ class FakeHA(HomeAssistant):
             "schedule": {"recurrence": "never", "time": None, "days": []},
         }
         self.n = 0
+        self.devices: list[dict] = []  # the device registry
+        self.entities: list[dict] = []  # the entity registry
+        self.matter_down = False  # the Matter server does not answer on the loopback
+        self.commissionable: dict[str, dict] = {}  # a pairing code -> the node it makes
+        self.commissioned: list[str] = []
         self.states: dict[str, str] = {}  # the helpers' states (the knobs): unknown until set
         self.log: list[str] = []
         default = {"server_port": 8123, "use_x_forwarded_for": False, "trusted_proxies": []}
@@ -141,6 +146,15 @@ class FakeHA(HomeAssistant):
                     }
                 ],
             )
+        if d == "matter":
+            if self.entries.get(d):
+                self.flows.pop(fid)
+                return 200, {"type": "abort", "flow_id": fid, "reason": "already_configured"}
+            return self._form(
+                fid,
+                "manual",
+                [{"name": "url", "required": True, "default": "ws://localhost:5580/ws"}],
+            )
         if d == "ipp":
             return self._form(
                 fid,
@@ -199,6 +213,12 @@ class FakeHA(HomeAssistant):
                     fid, "user", [{"name": "host", "required": True}], {"base": "cannot_connect"}
                 )
             return self._create(fid, flow, body["host"], body)
+        if d == "matter":
+            if self.matter_down:
+                return self._form(
+                    fid, "manual", [{"name": "url", "required": True}], {"base": "cannot_connect"}
+                )
+            return self._create(fid, flow, "Matter", body)
         if d == "heos":
             if body.get("host") in self.off:
                 return self._form(
@@ -242,6 +262,77 @@ class FakeHA(HomeAssistant):
                 "data": {"handler": self.flows[fid]["handler"], "flow_id": fid, "refresh": True},
             }
         )
+
+    def matter_node(self, serial, mac, *, vendor="Example", model="Bulb A19", domains=("light",)):
+        """A Matter node the phone commissioned: its device (keyed on the
+        serial), one entity per domain named the integration's way."""
+        self.n += 1
+        node = self.n
+        dev = {
+            "id": f"dev{node}",
+            "identifiers": [["matter", f"deviceid_00000000000000FF-{node}-MatterNodeDevice"]]
+            + ([["matter", f"serial_{serial}"]] if serial else []),
+            "connections": [],
+            "serial_number": serial,
+            "manufacturer": vendor,
+            "model": model,
+            "name": f"{model}",
+            "name_by_user": None,
+            "area_id": None,
+            "via_device_id": None,
+            "created_at": float(node),
+        }
+        self.devices.append(dev)
+        for d in domains:
+            self.entities.append(
+                {
+                    "entity_id": f"{d}.{model.lower().replace(' ', '_')}_{node}",
+                    "device_id": dev["id"],
+                    "platform": "matter",
+                    "entity_category": None,
+                    "disabled_by": None,
+                }
+            )
+        self.entities.append(
+            {
+                "entity_id": f"update.{model.lower().replace(' ', '_')}_{node}_firmware",
+                "device_id": dev["id"],
+                "platform": "matter",
+                "entity_category": "config",
+                "disabled_by": None,
+            }
+        )
+        dev["_mac"] = mac
+        return dev
+
+    def network_device(self, mac, name, domains=("media_player",), platform="cast"):
+        """A network thing's device, keyed on its hardware address."""
+        self.n += 1
+        node = self.n
+        dev = {
+            "id": f"dev{node}",
+            "identifiers": [[platform, f"{platform}-{node}"]],
+            "connections": [["mac", mac]],
+            "serial_number": None,
+            "manufacturer": "Vendor",
+            "model": name,
+            "name": name,
+            "name_by_user": None,
+            "area_id": None,
+            "via_device_id": None,
+        }
+        self.devices.append(dev)
+        for d in domains:
+            self.entities.append(
+                {
+                    "entity_id": f"{d}.{name.lower().replace(' ', '_')}_{node}",
+                    "device_id": dev["id"],
+                    "platform": platform,
+                    "entity_category": None,
+                    "disabled_by": None,
+                }
+            )
+        return dev
 
     def discover(self, domain, unique_id, title, step="zeroconf_confirm"):
         """A discovered flow, the way zeroconf leaves one waiting for a confirm."""
@@ -463,6 +554,41 @@ class FakeHA(HomeAssistant):
             }
         if type_ == "config_entries/flow/progress":
             return list(self.progress)
+        if type_ == "config/device_registry/list":
+            return [{k: v for k, v in d.items() if not k.startswith("_")} for d in self.devices]
+        if type_ == "config/device_registry/update":
+            for d in self.devices:
+                if d["id"] == payload["device_id"]:
+                    d.update({k: v for k, v in payload.items() if k != "device_id"})
+                    return d
+            raise AssertionError(payload)
+        if type_ == "config/entity_registry/list":
+            return list(self.entities)
+        if type_ == "config/entity_registry/update":
+            if any(e["entity_id"] == payload["new_entity_id"] for e in self.entities):
+                raise HouseError("config/entity_registry/update: invalid_info — already exists")
+            for e in self.entities:
+                if e["entity_id"] == payload["entity_id"]:
+                    e["entity_id"] = payload["new_entity_id"]
+                    return {"entity_entry": e}
+            raise AssertionError(payload)
+        if type_ == "matter/commission":
+            node = self.commissionable.pop(payload["code"], None)
+            if node is None:
+                raise HouseError("matter/commission: unknown_error — Commissioning failed")
+            assert payload.get("network_only") is True
+            self.commissioned.append(payload["code"])
+            self.matter_node(**node)
+            return None
+        if type_ == "matter/node_diagnostics":
+            dev = next(d for d in self.devices if d["id"] == payload["device_id"])
+            return {
+                "node_id": 1,
+                "network_type": "wifi",
+                "mac_address": dev.get("_mac"),
+                "ip_adresses": ["fe80::1%eth0"] if dev.get("_mac") else [],
+                "available": True,
+            }
         if type_ == "subscribe_events":
             return None
         raise AssertionError(type_)
@@ -809,7 +935,8 @@ def test_check_plans_the_entries_without_starting_a_flow(witness, secrets, tmp_p
     printer = next(s for s in steps if s.name == "entry kitchen_printer")
     assert printer.detail == "set up ipp at 192.0.2.32"
     assert not ha.flows and ha.pin_shown == 0 and "POST " + FLOWS not in ha.log[seen:]
-    assert summary(steps, True).startswith("apply: 7 would change")  # 8 entries wanted, 1 by hand
+    # 8 entries wanted + the Matter server's, 1 by hand
+    assert summary(steps, True).startswith("apply: 8 would change")
 
 
 def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):
@@ -1025,3 +1152,119 @@ def test_the_conductor_names_the_door_on_every_request(witness, monkeypatch):
     Conductor(witness, {}, "/tmp/x", ha)
     ha.post(FLOWS, {"handler": "home_connect"})
     assert seen.get("Ha-frontend-base") == "https://home.example.com"
+
+
+# --- the Matter pack: the server's entry, a device's room, the walk's Matter half ---
+
+
+def test_the_matter_server_gets_its_entry_and_a_keyed_device_its_room(witness, secrets, tmp_path):
+    ha = FakeHA()
+    bulb = ha.matter_node("EX-000001", "00:00:5e:00:53:41")  # commissioned by the phone
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["entry matter"] == "changed"
+    assert ha.entries["matter"][0]["_data"] == {"url": "ws://localhost:5580/ws"}
+    # the bulb's row (living_bulb, serial EX-000001): roomed, named, its light renamed
+    assert st["device living_bulb"] == "changed"
+    living = next(a for a in ha.areas if a["aliases"][0] == "living")
+    assert bulb["area_id"] == living["area_id"] and bulb["name_by_user"] == "living_bulb"
+    assert "light.living_bulb" in {e["entity_id"] for e in ha.entities}
+    assert "update.bulb_a19_" in "".join(e["entity_id"] for e in ha.entities)  # untouched
+    again = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert again["entry matter"] == "ok" and again["device living_bulb"] == "ok"
+    assert len(ha.entries["matter"]) == 1
+
+
+def test_a_box_that_is_two_devices_is_roomed_twice_and_renamed_never(witness, secrets, tmp_path):
+    ha = FakeHA()
+    tv_cast = ha.network_device("00:00:5e:00:53:20", "TV cast", platform="cast")
+    tv_remote = ha.network_device("00:00:5e:00:53:20", "TV remote", platform="androidtv_remote")
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["device living_tv (TV cast)"] == "changed"
+    assert st["device living_tv (TV remote)"] == "changed"
+    living = next(a for a in ha.areas if a["aliases"][0] == "living")
+    assert tv_cast["area_id"] == living["area_id"] and tv_remote["area_id"] == living["area_id"]
+    assert tv_cast["name_by_user"] == "living_tv" and tv_remote["name_by_user"] == "living_tv"
+    ids = {e["entity_id"] for e in ha.entities}
+    assert "media_player.living_tv" not in ids  # two players for one box keep their own numbering
+
+
+def test_a_device_not_there_yet_is_skipped_in_silence(witness, secrets, tmp_path):
+    ha = FakeHA()
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert "device living_bulb" not in states(steps)
+
+
+def test_check_plans_the_room_and_touches_nothing(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)  # furnished
+    bulb = ha.matter_node("EX-000001", "00:00:5e:00:53:41")
+    steps = apply(witness, secrets, tmp_path, ha, check=True)
+    st = states(steps)
+    assert st["device living_bulb"] == "would"
+    assert bulb["area_id"] is None and bulb["name_by_user"] is None
+    assert "light.living_bulb" not in {e["entity_id"] for e in ha.entities}
+
+
+def test_a_server_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):
+    ha = FakeHA()
+    ha.matter_down = True
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    entry = next(s for s in steps if s.name == "entry matter")
+    assert entry.state == "waiting" and "matter-server.service up?" in entry.detail
+    assert not ha.entries.get("matter") and not ha.flows
+
+
+def test_pair_matter_adopts_the_fresh_node_into_a_row(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.matter_node("EX-000001", "00:00:5e:00:53:41")  # the witness's row already
+    ha.matter_node(
+        "EX-000002", "00:00:5e:00:53:42", model="Bulb E14"
+    )  # the phone just did this one
+    row = pair_matter(
+        witness, secrets, tmp_path, ha, room="hall", role="main", at=None, code=None, serial=None
+    )
+    found = row.pop("_found")
+    assert row == {
+        "id": "hall_main",
+        "area": "hall",
+        "kind": "light",
+        "via": "matter",
+        "vendor": "Example",
+        "model": "Bulb E14",
+        "serial": "EX-000002",
+        "mac": "00:00:5e:00:53:42",
+        "role": "main",
+    }
+    assert found["device"] == "Bulb E14"
+    assert len(found["entities"]) == 1 and found["entities"][0].startswith("light.bulb_e14_")
+
+
+def test_pair_matter_by_code_commissions_over_ip_first(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.commissionable["34970112332"] = {"serial": "EX-000009", "mac": "00:00:5e:00:53:49"}
+    row = pair_matter(witness, secrets, tmp_path, ha, room="hall", code="34970112332")
+    assert ha.commissioned == ["34970112332"]
+    # hall_ceiling is the hall's first light: the generated id counts from it
+    assert row["id"] == "hall_light_2" and row["serial"] == "EX-000009"
+
+
+def test_pair_matter_says_when_nothing_or_too_much_is_fresh(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    with pytest.raises(HouseError, match="no Matter device the house does not already name"):
+        pair_matter(witness, secrets, tmp_path, ha, room="hall")
+    ha.matter_node("EX-000002", "00:00:5e:00:53:42")
+    ha.matter_node("EX-000003", "00:00:5e:00:53:43")
+    with pytest.raises(HouseError, match="2 Matter devices the house does not name") as exc:
+        pair_matter(witness, secrets, tmp_path, ha, room="hall")
+    assert "serial 'EX-000003'" in str(exc.value)
+    row = pair_matter(witness, secrets, tmp_path, ha, room="hall", serial="EX-000003")
+    assert row["serial"] == "EX-000003"
+    with pytest.raises(HouseError, match="no such area"):
+        pair_matter(witness, secrets, tmp_path, ha, room="attic")
+    with pytest.raises(HouseError, match="--at needs a --role"):
+        pair_matter(witness, secrets, tmp_path, ha, room="hall", at="left")

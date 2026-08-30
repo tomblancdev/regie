@@ -11,6 +11,7 @@ EXPECTED = {
     "units/home-assistant.container",
     "units/mosquitto.container",
     "units/zigbee2mqtt-main.container",
+    "units/matter-server.container",
     "home-assistant/configuration.yaml",
     "home-assistant/automations.yaml",
     "home-assistant/scenes.yaml",
@@ -242,3 +243,29 @@ def test_a_house_without_my_renders_default_config_written_out(house_with, secre
     for domain in members:
         if domain != "my":
             assert f"\n{domain}:\n" in text, domain
+
+
+def test_the_matter_pack_renders_the_server_unit_and_the_brain_waits_for_it(rendered):
+    unit = (rendered / "units/matter-server.container").read_text(encoding="utf-8")
+    assert "Image=ghcr.io/matter-js/matterjs-server:1.3.3" in unit
+    assert "Network=host" in unit and "Volume=/srv/home/matter-server:/data:Z" in unit
+    assert "Environment=LISTEN_ADDRESS=127.0.0.1" in unit
+    brain = (rendered / "units/home-assistant.container").read_text(encoding="utf-8")
+    assert "After=network-online.target mosquitto.service matter-server.service" in brain
+
+
+def test_without_the_matter_pack_no_server_unit(house_with, secrets, tmp_path):
+    def drop(d):
+        d["packs"].remove("matter")
+        d["things"] = [t for t in d["things"] if t.get("via") != "matter"]
+
+    house = load_house(house_with(drop))
+    render(house, tmp_path, secrets)
+    assert not (tmp_path / "units/matter-server.container").exists()
+    brain = (tmp_path / "units/home-assistant.container").read_text(encoding="utf-8")
+    assert "After=network-online.target mosquitto.service\n" in brain
+
+
+def test_a_when_the_engine_does_not_know_is_a_fault(witness):
+    with pytest.raises(HouseError, match="when: moon"):
+        witness.wanted({"when": "moon"})

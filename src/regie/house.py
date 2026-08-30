@@ -132,6 +132,16 @@ class House:
     def has_pack(self, name: str) -> bool:
         return any(p.name == name for p in self.packs)
 
+    def wanted(self, row: dict) -> bool:
+        """A template's or a directory's `when`: `pack:<name>` = the house
+        carries that pack; absent = always."""
+        when = row.get("when")
+        if not when:
+            return True
+        if when.startswith("pack:"):
+            return self.has_pack(when[5:])
+        raise HouseError(f"`when: {when}` is not one the engine knows (pack:<name>)")
+
     @staticmethod
     def integrations(thing: dict) -> list[str]:
         """The integration(s) a thing names — one id, or a list of them."""

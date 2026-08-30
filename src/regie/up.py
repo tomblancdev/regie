@@ -8,6 +8,7 @@ Under --check it prints what it would do and touches nothing."""
 from __future__ import annotations
 
 import io
+import os
 import socket
 import time
 import urllib.error
@@ -182,11 +183,23 @@ def up(
     rendered = list(manifest.get("files", []))
     result = Up(check=runner.check)
 
-    # the directories the units mount — podman would make them, but the
-    # packages dir must exist for Home Assistant's include even when empty
-    for rel in ("home-assistant/packages", "mosquitto/data"):
-        if not runner.check:
-            (root / rel).mkdir(parents=True, exist_ok=True)
+    # the directories the units mount — podman would make them root-owned:
+    # the packages dir must exist for Home Assistant's include even when
+    # empty, and an image that drops to a uid must own its data (the
+    # profile's `dirs`, an `owner` among its users, chowned when root)
+    for d in house.profile.dirs:
+        if runner.check or not house.wanted(d):
+            continue
+        target = root / d["path"]
+        target.mkdir(parents=True, exist_ok=True)
+        if d.get("owner") and os.geteuid() == 0:
+            uid = house.profile.users.get(d["owner"])
+            if uid is None:
+                raise HouseError(
+                    f"dir {d['path']}: owner {d['owner']!r} is not a user the profile names"
+                )
+            if target.stat().st_uid != int(uid):
+                os.chown(target, int(uid), int(uid))
 
     restart = install_component(house, root, runner, result, fetcher)
 
@@ -237,8 +250,9 @@ def up(
             result.pulled.append(img)
             runner.run("podman", "pull", "-q", img)
 
-    # the services, in the order the units were rendered (the broker before the brain)
-    for svc in sorted(units, key=lambda s: (s != "mosquitto", s)):
+    # the services: the broker first, the Matter server next, the brain after
+    # what it dials on the loopback, the radios last
+    for svc in sorted(units, key=lambda s: (s != "mosquitto", s != "matter-server", s)):
         rc, _ = runner.query("systemctl", "is-active", "--quiet", f"{svc}.service")
         if svc in restart and rc == 0:
             result.restarted.append(svc)

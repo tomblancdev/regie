@@ -578,6 +578,11 @@
           "$ref": "#/$defs/mac",
           "description": "a network thing's hardware address (a reservation, a row)"
         },
+        "serial": {
+          "type": "string",
+          "minLength": 1,
+          "description": "a Matter thing's serial number (its BasicInformation cluster) — the key that survives a rebuilt fabric; `pair --matter` reads it, `apply` rooms and names the device by it"
+        },
         "host": {
           "type": "string",
           "description": "a network thing's address"

@@ -21,21 +21,18 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 
 # verb → (what it will do, the release that builds it)
 NOT_YET = {
-    "backup": ("Home Assistant's own backup, now, through its API", "0.5 — the walk"),
-    "restore": ("Home Assistant's own backup file, restored through its API", "0.5 — the walk"),
+    "backup": ("Home Assistant's own backup, now, through its API", "0.6 — the Zigbee walk"),
+    "restore": (
+        "Home Assistant's own backup file, restored through its API",
+        "0.6 — the Zigbee walk",
+    ),
     "doctor": (
         "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.5 — the walk",
-    ),
-    "pair": (
-        "the walk — `pair --room <area> --role <role>`: open the join window, turn each "
-        "interview into a row (the room is the session, the kind is the thing's own, the "
-        "role and the place are the flags, the name is generated)",
-        "0.5 — the walk",
+        "0.6 — the Zigbee walk",
     ),
     "suggest": (
         "the mesh's opinion on rooms, from link quality — suggests, never assigns",
-        "0.5 — the walk",
+        "0.6 — the Zigbee walk",
     ),
     "migrate": ("move a home.yml to the current schema", "with the first schema bump"),
 }
@@ -78,6 +75,13 @@ def report(house: House, secrets: dict) -> None:
             f"{len(c['things'])} paired, {len(c['groups'])} room groups, topic {c['base_topic']}"
         )
     print("mqtt users: " + ", ".join(u["name"] for u in house.mqtt_users()))
+    if house.has_pack("matter"):
+        matter = [t for t in house.things if t["via"] in ("matter", "thread")]
+        keyed = sum(1 for t in matter if t.get("serial"))
+        print(
+            f"matter: the server beside the brain (ws://localhost:5580/ws), "
+            f"{len(matter)} thing(s), {keyed} keyed by serial"
+        )
     pins = house.pins()
     print("pins: " + ", ".join(f"{k} {v}" for k, v in pins.items()))
     names = house.secret_names()
@@ -246,6 +250,53 @@ def cmd_link(args) -> int:
     return 0 if out.state in ("changed", "ok") else 1
 
 
+def cmd_pair(args) -> int:
+    """The walk. Its Matter half (0.5): the thing commissioned by the phone or
+    by a code, adopted into a proposed row. The Zigbee half lands in 0.6."""
+    if not args.matter:
+        print(
+            "regie pair: the Zigbee walk (the join window, the interviews) lands in 0.6 — "
+            "the Matter half is here: `regie pair home.yml --matter --room <area> "
+            "[--role <role> --at <place>] [--code <code>]`",
+            file=sys.stderr,
+        )
+        return 2
+    from .apply import pair_matter
+    from .ha import HomeAssistant
+
+    house = load_house(args.home)
+    secrets = load_secrets(args.secrets)
+    root = Path(args.root) if args.root else Path(house.root())
+    row = pair_matter(
+        house,
+        secrets,
+        root,
+        HomeAssistant(args.url),
+        room=args.room,
+        role=args.role,
+        at=args.at,
+        code=args.code,
+        serial=args.serial,
+        thing_id=args.id,
+    )
+    found = row.pop("_found")
+    print(
+        f"adopted: {found['device']} — entities {', '.join(found['entities']) or 'none yet'}"
+        + (f" — at {', '.join(found['addresses'])}" if found["addresses"] else "")
+    )
+    print("the proposed row (add it to home.yml's things, then `regie apply`):")
+    fields = ", ".join(f"{k}: {_yaml_scalar(v)}" for k, v in row.items())
+    print(f"  - {{ {fields} }}")
+    return 0
+
+
+def _yaml_scalar(value) -> str:
+    text = str(value)
+    if text and all(c.isalnum() or c in "_-" for c in text) and not text[0].isdigit():
+        return text
+    return '"' + text.replace('"', '\\"') + '"'
+
+
 def cmd_mint(args) -> int:
     house = load_house(args.home)
     existing = load_secrets(args.secrets) if args.secrets and args.secrets.exists() else {}
@@ -382,6 +433,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout", type=int, default=600, help="seconds to wait for a consent's callback"
     )
     s.set_defaults(func=cmd_link)
+
+    s = sub.add_parser(
+        "pair",
+        help="the walk. --matter: a thing commissioned by the phone (or by --code) adopted "
+        "into a proposed row — the room is the session, the role and the place the flags, "
+        "the serial the key. The Zigbee half: 0.6",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("--matter", action="store_true", help="the Matter half of the walk")
+    s.add_argument("--room", required=True, help="the area the thing is in (the session)")
+    s.add_argument("--role", help="what it is for in its room (main, lamp, wall...)")
+    s.add_argument("--at", help="its place in the role's layout (left, front_right...)")
+    s.add_argument(
+        "--code",
+        help="a Matter pairing code (11 digits, or MT:...) — the server commissions the "
+        "thing over IP: a device another controller shares, or one already on the network",
+    )
+    s.add_argument("--serial", help="which device, when several are not named yet")
+    s.add_argument("--id", help="the row's id (default: <room>_<role>[_<at>] or <room>_<kind>_<n>)")
+    _secrets_arg(s)
+    s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.set_defaults(func=cmd_pair)
 
     s = sub.add_parser("mint", help="write every secret the house needs and does not have yet")
     s.add_argument("home", type=Path)

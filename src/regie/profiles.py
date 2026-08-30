@@ -46,6 +46,12 @@ class Profile:
         return dict(self.data.get("users", {}))
 
     @property
+    def dirs(self) -> list[dict]:
+        """The directories the units mount, made before the first start (a
+        `path` under the root, an `owner` among users, a `when`)."""
+        return list(self.data.get("dirs", []))
+
+    @property
     def root(self) -> str:
         return self.data.get("root", "/srv/home")
 

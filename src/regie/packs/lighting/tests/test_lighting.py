@@ -16,6 +16,7 @@ def test_a_room_with_lights_gets_its_group_and_its_silent_alert(rendered):
         "light.living_ceiling_2",
         "light.living_ceiling_3",
         "light.living_lamp",
+        "light.living_bulb",
     ]
     assert (
         pkg["homeassistant"]["customize"]["light.living_lights"]["friendly_name"]

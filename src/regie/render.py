@@ -177,9 +177,9 @@ def _owner_uid(house: House, t: dict) -> int | None:
 
 def plan(house: House) -> list[tuple[str, dict]]:
     items = [("base", t) for t in base_plan()]
-    items += [("profile", t) for t in house.profile.templates]
+    items += [("profile", t) for t in house.profile.templates if house.wanted(t)]
     for p in house.packs:
-        items += [(f"pack/{p.name}", t) for t in p.templates]
+        items += [(f"pack/{p.name}", t) for t in p.templates if house.wanted(t)]
     return items
 
 

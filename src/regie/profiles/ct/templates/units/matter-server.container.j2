@@ -1,0 +1,24 @@
+# rendered by La Régie — edit home.yml, not this file
+[Unit]
+Description=Matter server — the fabric's controller (matter.js), the brain's Matter radio
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image={{ images.matter_server }}:{{ pins.matter_server }}
+ContainerName=matter-server
+Network=host
+Volume={{ root }}/matter-server:/data:Z
+Volume=/etc/localtime:/etc/localtime:ro
+# the websocket and the dashboard on the loopback: the brain dials
+# ws://localhost:5580/ws, nobody else has a door; Matter itself (UDP, mDNS)
+# binds the host's interfaces on its own
+Environment=LISTEN_ADDRESS=127.0.0.1
+Environment=LOG_LEVEL=info
+Environment=TZ={{ data.house.timezone | default('UTC') }}
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target default.target

@@ -15,15 +15,33 @@ pins:
   home_assistant: "2026.8.3"
   mosquitto: "2.0.22"
   zigbee2mqtt: "2.13.0"
+  # the Matter server (pack matter): matter.js's server, the successor of
+  # python-matter-server (archived 2026-06). Its line follows the client
+  # library Home Assistant pins (matter-python-client 1.3.0 in 2026.8): the
+  # last patch of that line; a new schema comes with a Home Assistant bump
+  matter_server: "1.3.3"
 images:
   home_assistant: ghcr.io/home-assistant/home-assistant
   mosquitto: docker.io/library/eclipse-mosquitto
   zigbee2mqtt: docker.io/koenkk/zigbee2mqtt
+  matter_server: ghcr.io/matter-js/matterjs-server
 # the uid an image drops to: a rendered file it must read (base.yml `owner`)
 # is chowned to it when the engine runs as root - the broker's image refuses
-# a root-only password file on its read-only config mount
+# a root-only password file on its read-only config mount; a data directory
+# an image must WRITE (dirs below, `owner`) is chowned the same way
 users:
   mosquitto: 1883
+  matter_server: 1000
+
+# the directories the units mount, made by `up` before the first start -
+# podman would make them root-owned; an image that drops to a uid must own
+# its data (the Matter server keeps the fabric's credentials in /data as
+# uid 1000: root-owned, it starts and cannot write). `when: pack:<name>`
+# = only when the house carries that pack
+dirs:
+  - { path: home-assistant/packages }
+  - { path: mosquitto/data }
+  - { path: matter-server, owner: matter_server, when: "pack:matter" }
 
 # the units — the half that differs between profiles (a `docker` profile
 # renders a compose file here instead)
@@ -31,3 +49,5 @@ templates:
   - { src: units/home-assistant.container.j2, dst: units/home-assistant.container }
   - { src: units/mosquitto.container.j2, dst: units/mosquitto.container }
   - { src: units/zigbee2mqtt.container.j2, dst: "units/zigbee2mqtt-{{ coordinator.id }}.container", each: coordinators }
+  # the Matter server: one unit, only when the house carries the pack
+  - { src: units/matter-server.container.j2, dst: units/matter-server.container, when: "pack:matter" }
