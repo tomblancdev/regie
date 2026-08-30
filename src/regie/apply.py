@@ -657,7 +657,7 @@ class Conductor:
             and ret.get("copies") == want["copies"]
             and create.get("agent_ids")
             == [
-                "backup.local"
+                "backup.local"  # no-environment: ok
             ]  # no-environment: ok — Home Assistant's own local backup agent, not a host
             and bool(create.get("password"))
             and cfg.get("automatic_backups_configured") is True
@@ -673,7 +673,7 @@ class Conductor:
             "backup/config/update",
             create_backup={
                 "agent_ids": [
-                    "backup.local"
+                    "backup.local"  # no-environment: ok
                 ],  # no-environment: ok — Home Assistant's own local backup agent, not a host
                 "include_database": True,
                 "include_folders": [],

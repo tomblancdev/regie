@@ -1,10 +1,12 @@
 # Changelog
 
-## 0.3.1 (2026-08-30)
+## 0.3.2 (2026-08-30)
 
-- the `no-environment` gate's hatch on Home Assistant's own backup agent id
-  (`backup.local`, a real value by nature) was lost in 0.3.0's rewrite of
-  `apply.py`: CI red for a name that names nobody — restored
+- the `no-environment` gate's hatch on Home Assistant's own local backup
+  agent id (a real value by nature) was lost in 0.3.0's rewrite of `apply.py`,
+  then landed on the wrong line under the formatter in 0.3.1: CI red twice for
+  a name that names nobody — the hatch sits on the value's own line now, and
+  the gate runs after the formatter
 
 ## 0.3.0 — the things' integrations (2026-08-30)
 
