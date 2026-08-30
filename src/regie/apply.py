@@ -655,7 +655,10 @@ class Conductor:
             sched.get("recurrence") == "daily"
             and str(sched.get("time") or "")[:5] == want["time"]
             and ret.get("copies") == want["copies"]
-            and create.get("agent_ids") == ["backup.local"]
+            and create.get("agent_ids")
+            == [
+                "backup.local"
+            ]  # no-environment: ok — Home Assistant's own local backup agent, not a host
             and bool(create.get("password"))
             and cfg.get("automatic_backups_configured") is True
         )
@@ -669,7 +672,9 @@ class Conductor:
         ws.call(
             "backup/config/update",
             create_backup={
-                "agent_ids": ["backup.local"],
+                "agent_ids": [
+                    "backup.local"
+                ],  # no-environment: ok — Home Assistant's own local backup agent, not a host
                 "include_database": True,
                 "include_folders": [],
                 "include_all_addons": False,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-08-30)
+
+- the `no-environment` gate's hatch on Home Assistant's own backup agent id
+  (`backup.local`, a real value by nature) was lost in 0.3.0's rewrite of
+  `apply.py`: CI red for a name that names nobody — restored
+
 ## 0.3.0 — the things' integrations (2026-08-30)
 
 A row that names an `integration:` becomes a config entry:
