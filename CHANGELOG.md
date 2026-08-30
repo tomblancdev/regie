@@ -49,6 +49,18 @@ was missing — its room.
   among the profile's users, a `when`) — `up` makes them before the first
   start and chowns them when root; **`when: pack:<name>`** on a profile's
   template or dir renders it only when the house carries that pack
+- **house `matter.only_fabric: true`** — the brain is a thing's only
+  controller: `apply` removes every other fabric it finds on a node the
+  house names (the phone's commissioning stack leaves a *Google LLC* fabric
+  on every bulb it pairs; a vendor's app would leave its own) — said in the
+  step, idempotent. `pair --only-fabric` does the same once, at adoption
+- a Matter node that reports **no serial number** (a Govee H6008 does not)
+  is keyed on the hardware address its diagnostics report: the row carries
+  `mac`, `apply` finds the device through the node's diagnostics
+- **fx: a run never started** — the snapshot scene was named with
+  `context.id`, and a script's variables know `this` but no `context`
+  (found on the first bulb: *'context' is undefined*); named by the clock
+  now (`now().strftime(...)`), one scene per run as before
 - the Zigbee walk (`pair --room` alone, `suggest`), `backup`, `restore`,
   `doctor` move to 0.6
 

@@ -284,7 +284,10 @@ def script(c: Compiled, house_label: str) -> dict:
         fields[name] = spec
         # the run's value, the shape's default when the caller gave none
         variables[name] = "{{ " + name + " | default(" + repr(default) + ") }}"
-    variables["snapshot"] = "fx_{{ this.entity_id[7:] }}_{{ context.id | lower }}"
+    # one snapshot scene per run, named by the clock: a script's variables know
+    # `this` (the script's state) but no `context` - found live on the first
+    # bulb (0.5.0: "'context' is undefined" and the run never started)
+    variables["snapshot"] = "fx_{{ this.entity_id[7:] }}_{{ now().strftime('%Y%m%d%H%M%S%f') }}"
     if "colour" in c.fields:
         variables["colour_rgb"] = (
             "{{ [colour[1:3] | int(base=16), colour[3:5] | int(base=16), "
