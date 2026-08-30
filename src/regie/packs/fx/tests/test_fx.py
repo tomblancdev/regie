@@ -127,7 +127,11 @@ def test_the_scripts_render_with_snapshot_and_restore(rendered):
     assert flash["mode"] == "parallel" and flash["fields"]["target"]["required"] is True
     assert flash["fields"]["hold"]["default"] == 0.12
     assert flash["variables"]["hold"] == "{{ hold | default(0.12) }}"
-    assert flash["variables"]["snapshot"] == "fx_{{ this.entity_id[7:] }}_{{ context.id | lower }}"
+    # one scene per run, named by the clock (a script's variables know no `context`)
+    assert flash["variables"]["snapshot"] == (
+        "fx_{{ this.entity_id[7:] }}_{{ now().strftime('%Y%m%d%H%M%S%f') }}"
+    )
+    assert "context" not in flash["variables"]["snapshot"]
     assert flash["sequence"][0] == {
         "action": "scene.create",
         "data": {"scene_id": "{{ snapshot }}", "snapshot_entities": "{{ target }}"},
