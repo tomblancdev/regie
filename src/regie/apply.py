@@ -779,20 +779,45 @@ class Conductor:
             in {(c[0], str(c[1]).lower()) for c in d.get("connections", []) if len(c) == 2}
         ]
 
+    def entry_devices(self, devices: list[dict], thing: dict) -> list[dict]:
+        """The devices under the config entries a row made (one entry per
+        integration it names, the nth entry of a domain for the nth row —
+        the entries step's own order). An entry that holds several devices
+        says nothing about which is the row's: skipped, the serial or the
+        hardware address must say."""
+        out: list[dict] = []
+        for domain in self.house.integrations(thing):
+            rows = self.house.rows_of(domain)
+            have = self.domain_entries(domain)
+            n = rows.index(thing) if thing in rows else -1
+            if n < 0 or n >= len(have):
+                continue
+            mine = [d for d in devices if have[n]["entry_id"] in (d.get("config_entries") or [])]
+            if len(mine) == 1:
+                out.append(mine[0])
+        return out
+
     def devices(self, ws) -> None:
         """A row's device, roomed and named by the row (a device's room):
-        found by its serial (a Matter thing) or its hardware address (a
-        network thing); the entity of the thing's own domain renamed to the
-        house's id when the row is one device with one such entity. A row
-        whose device is not there yet is skipped in silence: the entry step
-        (or the walk) says what waits."""
-        rows = [t for t in self.house.things if t.get("serial") or t.get("mac")]
+        found by its serial (a Matter thing), by its hardware address (a
+        network thing), or as the one device under a config entry the row
+        made; the entity of the thing's own domain renamed to the house's id
+        when the row is one device with one such entity. A row whose device
+        is not there yet is skipped in silence: the entry step (or the walk)
+        says what waits."""
+        rows = [
+            t
+            for t in self.house.things
+            if t.get("serial") or t.get("mac") or self.house.integrations(t)
+        ]
         if not rows:
             return
         devices = ws.call("config/device_registry/list") or []
         entities = ws.call("config/entity_registry/list") or []
         for t in rows:
             found = self.device_of(devices, t)
+            if not found:
+                found = self.entry_devices(devices, t)
             if not found:
                 continue
             area_id = self.area_ids.get(t["area"])

@@ -305,14 +305,16 @@ class FakeHA(HomeAssistant):
         dev["_mac"] = mac
         return dev
 
-    def network_device(self, mac, name, domains=("media_player",), platform="cast"):
-        """A network thing's device, keyed on its hardware address."""
+    def network_device(self, mac, name, domains=("media_player",), platform="cast", entry=None):
+        """A network thing's device, keyed on its hardware address (or on the
+        config entry it came with, when it has no address to give)."""
         self.n += 1
         node = self.n
         dev = {
             "id": f"dev{node}",
             "identifiers": [[platform, f"{platform}-{node}"]],
-            "connections": [["mac", mac]],
+            "connections": [["mac", mac]] if mac else [],
+            "config_entries": [entry["entry_id"]] if entry else [],
             "serial_number": None,
             "manufacturer": "Vendor",
             "model": name,
@@ -1268,3 +1270,27 @@ def test_pair_matter_says_when_nothing_or_too_much_is_fresh(witness, secrets, tm
         pair_matter(witness, secrets, tmp_path, ha, room="attic")
     with pytest.raises(HouseError, match="--at needs a --role"):
         pair_matter(witness, secrets, tmp_path, ha, room="hall", at="left")
+
+
+def test_a_device_with_no_address_is_the_one_under_the_rows_entry(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)  # the printer's ipp entry made
+    ipp = ha.entries["ipp"][0]
+    printer = ha.network_device(None, "ET-4750", domains=("sensor",), platform="ipp", entry=ipp)
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["device kitchen_printer"] == "changed"
+    kitchen = next(a for a in ha.areas if a["aliases"][0] == "kitchen")
+    assert printer["area_id"] == kitchen["area_id"]
+    assert printer["name_by_user"] == "kitchen_printer"
+    assert "sensor.kitchen_printer" in {e["entity_id"] for e in ha.entities}
+
+
+def test_an_entry_holding_two_devices_names_no_row(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    cast = ha.entries["cast"][0]  # one entry for every cast on the lane
+    a = ha.network_device(None, "Puck A", platform="cast", entry=cast)
+    b = ha.network_device(None, "Puck B", platform="cast", entry=cast)
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert "device living_cast" not in states(steps)
+    assert a["area_id"] is None and b["area_id"] is None
