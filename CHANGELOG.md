@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5 (2026-08-30)
+
+- a test's expectation corrected (a second row of a single-entry domain is
+  served by the first's entry: `ok`, not `changed`) — 0.3.4 shipped with it red
+  because a `pytest | tail` pipeline reports `tail`'s status; the release
+  chain reads pytest's own now
+
 ## 0.3.4 — a box that is several things (2026-08-30)
 
 - **`integration:` takes a list** — one config entry per domain named: a

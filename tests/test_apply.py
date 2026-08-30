@@ -558,7 +558,9 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     tv = next(s for s in steps if s.name == "entry living_tv (androidtv_remote)")
     assert tv.detail == "androidtv_remote: a pin on its screen — regie link living_tv"
     hand = sum(1 for s in steps if s.state == "hand")
-    assert summary(steps, False) == f"apply: {len(steps) - hand} changed, 0 ok, {hand} by hand"
+    ok = sum(1 for s in steps if s.state == "ok")  # the puck's cast row: served by the TV's entry
+    assert ok == 1
+    assert summary(steps, False) == f"apply: {len(steps) - hand - ok} changed, 1 ok, {hand} by hand"
 
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert set(states(again).values()) == {"ok", "hand"}, states(again)
