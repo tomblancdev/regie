@@ -114,6 +114,8 @@ class Conductor:
         self.client_id = ha.url + "/"  # Home Assistant wants a URL as a client id
         self.tokens_dir = self.root / STATE / "tokens"
         self._cache: dict = {}
+        if house.data["house"].get("url") and not ha.frontend_base:
+            ha.frontend_base = house.data["house"]["url"]
 
     # --- helpers ------------------------------------------------------------
     def step(self, name: str, state: str, detail: str) -> None:

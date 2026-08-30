@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3 — the brain's own door for a consent (2026-08-30)
+
+- **`house.my: false`** — Home Assistant's oauth2 helper sends every consent
+  through `my.home-assistant.io` whenever the `my` integration is loaded, and
+  `default_config` has no "minus one"; a house that wants its own door as the
+  callback (`<url>/auth/external/callback`, what a vendor's app registers)
+  renders `default_config`'s members written out without `my` (the list the
+  product pins in `base.yml`, read from the manifest at the tested version)
+- the client sends **`HA-Frontend-Base: <house url>`** — the header the
+  frontend sends and the one Home Assistant builds that callback from when
+  `my` is absent (`regie link` answered "No header in request" without it)
+
 ## 0.3.2 (2026-08-30)
 
 - the `no-environment` gate's hatch on Home Assistant's own local backup

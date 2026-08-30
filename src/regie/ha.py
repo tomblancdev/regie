@@ -17,15 +17,26 @@ from .errors import HouseError
 
 
 class HomeAssistant:
-    def __init__(self, url: str = "http://127.0.0.1:8123", token: str | None = None):
+    def __init__(
+        self,
+        url: str = "http://127.0.0.1:8123",
+        token: str | None = None,
+        frontend_base: str | None = None,
+    ):
         self.url = url.rstrip("/")
         self.token = token
+        # the door's public address, sent as the header the frontend sends
+        # (HA-Frontend-Base): without `my`, Home Assistant builds an OAuth
+        # callback from it - <door>/auth/external/callback
+        self.frontend_base = frontend_base
 
     # --- REST -------------------------------------------------------------
     def _request(
         self, method: str, path: str, body: bytes | None, headers: dict, auth: bool
     ) -> tuple[int, Any]:
         h = dict(headers)
+        if self.frontend_base:
+            h["HA-Frontend-Base"] = self.frontend_base.rstrip("/")
         if auth:
             if not self.token:
                 raise HouseError(f"{path}: no token to speak with")

@@ -65,6 +65,7 @@ def test_units_pin_the_images(rendered, witness):
 
 def test_home_assistant_configuration(rendered):
     text = (rendered / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
+    assert "\ndefault_config:\n" in text  # the witness keeps `my`: one line
     assert "packages: !include_dir_named packages" in text
     assert "automation: !include automations.yaml" in text
     assert "trusted_proxies" not in text  # the reverse proxy is the conductor's (stored config)
@@ -208,3 +209,26 @@ def test_owner_is_chowned_only_as_root(witness, secrets, tmp_path, monkeypatch):
     r.render(witness, tmp_path, secrets)
     assert ("passwd", 1883, 1883) in calls and ("acl", 1883, 1883) in calls
     assert not [c for c in calls if c[0] == "configuration.yaml"]
+
+
+def test_a_house_without_my_renders_default_config_written_out(house_with, secrets, tmp_path):
+    """house.my: false — the brain's own door is the OAuth callback, so the `my`
+    integration must not load: default_config's members are written out
+    without it (the list the product pins in base.yml)."""
+    from regie.house import load_house
+    from regie.render import base_default_config, render
+
+    def no_my(d):
+        d["house"]["my"] = False
+
+    house = load_house(house_with(no_my))
+    out = tmp_path / "no-my"
+    render(house, out, secrets)
+    text = (out / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
+    assert "default_config:" not in text.replace("# default_config", "")
+    assert "\nmy:\n" not in text
+    members = base_default_config()
+    assert "my" in members and len(members) >= 20
+    for domain in members:
+        if domain != "my":
+            assert f"\n{domain}:\n" in text, domain

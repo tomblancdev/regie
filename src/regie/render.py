@@ -48,6 +48,12 @@ def base_components() -> dict:
     return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8")).get("components", {})
 
 
+def base_default_config() -> list[str]:
+    """What Home Assistant's `default_config:` loads at the version the product
+    tests against (base.yml) - rendered explicitly when a house drops `my`."""
+    return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8")).get("default_config", [])
+
+
 def make_env(house: House) -> Environment:
     loaders = {
         "base": FileSystemLoader(str(BASE / "templates")),
@@ -79,6 +85,7 @@ def context(house: House, secrets: dict) -> dict:
         "root": house.root(),
         "secrets": secrets,
         "version": __version__,
+        "default_config": base_default_config(),
         "entity": house.entity,
         "coordinators": house.coordinators(),
         "mqtt_users": house.mqtt_users(),

@@ -67,6 +67,11 @@
             "us_customary"
           ],
           "default": "metric"
+        },
+        "my": {
+          "type": "boolean",
+          "default": true,
+          "description": "My Home Assistant (my.home-assistant.io): true = Home Assistant's default, every OAuth consent redirects through the project's page; false = the brain's own door is the callback (<url>/auth/external/callback - what a vendor's app registers) and default_config is rendered explicitly without `my`"
         }
       }
     },

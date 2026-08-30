@@ -892,3 +892,33 @@ def test_a_discovered_tv_is_the_rows_by_its_mac(witness, secrets, tmp_path):
     )
     assert out.state == "changed" and f"GET {FLOWS}/{fid}" in ha.log
     assert entry_titles(ha, "androidtv_remote") == ["TV"]
+
+
+def test_the_conductor_names_the_door_on_every_request(witness, monkeypatch):
+    """Without `my`, Home Assistant builds the OAuth callback from the header the
+    frontend sends (HA-Frontend-Base): the client sends the house's url."""
+    import io
+    import urllib.request
+
+    from regie.apply import Conductor
+
+    seen = {}
+
+    class Reply(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen.update(req.headers)
+        return Reply(b"{}")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    ha = HomeAssistant("http://127.0.0.1:8123", token="t")
+    Conductor(witness, {}, "/tmp/x", ha)
+    ha.post(FLOWS, {"handler": "home_connect"})
+    assert seen.get("Ha-frontend-base") == "https://home.example.com"

@@ -24,6 +24,38 @@ templates:
   - { src: zigbee2mqtt/groups.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/groups.yaml", each: coordinators }
   - { src: zigbee2mqtt/secret.yaml.j2, dst: "zigbee2mqtt/{{ coordinator.id }}/secret.yaml", each: coordinators, mode: "0600" }
 
+# What `default_config:` loads (Home Assistant 2026.8.3 - the default_config
+# manifest's dependencies, read at the source). A house that keeps `my`
+# (house.my: true, the default) renders the one line `default_config:`; a
+# house that wants ITS OWN DOOR as the OAuth callback (house.my: false)
+# cannot: Home Assistant's oauth2 helper redirects every consent through
+# my.home-assistant.io whenever `my` is loaded, and default_config has no
+# "minus one" - so the list is rendered explicitly, without `my`. Every
+# member below accepts an empty `<domain>:` (read at the source: each is an
+# empty_config_schema or takes an empty mapping). Check at each HA bump.
+default_config:
+  - assist_pipeline
+  - bluetooth
+  - cloud
+  - conversation
+  - dhcp
+  - energy
+  - file
+  - go2rtc
+  - history
+  - homeassistant_alerts
+  - logbook
+  - media_source
+  - mobile_app
+  - my
+  - ssdp
+  - stream
+  - sun
+  - usage_prediction
+  - usb
+  - webhook
+  - zeroconf
+
 # Custom components the brain needs, pinned by tag AND digest: `regie up`
 # fetches one when the house asks for it (the OIDC door -> auth_oidc) and
 # lays it under home-assistant/custom_components/<domain>. A bump here is a

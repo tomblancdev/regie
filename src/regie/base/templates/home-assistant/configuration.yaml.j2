@@ -22,7 +22,17 @@ homeassistant:
 {% endif %}
   packages: !include_dir_named packages
 
+{% if data.house.my | default(true) %}
 default_config:
+{% else %}
+# default_config, written out WITHOUT `my` (house.my: false): with the `my`
+# integration loaded Home Assistant sends every OAuth consent through
+# my.home-assistant.io; without it the callback is this brain's own door,
+# <url>/auth/external/callback - the address a vendor's app registers
+{% for domain in default_config if domain != 'my' %}
+{{ domain }}:
+{% endfor %}
+{% endif %}
 
 automation: !include automations.yaml
 scene: !include scenes.yaml
