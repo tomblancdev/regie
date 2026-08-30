@@ -278,12 +278,20 @@ def cmd_pair(args) -> int:
         code=args.code,
         serial=args.serial,
         thing_id=args.id,
+        only_fabric=args.only_fabric,
     )
     found = row.pop("_found")
     print(
         f"adopted: {found['device']} — entities {', '.join(found['entities']) or 'none yet'}"
         + (f" — at {', '.join(found['addresses'])}" if found["addresses"] else "")
     )
+    if found["evicted"]:
+        print(f"evicted: {', '.join(found['evicted'])} — the brain's fabric is the only one")
+    if found["other_fabrics"]:
+        print(
+            f"also on: {', '.join(found['other_fabrics'])} — another controller keeps a fabric "
+            "on it (--only-fabric removes them)"
+        )
     print("the proposed row (add it to home.yml's things, then `regie apply`):")
     fields = ", ".join(f"{k}: {_yaml_scalar(v)}" for k, v in row.items())
     print(f"  - {{ {fields} }}")
@@ -450,7 +458,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="a Matter pairing code (11 digits, or MT:...) — the server commissions the "
         "thing over IP: a device another controller shares, or one already on the network",
     )
-    s.add_argument("--serial", help="which device, when several are not named yet")
+    s.add_argument(
+        "--serial", help="which device, when several are not named yet (a serial or an address)"
+    )
+    s.add_argument(
+        "--only-fabric",
+        action="store_true",
+        help="remove every other fabric on the node (the phone's commissioning stack leaves "
+        "one of its own) — the brain is its only controller",
+    )
     s.add_argument("--id", help="the row's id (default: <room>_<role>[_<at>] or <room>_<kind>_<n>)")
     _secrets_arg(s)
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")

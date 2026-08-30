@@ -757,11 +757,14 @@ class Conductor:
         self.step("entry matter", "changed", f"set up the server on the loopback ({MATTER_URL})")
 
     @staticmethod
-    def device_of(devices: list[dict], thing: dict) -> list[dict]:
+    def device_of(devices: list[dict], thing: dict, macs: dict | None = None) -> list[dict]:
         """The Home Assistant device(s) a row is: by its serial (Matter's
         `serial_<sn>` identifier, or the device's own serial field), else by
-        its hardware address (a `mac` connection). Several devices for one
-        row = a box that is several things to Home Assistant."""
+        its hardware address (a `mac` connection; for a Matter node, the
+        address its diagnostics report - `macs`, by device id - since Home
+        Assistant's Matter device carries none, and a bulb may carry no
+        serial at all). Several devices for one row = a box that is several
+        things to Home Assistant."""
         serial = thing.get("serial")
         if serial:
             for d in devices:
@@ -772,12 +775,30 @@ class Conductor:
         mac = (thing.get("mac") or "").lower()
         if not mac:
             return []
+        macs = macs or {}
         return [
             d
             for d in devices
             if ("mac", mac)
             in {(c[0], str(c[1]).lower()) for c in d.get("connections", []) if len(c) == 2}
+            or macs.get(d["id"]) == mac
         ]
+
+    @staticmethod
+    def matter_macs(ws, devices: list[dict]) -> dict[str, str]:
+        """The hardware address of every Matter node, from its diagnostics
+        (one call each - local, the brain's own server)."""
+        out: dict[str, str] = {}
+        for d in devices:
+            if not any(len(i) == 2 and i[0] == "matter" for i in d.get("identifiers", [])):
+                continue
+            try:
+                diag = ws.call("matter/node_diagnostics", device_id=d["id"]) or {}
+            except HouseError:
+                continue
+            if diag.get("mac_address"):
+                out[d["id"]] = str(diag["mac_address"]).lower()
+        return out
 
     def entry_devices(self, devices: list[dict], thing: dict) -> list[dict]:
         """The devices under the config entries a row made (one entry per
@@ -814,8 +835,9 @@ class Conductor:
             return
         devices = ws.call("config/device_registry/list") or []
         entities = ws.call("config/entity_registry/list") or []
+        macs = self.matter_macs(ws, devices) if self.house.has_pack("matter") else {}
         for t in rows:
-            found = self.device_of(devices, t)
+            found = self.device_of(devices, t, macs)
             if not found:
                 found = self.entry_devices(devices, t)
             if not found:
@@ -1011,6 +1033,7 @@ def pair_matter(
     code: str | None = None,
     serial: str | None = None,
     thing_id: str | None = None,
+    only_fabric: bool = False,
 ) -> dict:
     """`regie pair --matter` — the walk's Matter half. The commissioning
     itself is the phone's (a fresh thing: Bluetooth, the phone puts it on the
@@ -1018,10 +1041,13 @@ def pair_matter(
     another controller shares, or already on the network — the server
     commissions it over IP, no phone). Then the node is ADOPTED: read from
     Home Assistant (vendor, model, serial, its hardware address from the
-    node's diagnostics) into a proposed row keyed on its serial — the room is
-    the session, the role and the place are the flags, the name is generated.
-    Nothing is written: the row is printed for the house file; `apply` rooms
-    and names the device from it."""
+    node's diagnostics) into a proposed row keyed on its serial - or on its
+    hardware address when it reports no serial (a Govee bulb does not) - the
+    room is the session, the role and the place are the flags, the name is
+    generated. `only_fabric`: every other fabric on the node (the phone's
+    commissioning stack keeps one of its own) is removed - the brain's is the
+    only controller. Nothing is written: the row is printed for the house
+    file; `apply` rooms and names the device from it."""
     if not house.has_pack("matter"):
         raise HouseError("the house carries no `matter` pack — add it to packs: first")
     area = next((a for a in house.areas if a["id"] == room), None)
@@ -1029,17 +1055,27 @@ def pair_matter(
         raise HouseError(f"room {room!r}: no such area in home.yml")
     if at and not role:
         raise HouseError("--at needs a --role (a place belongs to a role's layout)")
-    known = {t["serial"] for t in house.things if t.get("serial")}
+    known_serials = {t["serial"] for t in house.things if t.get("serial")}
+    known_macs = {t["mac"].lower() for t in house.things if t.get("mac")}
     c = Conductor(house, secrets, root, ha)
     ha.token = c.session_token()
     with ha.ws() as ws:
         if code:
             ws.call("matter/commission", code=code, network_only=True)
-        fresh = [d for d in matter_devices(ws) if d.get("serial_number") not in known]
+        nodes = matter_devices(ws)
+        macs = Conductor.matter_macs(ws, nodes)
+        fresh = [
+            d
+            for d in nodes
+            if d.get("serial_number") not in known_serials and macs.get(d["id"]) not in known_macs
+        ]
         if serial:
-            fresh = [d for d in fresh if d.get("serial_number") == serial]
+            key = serial.lower()
+            fresh = [
+                d for d in fresh if d.get("serial_number") == serial or macs.get(d["id"]) == key
+            ]
             if not fresh:
-                raise HouseError(f"no Matter device with serial {serial!r} in the brain")
+                raise HouseError(f"no Matter device with serial or address {serial!r} in the brain")
         if not fresh:
             raise HouseError(
                 "no Matter device the house does not already name — commission one first "
@@ -1047,18 +1083,19 @@ def pair_matter(
             )
         if len(fresh) > 1:
             lines = [
-                f"  {d.get('manufacturer')} {d.get('model')} serial {d.get('serial_number')!r}"
+                f"  {d.get('manufacturer')} {d.get('model')} serial {d.get('serial_number')!r} "
+                f"address {macs.get(d['id'])!r}"
                 for d in sorted(fresh, key=lambda d: d.get("created_at") or 0)
             ]
             raise HouseError(
                 f"{len(fresh)} Matter devices the house does not name — say which: "
-                "--serial <serial>\n" + "\n".join(lines)
+                "--serial <serial or address>\n" + "\n".join(lines)
             )
         dev = fresh[0]
-        if not dev.get("serial_number"):
+        if not dev.get("serial_number") and not macs.get(dev["id"]):
             raise HouseError(
-                f"{dev.get('manufacturer')} {dev.get('model')}: no serial number — the row "
-                "cannot be keyed; this device is not one the engine can adopt"
+                f"{dev.get('manufacturer')} {dev.get('model')}: no serial number and no hardware "
+                "address in its diagnostics — the row cannot be keyed; not one the engine can adopt"
             )
         entities = [
             e
@@ -1069,6 +1106,19 @@ def pair_matter(
             diag = ws.call("matter/node_diagnostics", device_id=dev["id"]) or {}
         except HouseError:
             diag = {}
+        fabrics = diag.get("active_fabrics") or []
+        ours = diag.get("active_fabric_index")
+        others = [f for f in fabrics if f.get("fabric_index") != ours]
+        evicted: list[dict] = []
+        if only_fabric:
+            for f in others:
+                ws.call(
+                    "matter/remove_matter_fabric",
+                    device_id=dev["id"],
+                    fabric_index=f["fabric_index"],
+                )
+                evicted.append(f)
+            others = []
     domains = {e["entity_id"].split(".", 1)[0] for e in entities}
     kind = next((k for k, d in KIND_OF_DOMAIN.items() if d in domains), None) or "device"
     row: dict = {}
@@ -1086,7 +1136,8 @@ def pair_matter(
         row["vendor"] = dev["manufacturer"]
     if dev.get("model"):
         row["model"] = dev["model"]
-    row["serial"] = dev["serial_number"]
+    if dev.get("serial_number"):
+        row["serial"] = dev["serial_number"]
     mac = diag.get("mac_address")
     if mac:
         row["mac"] = mac.lower()
@@ -1098,8 +1149,14 @@ def pair_matter(
         "device": dev.get("name_by_user") or dev.get("name"),
         "entities": sorted(e["entity_id"] for e in entities),
         "addresses": diag.get("ip_addresses") or diag.get("ip_adresses") or [],
+        "other_fabrics": [fabric_label(f) for f in others],
+        "evicted": [fabric_label(f) for f in evicted],
     }
     return row
+
+
+def fabric_label(f: dict) -> str:
+    return f"{f.get('vendor_name') or f.get('vendor_id')} (fabric {f.get('fabric_index')})"
 
 
 # a thing's kind from the entities its device carries (the first that matches)

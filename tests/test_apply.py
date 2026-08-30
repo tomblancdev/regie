@@ -303,6 +303,7 @@ class FakeHA(HomeAssistant):
             }
         )
         dev["_mac"] = mac
+        dev["_fabrics"] = [(1, "Google LLC"), (2, "Test Vendor")]  # the phone's stack + ours
         return dev
 
     def network_device(self, mac, name, domains=("media_player",), platform="cast", entry=None):
@@ -590,7 +591,15 @@ class FakeHA(HomeAssistant):
                 "mac_address": dev.get("_mac"),
                 "ip_adresses": ["fe80::1%eth0"] if dev.get("_mac") else [],
                 "available": True,
+                "active_fabrics": [
+                    {"fabric_index": i, "vendor_name": v} for i, v in dev.get("_fabrics", [])
+                ],
+                "active_fabric_index": 2,
             }
+        if type_ == "matter/remove_matter_fabric":
+            dev = next(d for d in self.devices if d["id"] == payload["device_id"])
+            dev["_fabrics"] = [f for f in dev["_fabrics"] if f[0] != payload["fabric_index"]]
+            return None
         if type_ == "subscribe_events":
             return None
         raise AssertionError(type_)
@@ -1294,3 +1303,46 @@ def test_an_entry_holding_two_devices_names_no_row(witness, secrets, tmp_path):
     steps = apply(witness, secrets, tmp_path, ha, check=False)
     assert "device living_cast" not in states(steps)
     assert a["area_id"] is None and b["area_id"] is None
+
+
+def test_a_node_without_a_serial_is_keyed_on_its_address(witness, secrets, tmp_path, house_with):
+    """A Govee bulb reports no serial number: the walk keys its row on the
+    hardware address the node's diagnostics report; apply finds it by that."""
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.matter_node("EX-000001", "00:00:5e:00:53:41")  # the witness's own row
+    bulb = ha.matter_node(None, "00:00:5e:00:53:52", model="Bulb")
+    row = pair_matter(witness, secrets, tmp_path, ha, room="hall", role="lamp", only_fabric=True)
+    found = row.pop("_found")
+    assert "serial" not in row and row["mac"] == "00:00:5e:00:53:52" and row["id"] == "hall_lamp"
+    assert found["evicted"] == ["Google LLC (fabric 1)"] and bulb["_fabrics"] == [
+        (2, "Test Vendor")
+    ]
+
+    house = load_house(
+        house_with(lambda d: d["things"].append(row))
+    )  # the row, where the house keeps them
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert states(steps)["device hall_lamp"] == "changed"
+    hall = next(a for a in ha.areas if a["aliases"][0] == "hall")
+    assert bulb["area_id"] == hall["area_id"] and bulb["name_by_user"] == "hall_lamp"
+    assert "light.hall_lamp" in {e["entity_id"] for e in ha.entities}
+    # a second walk: the bulb is named now, nothing is fresh
+    with pytest.raises(HouseError, match="no Matter device the house does not already name"):
+        pair_matter(house, secrets, tmp_path, ha, room="hall")
+    # and --serial takes an address too
+    ha.matter_node(None, "00:00:5e:00:53:53", model="Bulb")
+    assert (
+        pair_matter(house, secrets, tmp_path, ha, room="hall", serial="00:00:5E:00:53:53")["mac"]
+        == "00:00:5e:00:53:53"
+    )
+
+
+def test_other_fabrics_are_reported_and_kept_unless_asked(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.matter_node("EX-000001", "00:00:5e:00:53:41")
+    bulb = ha.matter_node("EX-000002", "00:00:5e:00:53:42")
+    row = pair_matter(witness, secrets, tmp_path, ha, room="hall")
+    assert row["_found"]["other_fabrics"] == ["Google LLC (fabric 1)"]
+    assert not row["_found"]["evicted"] and len(bulb["_fabrics"]) == 2
