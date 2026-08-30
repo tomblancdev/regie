@@ -4,6 +4,7 @@ real thing on the points that matter (onboarding refuses twice, registries
 key on aliases, a flow walks its form, a discovered flow is continued, a
 consent is an external step, a PIN is a form, the backup config compares)."""
 
+import json
 import re
 from contextlib import contextmanager
 
@@ -275,7 +276,8 @@ class FakeHA(HomeAssistant):
             entity = path.rsplit("/", 1)[1]
             if entity.split(".")[0] not in ("input_datetime", "input_select"):
                 return 404, {"message": "Entity not found."}
-            return 200, {"entity_id": entity, "state": self.states.get(entity, "unknown")}
+            fresh = "00:00:00" if entity.startswith("input_datetime.") else "home"
+            return 200, {"entity_id": entity, "state": self.states.get(entity, fresh)}
         if path.startswith("/api/config/config_entries/entry?domain="):
             return 200, [
                 {k: v for k, v in e.items() if k != "_data"}
@@ -571,10 +573,13 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert ok == 1
     assert summary(steps, False) == f"apply: {len(steps) - hand - ok} changed, 1 ok, {hand} by hand"
 
-    # the knobs: the files seed the helpers once
+    # the knobs: the files seed the helpers once (a fresh time helper reads
+    # 00:00, not unknown — the conductor's own mark says it has spoken)
     assert st["knob house_period_morning"] == "changed" and st["knob house_mode"] == "changed"
     assert ha.states["input_datetime.house_period_evening"] == "18:00:00"
     assert ha.states["input_select.house_mode"] == "home"
+    marks = json.loads((tmp_path / ".regie/knobs.json").read_text())
+    assert marks["input_datetime.house_period_morning"] == "06:30"
 
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert set(states(again).values()) == {"ok", "hand"}, states(again)
@@ -595,6 +600,11 @@ def test_a_knob_the_family_moved_is_read_and_kept(witness, secrets, tmp_path):
     assert ha.states["input_datetime.house_period_morning"] == "07:00:00"
     assert ha.states["input_select.house_mode"] == "cinema"
     assert next(s for s in steps if s.name == "knob house_period_day").detail == "09:00"
+    # the marks lost (a rebuilt brain): seeded again, the family's 07:00 overwritten
+    (tmp_path / ".regie/knobs.json").unlink()
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["knob house_period_morning"] == "changed"
+    assert ha.states["input_datetime.house_period_morning"] == "06:30:00"
 
 
 def test_a_room_renamed_is_adopted_by_its_old_id_now_an_alias(

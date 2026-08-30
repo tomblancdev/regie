@@ -66,10 +66,14 @@ holds one thing.
   per layout row (`light.<room>_<role>_<prefix>` once two of its places are
   filled), beside the room's
 - the conductor: **the knobs** — the periods' times and the first mode are
-  seeded ONCE from the files (a helper still `unknown`), and the UI's value
-  is read, compared and kept after (`knob house_period_morning: 07:00 — set
-  from the UI (the file says 06:30), kept`); the engine renders no
-  `initial:` on a helper, which would reset it at every restart
+  seeded ONCE per brain from the files, and the UI's value is read, compared
+  and kept after (`knob house_period_morning: 07:00 — set from the UI (the
+  file says 06:30), kept`); the conductor keeps its own memory of the seed
+  (`<root>/.regie/knobs.json`) because a fresh helper does not read
+  `unknown` — a time helper starts at 00:00, a select at its first option
+  (found live: four boundaries at 00:00 made the period `night` and the
+  clock rule moved the house to night); the engine renders no `initial:` on
+  a helper, which would reset it at every restart
 - `check` reports the vocabulary: the modes, the periods, the clock, each
   room's roles (filled / waiting), its scenes and the scripts they render,
   the fx backend and every stretch, the stories, the files included — and

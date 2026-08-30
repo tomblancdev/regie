@@ -24,6 +24,7 @@ conductor back in and mints it again — nothing is typed at a screen."""
 from __future__ import annotations
 
 import ipaddress
+import json
 import socket
 import ssl
 import time
@@ -481,10 +482,17 @@ class Conductor:
 
     def knobs(self) -> None:
         """What the files SEED and the UI owns after: the periods' times, the
-        house's first mode. A helper still `unknown` is set from the file; one
-        the family changed is read, compared, and kept (the file is the seed,
-        never the master — an `initial:` on the helper would reset it at every
-        restart, so the engine renders none)."""
+        house's first mode. Seeded ONCE per brain — the conductor keeps its own
+        memory of it (<root>/.regie/knobs.json): a fresh helper does not read
+        `unknown` (a time helper starts at 00:00, a select at its first option
+        — found live), so the mark, not the brain's state, says whether the
+        file has spoken. A marked knob is read, compared, and kept (the file
+        is the seed, never the master — an `initial:` on the helper would
+        reset it at every restart, so the engine renders none)."""
+        marks_path = self.root / STATE / "knobs.json"
+        marks: dict = {}
+        if marks_path.is_file():
+            marks = json.loads(marks_path.read_text(encoding="utf-8"))
         for k in self.house.knobs():
             entity = k["entity"]
             status, state = self.ha.get(f"/api/states/{entity}")
@@ -495,8 +503,9 @@ class Conductor:
             if status != 200:
                 raise HouseError(f"{entity}: {status} {state}")
             current = state.get("state", "unknown")
-            if current in ("unknown", "unavailable", ""):
-                self.step(name, "changed", f"seed {k['value']}")
+            shown = current[:5] if entity.startswith("input_datetime.") else current
+            if entity not in marks:
+                self.step(name, "changed", f"seed {k['value']} (was {shown})")
                 if not self.check:
                     domain, service = k["action"].split("/")
                     st, body = self.ha.post(
@@ -504,14 +513,17 @@ class Conductor:
                     )
                     if st != 200:
                         raise HouseError(f"{entity}: {st} {body}")
+                    marks[entity] = k["value"]
                 continue
-            shown = current[:5] if entity.startswith("input_datetime.") else current
             if shown == k["value"]:
                 self.step(name, "ok", shown)
             else:
                 self.step(
                     name, "ok", f"{shown} — set from the UI (the file says {k['value']}), kept"
                 )
+        if not self.check and marks:
+            marks_path.parent.mkdir(parents=True, exist_ok=True)
+            marks_path.write_text(json.dumps(marks, indent=2) + "\n", encoding="utf-8")
 
     # --- what the brain knows about an integration ----------------------------------
     def oauth_domains(self, ws) -> set[str]:
