@@ -43,7 +43,8 @@ holds one thing.
   it names is filled (`brightness`, `ct: warm|neutral|cool|<kelvin>`,
   `color: #rrggbb`, `transition`; a light role aims at its group
   `light.<room>_<role>`, a switch role at its things), `off` implicit (every
-  filled role that answers turn_off — lights, switches, media players),
+  filled light or switch role off — a screen or a speaker goes off only when
+  a scene names it),
   `script.<room>_default` + `sensor.<room>_default` = the scene "on" means
   now, per period × daylight (`defaults:` in the room file)
 - **pack `fx`** — `shapes/` are the bricks (`flash · fade · pulse · blackout ·

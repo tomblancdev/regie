@@ -35,8 +35,8 @@ def test_off_is_implicit_and_default_reads_its_sensor(rendered):
     pkg = load(rendered, "living")
     off = pkg["script"]["living_off"]
     actions = sorted(s["action"] for s in off["sequence"][0]["parallel"])
-    assert actions == ["light.turn_off"] * 2 + ["media_player.turn_off"] * 2, (
-        "main, lamp, the screen and the speaker; the satellite has no entity to switch off"
+    assert actions == ["light.turn_off"] * 2, (
+        "main and lamp; the screen and the speaker go off only when a scene names them"
     )
     default = pkg["script"]["living_default"]
     assert default["sequence"][0]["target"]["entity_id"] == (

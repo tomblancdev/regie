@@ -51,8 +51,10 @@ DOMAIN: dict[str, str | None] = {
     "proxy": None,
 }
 DAYLIGHT = ("dark", "dim", "bright")
-# what the implicit `off` scene switches off: a filled role whose things answer turn_off
-OFF_DOMAINS = ("light", "switch", "media_player")
+# what the implicit `off` scene switches off: the lights and the switches — a
+# screen or a speaker goes off only when a scene names it (a TV must not go
+# dark because the clock struck night)
+OFF_DOMAINS = ("light", "switch")
 KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 # the vocabulary's words and the pack that renders each — a house that writes
 # one without its pack is told so (a hint)
@@ -633,14 +635,17 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                         "under roles nor carried by a thing"
                     )
         unfilled = sorted(r for r in declared if r not in filled)
+        waiting = [p["id"] for p in house.scene_plan(a) if not p["renders"] and not p["implicit"]]
         if unfilled:
             hints.append(
                 f"{a['id']}: role(s) {', '.join(unfilled)} filled by nothing yet — "
                 "what names them renders nothing (the walk fills them)"
+                + (f"; scene(s) {', '.join(waiting)} wait, no script yet" if waiting else "")
             )
-        for plan in house.scene_plan(a):
-            if not plan["renders"] and not plan["implicit"]:
-                hints.append(f"{a['id']}: scene {plan['id']} waits for its roles, no script yet")
+        elif waiting:
+            hints.append(
+                f"{a['id']}: scene(s) {', '.join(waiting)} wait for their roles, no script yet"
+            )
         for period, value in house.defaults_of(a).items():
             if period_ids and period not in period_ids:
                 errors.append(f"{a['id']}: defaults name period {period!r} — not in modes.periods")
