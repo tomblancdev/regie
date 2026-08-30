@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 — a release carries its own pin (2026-08-30)
+
+The v0.5.0 tag's collection still said `regie_version: v0.4.1` in role
+`engine`'s defaults — a fleet pinning the tag **downgraded its brain's
+engine** to 0.4.1 (found live: the pin converge refused the very rooms the
+overlay run had just laid). The release step that was missing, written
+down: a tag bumps `pyproject.toml`, `ansible/galaxy.yml` *and* the engine
+role's default `regie_version`, together. No code change.
+
 ## 0.5.0 — the Matter pack, and the walk's Matter half (2026-08-31)
 
 A Matter thing over Wi-Fi needs no coordinator: the server beside the brain
