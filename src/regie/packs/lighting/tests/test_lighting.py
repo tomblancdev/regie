@@ -10,9 +10,11 @@ def test_a_room_with_lights_gets_its_group_and_its_silent_alert(rendered):
     pkg = yaml.safe_load(
         (rendered / "home-assistant/packages/lighting_living.yaml").read_text(encoding="utf-8")
     )
-    (group,) = pkg["light"]
+    group = pkg["light"][0]
     assert group["name"] == "living_lights" and group["entities"] == [
         "light.living_ceiling",
+        "light.living_ceiling_2",
+        "light.living_ceiling_3",
         "light.living_lamp",
     ]
     assert (
@@ -71,3 +73,24 @@ def test_a_room_without_lights_gets_no_package_and_no_card(house_with, secrets, 
         (tmp_path / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
     )
     assert "Chambre B" not in [c.get("title") for c in dash["views"][0]["cards"]]
+
+
+def test_a_role_gets_its_group_and_a_layout_its_rows(rendered):
+    pkg = yaml.safe_load(
+        (rendered / "home-assistant/packages/lighting_living.yaml").read_text(encoding="utf-8")
+    )
+    groups = {g["name"]: g for g in pkg["light"]}
+    assert groups["living_main"]["entities"] == [
+        "light.living_ceiling",
+        "light.living_ceiling_2",
+        "light.living_ceiling_3",
+    ]
+    assert groups["living_lamp"]["entities"] == ["light.living_lamp"]
+    assert groups["living_main_front"]["entities"] == [
+        "light.living_ceiling",
+        "light.living_ceiling_2",
+    ], "front_left + front_right filled: the front row exists; back has one bulb: no group"
+    assert "living_main_back" not in groups
+    names = pkg["homeassistant"]["customize"]
+    assert names["light.living_main"]["friendly_name"] == "Salon — Plafond"
+    assert names["light.living_main_front"]["friendly_name"] == "Salon — Plafond front"

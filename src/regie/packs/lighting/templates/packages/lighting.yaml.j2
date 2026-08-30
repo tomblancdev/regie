@@ -8,6 +8,19 @@ homeassistant:
     light.{{ area.id }}_lights:
       friendly_name: {{ (area.label ~ ' — ' ~ labels.ui.lights) | to_yaml }}
 
+{% set role_specs = declared_roles(area) %}
+{% for role, rthings in roles.items() %}
+{% set rl = rthings | selectattr('kind', 'equalto', 'light') | list %}
+{% if rl and (rl | length) == (rthings | length) %}
+    light.{{ area.id }}_{{ role }}:
+      friendly_name: {{ (area.label ~ ' — ' ~ (role_specs[role].label | default(role))) | to_yaml }}
+{% for g in layout_groups(area, role) %}
+    light.{{ g.id }}:
+      friendly_name: {{ (area.label ~ ' — ' ~ (role_specs[role].label | default(role)) ~ ' ' ~ g.prefix) | to_yaml }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
 light:
   - platform: group
     name: {{ area.id }}_lights
@@ -15,6 +28,29 @@ light:
     entities:
 {% for t in lights %}
       - {{ entity(t) }}
+{% endfor %}
+{% for role, rthings in roles.items() %}
+{% set rl = rthings | selectattr('kind', 'equalto', 'light') | list %}
+{% if rl and (rl | length) == (rthings | length) %}
+  # the role's group — what a scene or an effect aims at (home.yml `role:`)
+  - platform: group
+    name: {{ area.id }}_{{ role }}
+    unique_id: regie_{{ area.id }}_{{ role }}
+    entities:
+{% for t in rl %}
+      - {{ entity(t) }}
+{% endfor %}
+{% for g in layout_groups(area, role) %}
+  # the layout's {{ g.prefix }} places ({{ g.places | join(', ') }}), the ones filled
+  - platform: group
+    name: {{ g.id }}
+    unique_id: regie_{{ g.id }}
+    entities:
+{% for t in g.things %}
+      - {{ entity(t) }}
+{% endfor %}
+{% endfor %}
+{% endif %}
 {% endfor %}
 
 automation:

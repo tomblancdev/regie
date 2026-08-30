@@ -1,0 +1,3 @@
+# fx.yml — which effects the house enables (every shape when `enable` is
+# absent), on which backend (0.4: ha, the generic loop), its own shapes.
+backend: ha

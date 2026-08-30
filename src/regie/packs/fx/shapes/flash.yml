@@ -1,0 +1,11 @@
+# flash — full on, then back; the simplest brick. $level, $colour, $hold and
+# $times are the script's fields (their defaults here).
+summary: on at a level, off, once or a few times
+icon: mdi:flash
+tags: { kind: light, mood: sharp }
+needs: { step: 0.12 }
+fields: { level: 100, colour: null, hold: 0.12, times: 1 }
+steps:
+  - { level: $level, colour: $colour, hold: $hold }
+  - { level: 0, hold: $hold }
+repeat: $times

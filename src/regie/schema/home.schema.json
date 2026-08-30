@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema", "$comment": "no-environment: ok — the standard, not a network",
   "$id": "https://github.com/tomblancdev/regie/schema/home.schema.json",
   "title": "home.yml — a house, for La Régie (schema 1)",
-  "description": "The contract every house writes to. Things are data: an id, a room, a kind, how it is reached. Packs add fields to a thing (their schema fragment is merged before validation); kinds and via are OPEN vocabularies — an unknown value is a warning, never an error, so a new use case is a pack, not a schema bump.",
+  "description": "The contract every house writes to. Things are data: an id, a room, a kind, how it is reached, and since schema 1 / engine 0.4 what it is FOR (`role`). Packs add fields to a thing (their schema fragment is merged before validation); kinds, via and roles are OPEN vocabularies — an unknown value is a warning, never an error, so a new use case is a pack, not a schema bump. The vocabulary (rooms' scenes, modes, effects, scenarios) is the product's standard library: its shapes live here, `include:` brings them in from small files, the packs render them.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -291,6 +291,83 @@
       "items": {
         "$ref": "#/$defs/thing"
       }
+    },
+    "include": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "small files merged into this one before validation — an engine feature, the same on a Pi and on a fleet. Paths and globs are relative to home.yml. rooms: one file per room, merged into the area of the same id (created when `areas:` has no line for it); modes / fx: exactly one file each, in place of the block here; scenarios: one story per file (its id = the file's stem unless the file says `id:`)",
+      "properties": {
+        "rooms": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "modes": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "fx": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "scenarios": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          ]
+        }
+      }
+    },
+    "modes": {
+      "$ref": "#/$defs/modes"
+    },
+    "fx": {
+      "$ref": "#/$defs/fx"
+    },
+    "scenarios": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/scenario"
+      },
+      "description": "the stories — steps, waits, effects, scenes, words; one file each under include.scenarios"
     }
   },
   "$defs": {
@@ -343,6 +420,55 @@
         },
         "floor": {
           "$ref": "#/$defs/id"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "what people SAY for this room (pushed to Home Assistant's area aliases beside the id; the voice pipeline matches on them)"
+        },
+        "roles": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/role"
+          },
+          "description": "the roles this room has — what a thing is FOR here (lights: main · accent · lamp · strip · night · shelf · console…; the rest: remote · motion · door · screen · speaker · satellite…). An open enumeration; the walk fills them (`role:` on a thing's row)"
+        },
+        "scenes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/scene"
+          },
+          "description": "the room's looks by role; each renders as a script <room>_<scene> once a role it names is filled. `off` is implicit: every filled role off"
+        },
+        "defaults": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/scene_ref"
+              },
+              {
+                "$ref": "#/$defs/daylight_map"
+              }
+            ]
+          },
+          "description": "per period (the keys of modes.periods): the scene \"on\" means then — a scene id, or one per daylight (dark / dim / bright). sensor.<room>_default carries it; every turn-on path applies it"
+        },
+        "behaviours": {
+          "type": "object",
+          "description": "the packs' behaviour templates with this room's knobs — each pack documents its own keys (0.4: a seam, nothing reads it yet)"
         }
       }
     },
@@ -363,6 +489,10 @@
         "admin": {
           "type": "boolean",
           "default": false
+        },
+        "phone": {
+          "$ref": "#/$defs/id",
+          "description": "the companion app's notify slug (notify.mobile_app_<phone>) — makes the person a target of the mouth (notify.<person>, notify.household)"
         }
       }
     },
@@ -459,8 +589,17 @@
         },
         "integration": {
           "oneOf": [
-            { "$ref": "#/$defs/id" },
-            { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1, "uniqueItems": true }
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
           ],
           "description": "the Home Assistant integration(s) that reach it — one config entry each (the conductor's business); a list when one box is several things to Home Assistant (a receiver: heos + denonavr; a TV: androidtv_remote + cast)"
         },
@@ -474,8 +613,556 @@
         "options": {
           "type": "object",
           "description": "what a pack reads on a thing of its kinds; each pack documents its own"
+        },
+        "role": {
+          "$ref": "#/$defs/id",
+          "description": "what the thing is FOR in its room (main, accent, lamp, strip, night, shelf, console, remote, motion, door, screen, speaker, satellite…) — the key scenes and effects are written on, before the walk; open"
+        },
+        "at": {
+          "$ref": "#/$defs/id",
+          "description": "its place in the role's layout (front_left, row_3…) — needs a role; the walk assigns it"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "what people say for this one"
         }
       }
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+      "description": "a local time, HH:MM"
+    },
+    "look": {
+      "description": "what a role looks like in a scene: on / off, or a mapping — brightness (0-100), ct (warm | neutral | cool | kelvin), color (#rrggbb), transition (seconds)",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "enum": [
+            "on",
+            "off"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "brightness": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "ct": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "warm",
+                    "neutral",
+                    "cool"
+                  ]
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 10000
+                }
+              ]
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "transition": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "scene": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/look"
+      },
+      "description": "a persistent look for the room, BY ROLE — no entity id anywhere; a role nothing fills yet renders nothing"
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "what a room expects for one of its roles — a label, and for a ceiling of many lights its layout (the places the walk assigns with `at:`)",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/id"
+        },
+        "layout": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "description": "the places, in order (front_left, front_center, …, row_1, …): places sharing a prefix make a group of their own (light.<room>_<role>_<prefix>); effects sweep in this order"
+        }
+      }
+    },
+    "daylight_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "dark": {
+          "$ref": "#/$defs/scene_ref"
+        },
+        "dim": {
+          "$ref": "#/$defs/scene_ref"
+        },
+        "bright": {
+          "$ref": "#/$defs/scene_ref"
+        }
+      },
+      "description": "a scene per daylight (the signal sensor.daylight: dark below the horizon, dim at low sun, bright)"
+    },
+    "mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "quiet": {
+          "type": "boolean",
+          "default": false,
+          "description": "the mouth stays silent in this mode unless the severity is alarm (binary_sensor.house_quiet)"
+        },
+        "scene": {
+          "description": "the scene every room takes when the house enters this mode: a scene id, `default` (the room's default for the period), or `off`",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "const": false
+            }
+          ]
+        },
+        "else": {
+          "description": "the scene a room takes when it lacks the one above (off, for instance)",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "const": false
+            }
+          ]
+        },
+        "rooms": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/scene_ref"
+          },
+          "description": "per room, a scene instead of the mode's"
+        },
+        "away": {
+          "type": "boolean",
+          "default": false,
+          "description": "the house is empty in this mode (binary_sensor.house_occupied reads off)"
+        },
+        "icon": {
+          "type": "string"
+        }
+      }
+    },
+    "clock_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "to"
+      ],
+      "properties": {
+        "to": {
+          "$ref": "#/$defs/id",
+          "description": "the mode the house enters when this period begins"
+        },
+        "from": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "description": "only when the house is in one of these modes (a cinema at 22:30 is not interrupted); any mode when absent"
+        }
+      }
+    },
+    "modes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modes"
+      ],
+      "description": "the house's state machine: input_select.house_mode, one automation per transition, the periods (four times editable in the UI, seeded from here once), the clock rules and the daylight thresholds",
+      "properties": {
+        "initial": {
+          "$ref": "#/$defs/id",
+          "default": "home",
+          "description": "the mode the brain starts in the very first time (seeded once by the conductor; the UI's choice is kept after)"
+        },
+        "modes": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/mode"
+          }
+        },
+        "periods": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/period"
+          },
+          "description": "in order of the day — each begins at its time (an input_datetime the family edits in the UI; this file only seeds it); before the first, the last one holds (night wraps)"
+        },
+        "clock": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/clock_rule"
+          },
+          "description": "per period: the mode its beginning moves the house to"
+        },
+        "daylight": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dark_below": {
+              "type": "number",
+              "default": -6,
+              "description": "the sun's elevation (degrees) under which it is dark (civil twilight = -6)"
+            },
+            "bright_above": {
+              "type": "number",
+              "default": 10,
+              "description": "above which it is bright"
+            }
+          }
+        },
+        "follow": {
+          "type": "boolean",
+          "default": true,
+          "description": "when the period or the daylight changes and the house is in a mode whose scene is `default`, the rooms that are lit take their new default"
+        }
+      }
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "steps"
+      ],
+      "description": "an effect's SHAPE — what, never how: steps of level / colour / hold / transition, repeats, bricks composed (`use:`); a backend compiles it at the protocol's resolution",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "needs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "the finest hold it asks for, seconds"
+            }
+          }
+        },
+        "fields": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          },
+          "description": "the shape's knobs with their defaults — the script's fields; a step refers to one as $name"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "use": {
+                "$ref": "#/$defs/id"
+              },
+              "level": {},
+              "colour": {},
+              "hold": {},
+              "transition": {}
+            }
+          }
+        },
+        "repeat": {
+          "description": "how many times the steps run ($times, or a number)"
+        },
+        "restore": {
+          "type": "boolean",
+          "default": true,
+          "description": "snapshot before, put back after"
+        }
+      }
+    },
+    "fx": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "which effects the house enables, on which backend, its own shapes",
+      "properties": {
+        "backend": {
+          "$ref": "#/$defs/id",
+          "default": "ha",
+          "description": "the compiler every target goes through at 0.4 (ha: the generic light-service loop); per-protocol backends land with their bench"
+        },
+        "enable": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "description": "the shapes rendered as scripts; every shape when absent"
+        },
+        "shapes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/shape"
+          },
+          "description": "the house's own shapes, beside the product's"
+        },
+        "kelvin": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "warm": {
+              "type": "integer"
+            },
+            "neutral": {
+              "type": "integer"
+            },
+            "cool": {
+              "type": "integer"
+            }
+          },
+          "description": "what warm / neutral / cool mean in a scene (2700 / 4000 / 5500 by default)"
+        }
+      }
+    },
+    "scenario_step": {
+      "description": "one step of a story: a mode, a scene (room/scene), an effect, a wait, words",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scene"
+          ],
+          "properties": {
+            "scene": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fx"
+          ],
+          "properties": {
+            "fx": {
+              "type": "object",
+              "required": [
+                "shape",
+                "target"
+              ],
+              "properties": {
+                "shape": {
+                  "$ref": "#/$defs/id"
+                },
+                "target": {}
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wait"
+          ],
+          "properties": {
+            "wait": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]{2}:[0-9]{2}:[0-9]{2}$"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tell"
+          ],
+          "properties": {
+            "tell": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "message"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "info",
+                    "warn",
+                    "alarm"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "steps"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scenario_step"
+          }
+        }
+      }
+    },
+    "period": {
+      "description": "when a period begins: a time (HH:MM), or {at, label} — the label is what the family sees on the time helper",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/time"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "at"
+          ],
+          "properties": {
+            "at": {
+              "$ref": "#/$defs/time"
+            },
+            "label": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "scene_ref": {
+      "description": "a scene id — `off` (YAML reads a bare off as false: both are taken) or `default`",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "const": false
+        }
+      ]
     }
   },
   "x-known": {

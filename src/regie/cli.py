@@ -21,20 +21,21 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 
 # verb → (what it will do, the release that builds it)
 NOT_YET = {
-    "backup": ("Home Assistant's own backup, now, through its API", "0.4 — the walk"),
-    "restore": ("Home Assistant's own backup file, restored through its API", "0.4 — the walk"),
+    "backup": ("Home Assistant's own backup, now, through its API", "0.5 — the walk"),
+    "restore": ("Home Assistant's own backup file, restored through its API", "0.5 — the walk"),
     "doctor": (
         "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.4 — the walk",
+        "0.5 — the walk",
     ),
     "pair": (
-        "the walk — `pair --room <area>`: open the join window, turn each interview into a row "
-        "(the room is the session, the kind is the thing's own, the name is generated)",
-        "0.4 — the walk",
+        "the walk — `pair --room <area> --role <role>`: open the join window, turn each "
+        "interview into a row (the room is the session, the kind is the thing's own, the "
+        "role and the place are the flags, the name is generated)",
+        "0.5 — the walk",
     ),
     "suggest": (
         "the mesh's opinion on rooms, from link quality — suggests, never assigns",
-        "0.4 — the walk",
+        "0.5 — the walk",
     ),
     "migrate": ("move a home.yml to the current schema", "with the first schema bump"),
 }
@@ -85,11 +86,64 @@ def report(house: House, secrets: dict) -> None:
         print(f"secrets: {len(names)} needed, {len(missing)} missing — " + ", ".join(missing))
     else:
         print(f"secrets: {len(names)} needed, all present")
+    vocabulary(house)
     if house.warnings:
         print("warnings:")
         for w in house.warnings:
             print(f"  - {w}")
+    if house.hints:
+        print("hints:")
+        for h in house.hints:
+            print(f"  - {h}")
     print("ok")
+
+
+def vocabulary(house: House) -> None:
+    """The words the house writes, resolved by role — what renders, what waits."""
+    from .fx import compile_all
+
+    m = house.modes()
+    if m:
+        periods = ", ".join(f"{p['id']} {p['time']}" for p in m["periods"])
+        print(
+            f"modes: {', '.join(x['id'] for x in m['modes'])} (initial {m['initial']}) · "
+            f"periods {periods or 'none'} · clock {len(m['clock'])} rule(s) · "
+            f"daylight dark < {m['daylight']['dark_below']}°, "
+            f"bright > {m['daylight']['bright_above']}°"
+        )
+    for a in house.areas:
+        declared = house.declared_roles(a)
+        if not declared and not a.get("scenes") and not a.get("defaults"):
+            continue
+        filled = house.roles_in(a["id"])
+        roles = " ".join(
+            r + (f"({len(spec['layout'])} places)" if spec.get("layout") else "")
+            for r, spec in declared.items()
+        )
+        scripts = sorted(house.rendered_scenes(a))
+        line = (
+            f"room {a['id']} « {a['label']} »: roles {roles or '—'} · "
+            f"filled {' '.join(filled) or 'none'}"
+        )
+        if a.get("scenes"):
+            line += f" · scenes {' '.join(a['scenes'])} → scripts {' '.join(scripts) or 'none yet'}"
+        if a.get("defaults"):
+            line += " · defaults per period"
+        print(line)
+    if house.has_pack("fx"):
+        scripts, notes, backend = compile_all(house.fx(), house.data["house"]["label"])
+        print(
+            f"fx: backend {backend['name']} (step {backend['envelope'].get('step', 0)} s) · "
+            f"{len(scripts)} script(s): {', '.join(s[3:] for s in scripts)}"
+        )
+        for n in notes:
+            print(f"  ~ {n}")
+    if house.scenarios:
+        print(f"scenarios: {', '.join(s['id'] for s in house.scenarios)}")
+    if house.included:
+        parts = [f"{k} {len(v)} file(s)" for k, v in house.included.items() if v]
+        if parts:
+            print("included: " + ", ".join(parts))
 
 
 def cmd_render(args) -> int:
@@ -107,6 +161,8 @@ def cmd_render(args) -> int:
         print(f"  - {p.relative_to(out)}")
     for w in house.warnings:
         print(f"  ! {w}")
+    for h in house.hints:
+        print(f"  ~ {h}")
     return 0
 
 

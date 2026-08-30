@@ -1,0 +1,7 @@
+# blackout — everything off for a while, then back as it was.
+summary: off for a while, then back
+icon: mdi:lightbulb-off-outline
+tags: { kind: light, mood: dramatic }
+fields: { for: 3 }
+steps:
+  - { level: 0, hold: $for }

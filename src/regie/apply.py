@@ -1,9 +1,11 @@
 """`regie apply` — the conductor: what only Home Assistant's API can set,
 converged declaratively and idempotently from home.yml: the first boot (the
 owner, the core config, analytics off), the long-lived tokens the house
-needs, the reverse proxy it trusts, floors and areas, the backup schedule,
-and — since 0.3 — one config entry per thing that names an `integration:`
-(the MQTT broker rides the same walker). Keyed on names that survive a
+needs, the reverse proxy it trusts, floors and areas (with what people say
+for them, and a room adopted by alias when its id changes), the knobs the
+files seed once (the periods' times, the first mode — 0.4), the backup
+schedule, and — since 0.3 — one config entry per thing that names an
+`integration:` (the MQTT broker rides the same walker). Keyed on names that survive a
 rebuild; `--check` prints the plan and changes nothing.
 
 An entry is keyed on its DOMAIN: Home Assistant's API shows an entry's
@@ -406,31 +408,56 @@ class Conductor:
         # ADOPTED - aliased and floored - never duplicated by name
         unnamed = {r["name"].casefold(): r for r in live_areas if not r.get("aliases")}
         house_ids = {a["id"] for a in self.house.areas}
+        taken: set[str] = set()
         for a in self.house.areas:
+            wanted = self.house.area_aliases(a)
             live = areas.get(a["id"])
             floor_id = floor_ids.get(a.get("floor") or "")
-            if not live and a["label"].casefold() in unnamed:
-                found = unnamed.pop(a["label"].casefold())
-                self.step(
-                    f"area {a['id']}", "changed", f"adopt {found['name']} ({found['area_id']})"
-                )
-                if not self.check:
-                    ws.call(
-                        "config/area_registry/update",
-                        area_id=found["area_id"],
-                        name=a["label"],
-                        aliases=[a["id"]],
-                        floor_id=floor_id,
+            if not live:
+                # a room renamed (its old id now one of its aliases — `salon`
+                # became `living_room`), or Home Assistant's own area named
+                # the way people say it: adopted, never duplicated
+                spoken = {x.casefold() for x in wanted[1:]}
+                found = next(
+                    (
+                        r
+                        for r in live_areas
+                        if r["area_id"] not in taken
+                        and (
+                            set(r.get("aliases", [])) & set(wanted[1:])
+                            or (not r.get("aliases") and r["name"].casefold() in spoken)
+                        )
+                    ),
+                    None,
+                ) or unnamed.pop(a["label"].casefold(), None)
+                if found:
+                    taken.add(found["area_id"])
+                    self.step(
+                        f"area {a['id']}", "changed", f"adopt {found['name']} ({found['area_id']})"
                     )
-                continue
+                    if not self.check:
+                        ws.call(
+                            "config/area_registry/update",
+                            area_id=found["area_id"],
+                            name=a["label"],
+                            aliases=wanted,
+                            floor_id=floor_id,
+                        )
+                    continue
             if live:
-                if live["name"] != a["label"] or (live.get("floor_id") or None) != floor_id:
+                taken.add(live["area_id"])
+                if (
+                    live["name"] != a["label"]
+                    or (live.get("floor_id") or None) != floor_id
+                    or set(live.get("aliases", [])) != set(wanted)
+                ):
                     self.step(f"area {a['id']}", "changed", f"update {a['label']}")
                     if not self.check:
                         ws.call(
                             "config/area_registry/update",
                             area_id=live["area_id"],
                             name=a["label"],
+                            aliases=wanted,
                             floor_id=floor_id,
                         )
                 else:
@@ -438,16 +465,52 @@ class Conductor:
                 continue
             self.step(f"area {a['id']}", "changed", f"create {a['label']}")
             if not self.check:
-                payload = {"name": a["label"], "aliases": [a["id"]]}
+                payload = {"name": a["label"], "aliases": wanted}
                 if floor_id:
                     payload["floor_id"] = floor_id
                 ws.call("config/area_registry/create", **payload)
         # what the brain has that the house does not name: reported, never removed
         for r in live_areas:
+            if r["area_id"] in taken:
+                continue
             alias = next((x for x in r.get("aliases", []) if x in house_ids), None)
             if alias is None:
                 self.step(
                     f"area ({r['area_id']})", "ok", f"{r['name']} — not in home.yml, left alone"
+                )
+
+    def knobs(self) -> None:
+        """What the files SEED and the UI owns after: the periods' times, the
+        house's first mode. A helper still `unknown` is set from the file; one
+        the family changed is read, compared, and kept (the file is the seed,
+        never the master — an `initial:` on the helper would reset it at every
+        restart, so the engine renders none)."""
+        for k in self.house.knobs():
+            entity = k["entity"]
+            status, state = self.ha.get(f"/api/states/{entity}")
+            name = f"knob {entity.split('.', 1)[1]}"
+            if status == 404:
+                self.step(name, "ok", "no such helper on the brain — nothing to seed")
+                continue
+            if status != 200:
+                raise HouseError(f"{entity}: {status} {state}")
+            current = state.get("state", "unknown")
+            if current in ("unknown", "unavailable", ""):
+                self.step(name, "changed", f"seed {k['value']}")
+                if not self.check:
+                    domain, service = k["action"].split("/")
+                    st, body = self.ha.post(
+                        f"/api/services/{domain}/{service}", {"entity_id": entity, **k["data"]}
+                    )
+                    if st != 200:
+                        raise HouseError(f"{entity}: {st} {body}")
+                continue
+            shown = current[:5] if entity.startswith("input_datetime.") else current
+            if shown == k["value"]:
+                self.step(name, "ok", shown)
+            else:
+                self.step(
+                    name, "ok", f"{shown} — set from the UI (the file says {k['value']}), kept"
                 )
 
     # --- what the brain knows about an integration ----------------------------------
@@ -708,6 +771,7 @@ class Conductor:
         with self.ha.ws() as ws:
             self.registries(ws)
             self.backup(ws)
+        self.knobs()
         self.mqtt()
         with self.ha.ws() as ws:
             self.credentials(ws)

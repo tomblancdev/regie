@@ -38,3 +38,17 @@ ui:
   all_off: Tout éteindre
   silent: ne répond plus
   floor: Étage
+  # the vocabulary (0.4): the signals, the modes, the mouth
+  house: Maison
+  mode: Mode
+  period: Période
+  period_begins: Début
+  daylight: Lumière du jour
+  default: par défaut
+  night: Nuit
+  occupied: occupée
+  quiet: silence
+  scene: scène
+  tell: dire
+  story: histoire
+  effects: effets

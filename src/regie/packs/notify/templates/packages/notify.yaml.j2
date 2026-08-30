@@ -1,0 +1,48 @@
+{% set phones = people | selectattr('phone', 'defined') | list %}
+# rendered by La Régie — the mouth (pack notify): script.tell, and the household's phones
+{% if phones %}
+notify:
+  - platform: group
+    name: household
+    services:
+{% for p in phones %}
+      - action: mobile_app_{{ p.phone }}
+{% endfor %}
+{% for p in phones %}
+  - platform: group
+    name: {{ p.id }}
+    services:
+      - action: mobile_app_{{ p.phone }}
+{% endfor %}
+
+{% endif %}
+script:
+  tell:
+    alias: {{ labels.ui.tell | to_yaml }}
+    description: "the mouth: a message with a severity — a persistent notification always; the phones unless the house is quiet (alarm always) (La Régie, pack notify)"
+    icon: mdi:bullhorn
+    mode: queued
+    fields:
+      message: { name: message, required: true, selector: { text: null } }
+      title: { name: title, default: {{ data.house.label | to_yaml }}, selector: { text: null } }
+      severity: { name: severity, default: info, selector: { select: { options: [info, warn, alarm] } } }
+    variables:
+      severity: "{{ '{{' }} severity | default('info') {{ '}}' }}"
+      title: {{ ("{{ title | default('" ~ (data.house.label | replace("'", "")) ~ "') }}") | to_yaml }}
+      loud: "{{ '{{' }} severity == 'alarm' or not is_state('binary_sensor.house_quiet', 'on') {{ '}}' }}"
+    sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: "regie_tell_{{ '{{' }} severity {{ '}}' }}"
+          title: "{{ '{{' }} title {{ '}}' }}"
+          message: "{{ '{{' }} message {{ '}}' }}"
+{% if phones %}
+      - if:
+          - condition: template
+            value_template: "{{ '{{' }} loud {{ '}}' }}"
+        then:
+          - action: notify.household
+            data:
+              title: "{{ '{{' }} title {{ '}}' }}"
+              message: "{{ '{{' }} message {{ '}}' }}"
+{% endif %}

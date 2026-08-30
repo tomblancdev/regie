@@ -1,5 +1,87 @@
 # Changelog
 
+## 0.4.0 — the skeleton: the vocabulary by role (2026-08-30)
+
+The house's standard library, buildable before a single bulb exists — a
+mode machine, signals, scenes, effects and stories rendered on a brain with
+zero lights, filled by the walk later. Five words, one pack each; one file
+holds one thing.
+
+- **`role`** on a thing's row — what it is FOR in its room (`main`, `accent`,
+  `lamp`, `strip`, `night`, `shelf`, `console`, `screen`, `speaker`,
+  `satellite`, `motion`, `door`…; open, like `kind`) — and **`at`**, its place
+  in the role's layout (`front_left`, `row_3`); a role couples a scene to a
+  purpose, not to a device, so the room files are written now and survive a
+  bulb's replacement. A room declares its roles (`roles:` — a label, a
+  `layout` for a ceiling of many lights); a role nothing fills renders
+  nothing and `check` lists it as a hint, never an error
+- **`aliases`** on areas and things — what people say; the conductor pushes
+  them to Home Assistant's area aliases beside the id, and **adopts an area
+  by alias**: a room whose id changes (`salon` → `living_room`) keeps its
+  Home Assistant area and its things, nothing is duplicated
+- **`include:`** — an engine feature: `rooms: rooms/*.yml` (one file per
+  room, merged into the area of the same id or appended), `modes: modes.yml`,
+  `fx: fx.yml`, `scenarios: scenarios/*.yml` (one story per file), relative
+  to home.yml; each file validated on its own first so a fault names the
+  file; a literal path must exist, a glob may match nothing
+- **pack `signals`** — `sensor.house_period` (the last period boundary
+  passed today, from **four times the family edits in the UI**:
+  `input_datetime.house_period_<period>`, re-read every minute),
+  `sensor.daylight` (`dark · dim · bright` from the sun's elevation, the
+  thresholds in modes.yml), `binary_sensor.night`, `house_occupied` (off in
+  a mode that says `away: true`), `house_quiet` (a mode that says `quiet:
+  true`), `<room>_occupied` wherever a room has a motion thing — a signal
+  that cannot be measured is absent, never "off"
+- **pack `modes`** — `input_select.house_mode` from modes.yml, one automation
+  per transition (the mode → every room → its scene: the mode's `scene`,
+  `default`, `off`, the room's own line, or `else`), the **clock rules** (a
+  period's beginning moves the mode, only from the modes named), the
+  **defaults that follow** (a lit room takes its new default when the period
+  or the daylight changes, in a mode whose scene is `default`); the house
+  card on the phone: the mode, the period, the daylight, the four times
+- **pack `scenes`** — `script.<room>_<scene>` per scene by role once a role
+  it names is filled (`brightness`, `ct: warm|neutral|cool|<kelvin>`,
+  `color: #rrggbb`, `transition`; a light role aims at its group
+  `light.<room>_<role>`, a switch role at its things), `off` implicit (every
+  filled role that answers turn_off — lights, switches, media players),
+  `script.<room>_default` + `sensor.<room>_default` = the scene "on" means
+  now, per period × daylight (`defaults:` in the room file)
+- **pack `fx`** — `shapes/` are the bricks (`flash · fade · pulse · blackout ·
+  strike`, composed with `use:`; a step says `$field` to read the script's
+  field at run time), `backends/` the compilers with their **envelope**
+  (`ha` compiles: the generic light-service loop, its 0.2 s step a floor to
+  measure; `zigbee`, `wled`, `yeelight`, `matter` carry their numbers, read
+  at the source, and no compiler yet); `script.fx_<shape>` with `target` +
+  the shape's fields — snapshot (`scene.create`), the steps, the snapshot
+  back (`scene.turn_on` + `scene.delete`); every hold under the backend's
+  step is stretched **and said** in `check`, a runtime hold clamped
+- **pack `notify`** — the mouth: `script.tell` (message, title, severity —
+  a persistent notification always, the phones unless `house_quiet` is on or
+  the severity is alarm); `notify.household` and `notify.<person>` from the
+  people's **`phone:`** (the companion app's slug)
+- **pack `scenarios`** — a story file (`steps:` of `mode` · `scene:
+  room/scene` · `fx` · `wait` · `tell`) → `script.scenario_<id>`
+- pack `lighting`: **one light group per role** (`light.<room>_<role>`) and
+  per layout row (`light.<room>_<role>_<prefix>` once two of its places are
+  filled), beside the room's
+- the conductor: **the knobs** — the periods' times and the first mode are
+  seeded ONCE from the files (a helper still `unknown`), and the UI's value
+  is read, compared and kept after (`knob house_period_morning: 07:00 — set
+  from the UI (the file says 06:30), kept`); the engine renders no
+  `initial:` on a helper, which would reset it at every restart
+- `check` reports the vocabulary: the modes, the periods, the clock, each
+  room's roles (filled / waiting), its scenes and the scripts they render,
+  the fx backend and every stretch, the stories, the files included — and
+  `hints:` beside `warnings:` (`--strict` fails on warnings only)
+- the witness house grows: room files, modes.yml, fx.yml, a story, roles on
+  its things, a 12-place ceiling; rendered, then `check_config` in Home
+  Assistant 2026.8.3 clean
+- read at the source while building: a script field's selector is written
+  bare (`text:`), `text: {}` is refused; YAML 1.1 reads a bare `off` as
+  false — the schema takes both; `input_datetime`'s `initial` overrides the
+  restored value at every start
+- the walk, `backup` / `restore` / `doctor` move to 0.5
+
 ## 0.3.5 (2026-08-30)
 
 - a test's expectation corrected (a second row of a single-entry domain is

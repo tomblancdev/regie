@@ -17,5 +17,9 @@ Those are the fleet's own roles, beside these.
     - role: tomblancdev.regie.brain
       vars:
         regie_home_yml: "{{ playbook_dir }}/home/home.yml"
+        regie_house_files:                      # what home.yml include:s — one file holds one thing
+          - { src: "{{ playbook_dir }}/home/rooms/", dest: rooms/ }
+          - { src: "{{ playbook_dir }}/home/modes.yml", dest: modes.yml }
+          - { src: "{{ playbook_dir }}/home/fx.yml", dest: fx.yml }
         regie_secrets: "{{ my_store.brain }}"   # values — the store is yours
 ```

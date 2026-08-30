@@ -77,6 +77,7 @@ class FakeHA(HomeAssistant):
             "schedule": {"recurrence": "never", "time": None, "days": []},
         }
         self.n = 0
+        self.states: dict[str, str] = {}  # the helpers' states (the knobs): unknown until set
         self.log: list[str] = []
         default = {"server_port": 8123, "use_x_forwarded_for": False, "trusted_proxies": []}
         self.http = {
@@ -270,6 +271,11 @@ class FakeHA(HomeAssistant):
             return 401, {"message": "Unauthorized"}
         if path == "/api/":
             return 200, {"message": "API running."}
+        if path.startswith("/api/states/"):
+            entity = path.rsplit("/", 1)[1]
+            if entity.split(".")[0] not in ("input_datetime", "input_select"):
+                return 404, {"message": "Entity not found."}
+            return 200, {"entity_id": entity, "state": self.states.get(entity, "unknown")}
         if path.startswith("/api/config/config_entries/entry?domain="):
             return 200, [
                 {k: v for k, v in e.items() if k != "_data"}
@@ -311,6 +317,9 @@ class FakeHA(HomeAssistant):
                 return 403, {"message": "already done"}
             self.onboarded[step] = True
             return 200, {} if step != "integration" else {"auth_code": "x"}
+        if path.startswith("/api/services/"):
+            self.states[body["entity_id"]] = body.get("time") or body.get("option")
+            return 200, []
         if path == FLOWS:
             self.n += 1
             fid = f"flow{self.n}"
@@ -562,10 +571,71 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert ok == 1
     assert summary(steps, False) == f"apply: {len(steps) - hand - ok} changed, 1 ok, {hand} by hand"
 
+    # the knobs: the files seed the helpers once
+    assert st["knob house_period_morning"] == "changed" and st["knob house_mode"] == "changed"
+    assert ha.states["input_datetime.house_period_evening"] == "18:00:00"
+    assert ha.states["input_select.house_mode"] == "home"
+
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert set(states(again).values()) == {"ok", "hand"}, states(again)
     assert states(again)["entry kitchen_printer"] == "ok"
     assert len(ha.entries["ipp"]) == 1 and len(ha.entries["cast"]) == 1  # keyed on the domain
+
+
+def test_a_knob_the_family_moved_is_read_and_kept(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.states["input_datetime.house_period_morning"] = "07:00:00"  # edited in the UI
+    ha.states["input_select.house_mode"] = "cinema"
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    morning = next(s for s in steps if s.name == "knob house_period_morning")
+    assert morning.state == "ok" and morning.detail == (
+        "07:00 — set from the UI (the file says 06:30), kept"
+    )
+    assert ha.states["input_datetime.house_period_morning"] == "07:00:00"
+    assert ha.states["input_select.house_mode"] == "cinema"
+    assert next(s for s in steps if s.name == "knob house_period_day").detail == "09:00"
+
+
+def test_a_room_renamed_is_adopted_by_its_old_id_now_an_alias(
+    witness, secrets, tmp_path, house_with
+):
+    """`salon` becomes `living_room` (the ids clean up): the live area keeps its
+    Home Assistant id and its things; its aliases move, nothing is duplicated."""
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    before = next(a for a in ha.areas if a["aliases"][0] == "living")
+
+    def rename(d):
+        living = next(a for a in d["areas"] if a["id"] == "living")
+        living["id"] = "living_room"
+        living["aliases"] = ["living", "salon"]
+        for t in d["things"]:
+            if t["area"] == "living":
+                t["area"] = "living_room"
+            t["bind"] = ["living_room" if b == "living" else b for b in t.get("bind", [])]
+
+    path = house_with(rename)
+    room = path.parent / "rooms" / "living.yml"
+    room.write_text(
+        room.read_text()
+        .replace("id: living\n", "id: living_room\n")
+        .replace("aliases: [salon", "aliases: [living, salon")
+    )
+    story = path.parent / "scenarios" / "wakeup.yml"
+    story.write_text(
+        story.read_text()
+        .replace("living/", "living_room/")
+        .replace("light.living_", "light.living_room_")
+    )
+    house = load_house(path)
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["area living_room"] == "changed"
+    after = next(a for a in ha.areas if a["area_id"] == before["area_id"])
+    assert after["aliases"] == ["living_room", "living", "salon", "le salon"]
+    assert len([a for a in ha.areas if a["name"] == "Salon"]) == 1
+    assert "area (salon)" not in st
 
 
 def test_the_token_lost_on_disk_is_minted_again_by_password(witness, secrets, tmp_path):
@@ -633,7 +703,7 @@ def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, t
     st = states(steps)
     assert st["area living"] == "changed"
     living = next(a for a in ha.areas if a["area_id"] == "salon")
-    assert living["aliases"] == ["living"] and living["name"] == "Salon"
+    assert living["aliases"] == ["living", "salon", "le salon"] and living["name"] == "Salon"
     assert living["floor_id"] == ha.floors[0]["floor_id"]
     assert [a for a in ha.areas if a["name"] == "Salon"] == [living]  # adopted, not duplicated
     assert st["area kitchen"] == "changed"  # Cuisine adopted by the witness's kitchen too

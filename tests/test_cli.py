@@ -10,9 +10,12 @@ def test_check_reports_and_passes(witness_path, capsys):
     )
     out = capsys.readouterr().out
     assert "maison_temoin — Maison témoin (fr, Europe/Paris)" in out
-    assert "profile ct · packs lighting, chalet (house)" in out
     assert (
-        "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 16 paired, 5 room groups" in out
+        "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, chalet (house)"
+        in out
+    )
+    assert (
+        "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 18 paired, 5 room groups" in out
     )
     assert "secrets: 9 needed, all present" in out
     assert "not paired yet" in out and out.rstrip().endswith("ok")
@@ -44,15 +47,15 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "21 written, 0 unchanged, 0 kept, 0 removed" in out
+    assert "30 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
     assert main(["doctor", str(witness_path)]) == 2
-    assert "lands in 0.4 — the walk" in capsys.readouterr().err
+    assert "lands in 0.5 — the walk" in capsys.readouterr().err
     assert main(["pair", "--room", "living"]) == 2
-    assert "lands in 0.4 — the walk" in capsys.readouterr().err
+    assert "lands in 0.5 — the walk" in capsys.readouterr().err
 
 
 def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):

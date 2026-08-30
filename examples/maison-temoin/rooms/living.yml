@@ -1,0 +1,23 @@
+# rooms/living.yml — one file holds one thing: the living room. Its roles
+# (what the things are FOR here), its looks by role (no entity id anywhere),
+# what "on" means per period and daylight. The walk fills the roles.
+id: living
+label: Salon
+aliases: [salon, "le salon"]
+roles:
+  main:      { label: Plafond, layout: [front_left, front_center, front_right, back_left, back_center, back_right] }
+  lamp:      { label: Lampadaire }
+  strip:     { label: Ruban }          # nothing fills it yet: what names it renders nothing
+  screen:    {}
+  speaker:   {}
+  satellite: {}
+scenes:
+  day:     { main: on, lamp: off }
+  evening: { main: { brightness: 60, ct: warm }, lamp: on }
+  cinema:  { main: off, lamp: { brightness: 10, ct: warm }, strip: { color: "#200000" } }
+  night:   { main: off, lamp: off }
+defaults:                               # per period; a scene, or one per daylight
+  morning: { dark: evening, dim: day, bright: day }
+  day:     day
+  evening: { dark: evening, dim: day, bright: day }
+  night:   night

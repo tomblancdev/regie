@@ -1,0 +1,7 @@
+# fade — to a level, over a time; the bulb ramps by itself where it can.
+summary: to a level over a time
+icon: mdi:transition
+tags: { kind: light, mood: soft }
+fields: { to: 0, over: 2, colour: null }
+steps:
+  - { level: $to, colour: $colour, transition: $over, hold: $over }

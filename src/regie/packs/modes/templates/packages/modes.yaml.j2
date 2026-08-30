@@ -1,0 +1,68 @@
+{% if modes %}
+# rendered by La Régie — the modes (pack modes): the house's state machine.
+# The selector's first value is seeded once by the conductor (modes.yml
+# `initial`); the UI's choice is kept across restarts and converges.
+input_select:
+  house_mode:
+    name: {{ labels.ui.mode | to_yaml }}
+    icon: mdi:home-switch
+    options:
+{% for m in modes.modes %}
+      - {{ m.id }}
+{% endfor %}
+
+{% set ns = namespace(automations=[]) %}
+{% for m in modes.modes %}
+{% set actions = [] %}
+{% for a in areas %}
+{% set s = mode_scene(m, a) %}
+{% if s %}{% set _ = actions.append({'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ a.id ~ '_' ~ s}}) %}{% endif %}
+{% endfor %}
+{% if actions %}
+{% set _ = ns.automations.append({
+  'id': 'regie_mode_' ~ m.id,
+  'alias': labels.ui.mode ~ ' → ' ~ m.label,
+  'description': 'the house enters ' ~ m.id ~ ': every room takes its scene (La Régie, pack modes — modes.yml, not the UI)',
+  'mode': 'restart',
+  'triggers': [{'trigger': 'state', 'entity_id': 'input_select.house_mode', 'to': m.id}],
+  'actions': actions,
+}) %}
+{% endif %}
+{% endfor %}
+{% for rule in modes.clock %}
+{% set auto = {
+  'id': 'regie_clock_' ~ rule.period,
+  'alias': labels.ui.period ~ ' ' ~ rule.period ~ ' → ' ~ rule.to,
+  'description': 'the clock moves the house to ' ~ rule.to ~ ' when ' ~ rule.period ~ ' begins' ~ (' — only from ' ~ (rule['from'] | join(', ')) if rule['from'] else '') ~ ' (La Régie, pack modes)',
+  'mode': 'single',
+  'triggers': [{'trigger': 'state', 'entity_id': 'sensor.house_period', 'to': rule.period}],
+} %}
+{% if rule['from'] %}{% set _ = auto.update({'conditions': [{'condition': 'state', 'entity_id': 'input_select.house_mode', 'state': rule['from']}]}) %}{% endif %}
+{% set _ = auto.update({'actions': [{'action': 'input_select.select_option', 'target': {'entity_id': 'input_select.house_mode'}, 'data': {'option': rule.to}}]}) %}
+{% set _ = ns.automations.append(auto) %}
+{% endfor %}
+{% set following = modes.modes | selectattr('scene', 'equalto', 'default') | map(attribute='id') | list %}
+{% set lit_rooms = [] %}
+{% for a in areas if modes.follow and following and rendered_scenes(a) %}{% set _ = lit_rooms.append(a) %}{% endfor %}
+{% if lit_rooms %}
+{% set steps = [] %}
+{% for a in lit_rooms %}
+{% set _ = steps.append({'if': [{'condition': 'state', 'entity_id': 'light.' ~ a.id ~ '_lights', 'state': 'on'}], 'then': [{'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ a.id ~ '_default'}}]}) %}
+{% endfor %}
+{% set _ = ns.automations.append({
+  'id': 'regie_defaults_follow',
+  'alias': labels.ui.default ~ ' — ' ~ labels.ui.period ~ ' · ' ~ labels.ui.daylight,
+  'description': 'when the period or the daylight changes, a lit room takes its new default (La Régie, pack modes — modes.yml follow)',
+  'mode': 'queued',
+  'triggers': [{'trigger': 'state', 'entity_id': ['sensor.house_period', 'sensor.daylight']}],
+  'conditions': [{'condition': 'state', 'entity_id': 'input_select.house_mode', 'state': following}],
+  'actions': steps,
+}) %}
+{% endif %}
+automation:
+{% if ns.automations %}
+{{ ns.automations | to_block(2) }}
+{% else %}
+  []   # no room has a filled role yet: the transitions have nothing to do (the walk)
+{% endif %}
+{% endif %}

@@ -1,0 +1,13 @@
+# Pack `scenarios` — a story: steps, waits, effects, scenes, words
+# (scenarios/<name>.yml) → one script scenario_<id>. v1 runs a story inside
+# the brain with the packs' own verbs (mode · scene · fx · wait · tell); the
+# branches, the triggers and the game view for a kiosk come with the first
+# game. The AI game master later runs the same stories from outside — one
+# vocabulary, never two mechanisms.
+name: scenarios
+summary: script.scenario_<id> per story file — mode · scene · fx · wait · tell
+kinds: []
+services: []
+templates:
+  - { src: packages/scenarios.yaml.j2, dst: home-assistant/packages/scenarios.yaml }
+cards: []

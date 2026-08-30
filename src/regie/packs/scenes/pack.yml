@@ -1,0 +1,14 @@
+# Pack `scenes` — a room's looks BY ROLE (rooms/<room>.yml), each rendered as
+# a script <room>_<scene> the day a role it names is filled; `off` implicit;
+# <room>_default = the scene "on" means now (sensor.<room>_default from the
+# room's defaults per period × daylight). No entity id anywhere: a scene
+# aims at the room's role groups (pack lighting) and survives a bulb's
+# replacement. The mesh store (Zigbee scenes recalled with the brain off)
+# lands with the walk.
+name: scenes
+summary: a script per scene by role, <room>_default and its sensor — from rooms/*.yml
+kinds: []
+services: []
+templates:
+  - { src: packages/scenes.yaml.j2, dst: "home-assistant/packages/scenes_{{ area.id }}.yaml", each: areas }
+cards: []

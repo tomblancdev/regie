@@ -1,0 +1,14 @@
+# Pack `modes` — the house's state, one at a time: input_select.house_mode
+# from modes.yml, one automation per transition (the mode → every room → its
+# scene, by role), the clock rules (a period's beginning moves the mode, only
+# from the modes named), and the defaults following the period and the
+# daylight in the rooms that are lit. The house card on the phone: the mode,
+# the period, the daylight, the four times.
+name: modes
+summary: input_select.house_mode, a transition automation per mode, the clock rules, the defaults that follow; the house card
+kinds: []
+services: []
+templates:
+  - { src: packages/modes.yaml.j2, dst: home-assistant/packages/modes.yaml }
+cards:
+  - { src: cards/house.yaml.j2 }

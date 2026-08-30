@@ -16,7 +16,8 @@ from jinja2 import Environment, FileSystemLoader, PrefixLoader, StrictUndefined
 
 from . import __version__
 from .errors import HouseError
-from .house import House
+from .fx import compile_all
+from .house import DAYLIGHT, House
 from .secrets import mosquitto_hash
 
 BASE = Path(__file__).parent / "base"
@@ -29,6 +30,18 @@ def to_yaml(value) -> str:
     if text.endswith("...\n"):
         text = text[:-4]
     return text.strip()
+
+
+def to_block(value, indent: int = 0) -> str:
+    """A structure the engine built (a script, an automation), as block YAML,
+    keys in the order they were given, indented under the template's key."""
+    text = yaml.safe_dump(
+        value, default_flow_style=False, allow_unicode=True, sort_keys=False, width=10**6
+    )
+    pad = " " * indent
+    return "".join(pad + line if line.strip() else line for line in text.splitlines(True)).rstrip(
+        "\n"
+    )
 
 
 @dataclass
@@ -70,11 +83,15 @@ def make_env(house: House) -> Environment:
         autoescape=False,
     )
     env.filters["to_yaml"] = to_yaml
+    env.filters["to_block"] = to_block
     env.filters["mosquitto_hash"] = mosquitto_hash
     return env
 
 
 def context(house: House, secrets: dict) -> dict:
+    fx_scripts = {}
+    if house.has_pack("fx"):
+        fx_scripts, _notes, _backend = compile_all(house.fx(), house.data["house"]["label"])
     return {
         "house": house,
         "data": house.data,
@@ -92,6 +109,21 @@ def context(house: House, secrets: dict) -> dict:
         "areas": house.areas,
         "things": house.things,
         "people": house.people,
+        # the vocabulary, resolved by role (house.py)
+        "modes": house.modes(),
+        "fx": house.fx(),
+        "fx_scripts": fx_scripts,
+        "scenarios": house.scenarios,
+        "daylight": DAYLIGHT,
+        "declared_roles": house.declared_roles,
+        "roles_in": house.roles_in,
+        "role_target": house.role_target,
+        "layout_groups": house.layout_groups,
+        "scene_plan": house.scene_plan,
+        "rendered_scenes": house.rendered_scenes,
+        "defaults_of": house.defaults_of,
+        "mode_scene": house.mode_scene,
+        "area_aliases": house.area_aliases,
     }
 
 
@@ -112,6 +144,7 @@ def item_context(house: House, key: str | None, item: dict | None, index: int) -
     if key == "area" and item is not None:
         ctx["area_things"] = house.things_in(item["id"])
         ctx["kinds"] = house.kinds_in(item["id"])
+        ctx["roles"] = house.roles_in(item["id"])
     return ctx
 
 

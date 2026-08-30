@@ -34,3 +34,17 @@ ui:
   all_off: All off
   silent: went silent
   floor: Floor
+  # the vocabulary (0.4): the signals, the modes, the mouth
+  house: House
+  mode: Mode
+  period: Period
+  period_begins: Begins
+  daylight: Daylight
+  default: default
+  night: Night
+  occupied: occupied
+  quiet: quiet
+  scene: scene
+  tell: tell
+  story: story
+  effects: effects

@@ -1,0 +1,7 @@
+# yeelight — start_cf: a custom step list (≥ 50 ms per step) uploaded to and
+# run by the bulb; one message to fire.
+name: yeelight
+summary: a bulb that runs a flow — 50 ms steps, uploaded once
+envelope: { step: 0.05, colour_in_motion: true, program: [start_cf] }
+measured: false
+compiler: none

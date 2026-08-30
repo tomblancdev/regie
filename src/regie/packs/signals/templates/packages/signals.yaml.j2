@@ -1,0 +1,82 @@
+{% if modes %}
+{% set period_ids = modes.periods | map(attribute='id') | list %}
+{% set night_id = 'night' if 'night' in period_ids else period_ids[-1] %}
+{% set quiet_modes = modes.modes | selectattr('quiet') | map(attribute='id') | list %}
+{% set away_modes = modes.modes | selectattr('away') | map(attribute='id') | list %}
+# rendered by La Régie — the signals (pack signals): what every client reasons on.
+# The periods' times are helpers the family edits in the UI; modes.yml only
+# seeds them once (the conductor, when a helper still reads unknown).
+input_datetime:
+{% for p in modes.periods %}
+  house_period_{{ p.id }}:
+    name: {{ (labels.ui.period_begins ~ ' — ' ~ p.label) | to_yaml }}
+    has_date: false
+    has_time: true
+    icon: mdi:clock-outline
+{% endfor %}
+
+template:
+  # the period: the last boundary passed today, in the day's order; before the
+  # first, the last one holds (night wraps past midnight). Re-read every minute
+  # and whenever a time is edited.
+  - triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: homeassistant
+        event: start
+{% for p in modes.periods %}
+      - trigger: state
+        entity_id: input_datetime.house_period_{{ p.id }}
+{% endfor %}
+    sensor:
+      - name: house_period
+        unique_id: regie_house_period
+        icon: mdi:clock-time-four-outline
+        state: >-
+          {{ '{%' }} set t = now().strftime('%H:%M') {{ '%}' }}
+          {{ '{%' }} set ns = namespace(p='{{ night_id }}') {{ '%}' }}
+          {{ '{%' }} for p in [{% for p in modes.periods %}'{{ p.id }}'{{ ', ' if not loop.last }}{% endfor %}] {{ '%}' }}
+          {{ '{%' }} set b = states('input_datetime.house_period_' ~ p) {{ '%}' }}
+          {{ '{%' }} if b not in ['unknown', 'unavailable'] and t >= b[0:5] {{ '%}' }}{{ '{%' }} set ns.p = p {{ '%}' }}{{ '{%' }} endif {{ '%}' }}
+          {{ '{%' }} endfor {{ '%}' }}
+          {{ '{{' }} ns.p {{ '}}' }}
+  # the daylight: the sun's elevation, three words (the thresholds are modes.yml's)
+  - sensor:
+      - name: daylight
+        unique_id: regie_daylight
+        icon: mdi:weather-sunny
+        state: >-
+          {{ '{%' }} set e = state_attr('sun.sun', 'elevation') | float(0) {{ '%}' }}
+          {{ '{{' }} 'dark' if e < {{ modes.daylight.dark_below }} else ('bright' if e > {{ modes.daylight.bright_above }} else 'dim') {{ '}}' }}
+    binary_sensor:
+      - name: night
+        unique_id: regie_night
+        icon: mdi:weather-night
+        state: "{{ '{{' }} is_state('sensor.house_period', '{{ night_id }}') {{ '}}' }}"
+      - name: house_occupied
+        unique_id: regie_house_occupied
+        device_class: occupancy
+{% if away_modes %}
+        state: "{{ '{{' }} states('input_select.house_mode') not in {{ away_modes | to_yaml }} {{ '}}' }}"
+{% else %}
+        state: "true"
+{% endif %}
+      - name: house_quiet
+        unique_id: regie_house_quiet
+        icon: mdi:volume-off
+{% if quiet_modes %}
+        state: "{{ '{{' }} states('input_select.house_mode') in {{ quiet_modes | to_yaml }} {{ '}}' }}"
+{% else %}
+        state: "false"
+{% endif %}
+{% for a in areas %}
+{% set motions = [] %}
+{% for t in things if t.area == a.id and t.kind == 'motion' and entity(t) %}{% set _ = motions.append(entity(t)) %}{% endfor %}
+{% if motions %}
+      - name: {{ a.id }}_occupied
+        unique_id: regie_{{ a.id }}_occupied
+        device_class: occupancy
+        state: "{{ '{{' }} {% for m in motions %}is_state('{{ m }}', 'on'){{ ' or ' if not loop.last }}{% endfor %} {{ '}}' }}"
+{% endif %}
+{% endfor %}
+{% endif %}

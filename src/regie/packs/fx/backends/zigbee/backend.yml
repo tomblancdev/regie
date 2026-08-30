@@ -1,0 +1,18 @@
+# zigbee — the mesh: a step is a message (~20-60 ms end to end), ZCL
+# transitions count in tenths → ~100 ms the finest reliable step on a bulb;
+# a GROUP command is a broadcast and the stack allows about 8 per 9 s
+# (Zigbee Pro's broadcast transaction table) — looks and single flashes go to
+# the group, sequences go unicast (unbudgeted, tens of ms apart); an IKEA
+# bulb FREEZES for a colour/colour-temperature transition (Zigbee2MQTT
+# unfreezes) — colour with transition 0, only brightness moves. Read at the
+# source (Zigbee2MQTT's IKEA library, the LED1924G9 page); NOT YET MEASURED:
+# the bench at the house's own coordinator writes these numbers.
+name: zigbee
+summary: the mesh — ~100 ms steps, ~8 group broadcasts per 9 s, colour set with no transition
+envelope:
+  step: 0.1
+  group_budget: { messages: 8, window: 9 }
+  colour_in_motion: false
+  program: [blink, breathe, brightness_move, brightness_step, identify, scene_recall]
+measured: false
+compiler: none         # lands with the walk's bench (0.5)

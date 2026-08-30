@@ -12,9 +12,16 @@ house:
   url: https://home.example.com
   country: FR
 profile: ct
-packs: [lighting, chalet]
+packs: [modes, signals, scenes, fx, notify, scenarios, lighting, chalet]
 paths:
   house_packs: packs
+# one file holds one thing (0.4): the rooms' looks, the modes, the effects and
+# the stories live beside this file and are merged in before validation
+include:
+  rooms: rooms/*.yml
+  modes: modes.yml
+  fx: fx.yml
+  scenarios: scenarios/*.yml
 # the brain's own owner: the break-glass login, created by `regie apply` at
 # the first boot (its password is the secret owner_password)
 owner: { username: gardien, label: Gardien }
@@ -45,24 +52,28 @@ areas:
   - { id: bedroom_a, label: Chambre A, floor: upstairs }
   - { id: bedroom_b, label: Chambre B, floor: upstairs }
 people:
-  - { id: alice, label: Alice, admin: true }
+  - { id: alice, label: Alice, admin: true, phone: alice_pixel }   # the companion app's slug: notify.alice, notify.household
   - { id: bob, label: Bob }
 things:
   # the radio itself is a thing: it has an address, a reservation, a check
   - { id: coordinator_main, area: living, kind: coordinator, via: lan, vendor: SMLIGHT, model: SLZB-MR1U, host: 192.0.2.10, mac: "00:00:5e:00:53:10" }
   # the living room — Zigbee lights, a remote bound to the room, the screen things
-  - { id: living_ceiling, area: living, kind: light, via: zigbee, vendor: IKEA, model: LED1836G9, ieee: "0x000d6ffffe000001", options: { dim: true } }
-  - { id: living_lamp, area: living, kind: light, via: zigbee, label: Lampadaire, ieee: "0x000d6ffffe000002" }
+  # `role` (0.4) = what a thing is FOR in its room — the key scenes and effects
+  # are written on; `at` = its place in the role's layout (rooms/living.yml)
+  - { id: living_ceiling, area: living, kind: light, via: zigbee, vendor: IKEA, model: LED1836G9, ieee: "0x000d6ffffe000001", role: main, at: front_left, options: { dim: true } }
+  - { id: living_ceiling_2, area: living, kind: light, via: zigbee, vendor: IKEA, model: LED1836G9, ieee: "0x000d6ffffe000005", role: main, at: front_right }
+  - { id: living_ceiling_3, area: living, kind: light, via: zigbee, vendor: IKEA, model: LED1836G9, ieee: "0x000d6ffffe000006", role: main, at: back_center }
+  - { id: living_lamp, area: living, kind: light, via: zigbee, label: Lampadaire, ieee: "0x000d6ffffe000002", role: lamp }
   - { id: living_remote, area: living, kind: remote, via: zigbee, vendor: IKEA, model: E2001, ieee: "0x000d6ffffe000003", bind: [living] }
   - { id: living_thermostat, area: living, kind: thermostat, via: zigbee, ieee: "0x000d6ffffe000004" }
-  - { id: living_tv, area: living, kind: tv, via: wifi, integration: [androidtv_remote, cast], host: 192.0.2.20, mac: "00:00:5e:00:53:20" }
+  - { id: living_tv, area: living, kind: tv, via: wifi, integration: [androidtv_remote, cast], host: 192.0.2.20, mac: "00:00:5e:00:53:20", role: screen }
   - { id: living_cast, area: living, kind: cast, via: wifi, integration: cast, mac: "00:00:5e:00:53:21" }
-  - { id: living_speaker, area: living, kind: speaker, via: wifi, integration: sonos, mac: "00:00:5e:00:53:22" }
-  - { id: living_satellite, area: living, kind: satellite, via: wifi, integration: wyoming, host: 192.0.2.23 }
+  - { id: living_speaker, area: living, kind: speaker, via: wifi, integration: sonos, mac: "00:00:5e:00:53:22", role: speaker }
+  - { id: living_satellite, area: living, kind: satellite, via: wifi, integration: wyoming, host: 192.0.2.23, role: satellite }
   # the hall — a motion light at night, the door, the lock, a camera
-  - { id: hall_ceiling, area: hall, kind: light, via: zigbee, ieee: "0x000d6ffffe000010" }
-  - { id: hall_motion, area: hall, kind: motion, via: zigbee, ieee: "0x000d6ffffe000011", options: { lights: [hall_ceiling], off_after: "00:03:00", only_at_night: true } }
-  - { id: hall_door, area: hall, kind: door, via: zigbee, ieee: "0x000d6ffffe000012" }
+  - { id: hall_ceiling, area: hall, kind: light, via: zigbee, ieee: "0x000d6ffffe000010", role: main }
+  - { id: hall_motion, area: hall, kind: motion, via: zigbee, ieee: "0x000d6ffffe000011", role: motion, options: { lights: [hall_ceiling], off_after: "00:03:00", only_at_night: true } }
+  - { id: hall_door, area: hall, kind: door, via: zigbee, ieee: "0x000d6ffffe000012", role: door }
   - { id: hall_lock, area: hall, kind: lock, via: zigbee, ieee: "0x000d6ffffe000013" }
   - { id: hall_camera, area: hall, kind: camera, via: wifi, integration: generic, host: 192.0.2.30 }
   # the kitchen — a Wi-Fi plug, a sensor, a valve, the printer, a thing that PUSHES over MQTT
@@ -74,10 +85,11 @@ things:
   - { id: kitchen_hood, area: kitchen, kind: switch, via: zigbee, label: Hotte, ieee: "0x000d6ffffe000023" }
   - { id: kitchen_energy, area: kitchen, kind: sensor, via: mqtt, label: Compteur }
   # upstairs — a wall switch bound straight to its bulb, a cover, a Bluetooth proxy
-  - { id: bedroom_a_ceiling, area: bedroom_a, kind: light, via: zigbee, ieee: "0x000d6ffffe000030" }
+  - { id: bedroom_a_ceiling, area: bedroom_a, kind: light, via: zigbee, ieee: "0x000d6ffffe000030", role: main }
   - { id: bedroom_a_cover, area: bedroom_a, kind: cover, via: zigbee, ieee: "0x000d6ffffe000031" }
   - { id: bedroom_a_wall, area: bedroom_a, kind: remote, via: zigbee, ieee: "0x000d6ffffe000032", bind: [bedroom_a_ceiling] }
   - { id: bedroom_b_ceiling, area: bedroom_b, kind: light, via: zigbee, ieee: "0x000d6ffffe000040" }
   - { id: bedroom_b_proxy, area: bedroom_b, kind: proxy, via: esphome, host: 192.0.2.40 }
   # a thing the walk has not reached yet: no address, so it renders nowhere and check says so
+  # (and no role yet: bedroom B's scenes wait — a hint, never an error)
   - { id: bedroom_b_lamp, area: bedroom_b, kind: light, via: zigbee }

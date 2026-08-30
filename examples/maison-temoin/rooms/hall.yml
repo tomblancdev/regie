@@ -1,0 +1,5 @@
+id: hall
+roles: { main: {}, motion: {}, door: {} }
+scenes:
+  dim: { main: { brightness: 20, ct: warm } }
+defaults: { morning: dim, day: dim, evening: dim, night: dim }

@@ -1,0 +1,7 @@
+# a room whose scenes wait for the walk: its lamp has no role yet, so the
+# scene renders no script and check says so (a hint); its default sensor exists
+id: bedroom_b
+roles: { lamp: {} }
+scenes:
+  soft: { lamp: { brightness: 30, ct: warm } }
+defaults: { morning: soft, day: soft, evening: soft, night: soft }

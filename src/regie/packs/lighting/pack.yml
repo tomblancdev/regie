@@ -2,7 +2,7 @@
 # lights, and the room cards on the phone. It brings no service (the base
 # already has Zigbee2MQTT); it instantiates from the things.
 name: lighting
-summary: room light groups, motion lights, "thing went silent", the phone's room cards
+summary: room light groups (+ one per role and per layout row since 0.4), motion lights, "thing went silent", the phone's room cards
 kinds: [light, plug, switch, remote, motion]
 services: []
 schema: schema.json

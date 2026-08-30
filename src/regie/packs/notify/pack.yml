@@ -1,0 +1,13 @@
+# Pack `notify` — the mouth: script.tell (message, title, severity) that every
+# client speaks through — a persistent notification always, the household's
+# phones when the house is not quiet (or the severity is alarm). The targets
+# come from the people: a person with a `phone:` (the companion app's slug)
+# is notify.<person>, and all of them notify.household. notify.wall (the
+# screens) lands with the kiosk.
+name: notify
+summary: script.tell — the mouth with a severity, quiet-aware; notify.household and notify.<person> from the people's phones
+kinds: []
+services: []
+templates:
+  - { src: packages/notify.yaml.j2, dst: home-assistant/packages/notify.yaml }
+cards: []

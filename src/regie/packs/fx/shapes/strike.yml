@@ -1,0 +1,12 @@
+# strike — a lightning strike: three flashes of unequal weight and a fading
+# tail. Composed of bricks; it knows nothing of the protocol that will run it.
+summary: three flashes and a fading tail — a lightning strike
+icon: mdi:weather-lightning
+tags: { kind: light, mood: storm }
+needs: { step: 0.08 }
+fields: { colour: null }
+steps:
+  - { use: flash, hold: 0.12, colour: $colour }
+  - { use: flash, level: 30, hold: 0.08, colour: $colour }
+  - { use: flash, hold: 0.12, colour: $colour }
+  - { use: fade, to: 0, over: 1 }

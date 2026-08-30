@@ -1,0 +1,6 @@
+# wled — a JSON API at ~20 ms, presets and a stream: a program on the device.
+name: wled
+summary: a strip that runs a program — 20 ms, presets, a stream
+envelope: { step: 0.02, colour_in_motion: true, program: [preset, stream] }
+measured: false
+compiler: none

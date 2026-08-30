@@ -34,16 +34,17 @@ prints in the family's words in any house.
 
 | Verb | Does | Since |
 |---|---|---|
-| `regie check home.yml` | validates the schema (the packs' fragments merged), cross-checks every reference, prints the plan: the radios, the broker's users, the secrets it needs, what is not paired yet | 0.1 |
+| `regie check home.yml` | validates the schema (the packs' fragments merged, the included files first so a fault names the file), cross-checks every reference, prints the plan: the radios, the broker's users, the secrets it needs, what is not paired yet — and since 0.4 the vocabulary: the modes and periods, each room's roles (filled / waiting), its scenes and the scripts they render, the effects' backend and every stretch, the stories; `hints:` beside `warnings:` | 0.1 · 0.4 |
 | `regie render home.yml --out DIR` | writes the units (the profile's) and the config tree (the base's and the packs'): Home Assistant's `configuration.yaml`, packages and dashboard, Mosquitto's conf/ACL/passwd, one Zigbee2MQTT instance per radio with its devices and room groups. Marks what it writes, prunes what the house no longer names, never touches what it did not write; files that hold a secret are `0600` | 0.1 |
+| **the vocabulary** (0.4) | five words, one pack each, written **by role** before a single bulb exists and filled by the walk: **signals** (`house_period` from four times edited in the UI, `daylight` from the sun, `night`, `house_occupied`, `house_quiet`, `<room>_occupied`), **modes** (`input_select.house_mode`, a transition per mode, the clock rules, the defaults that follow), **scenes** (`script.<room>_<scene>` by role, `<room>_default` = what "on" means now per period × daylight), **fx** (`script.fx_<shape>`: shapes are bricks, backends compile them at the protocol's resolution and say what they stretch), **notify** (`script.tell`, the mouth), **scenarios** (a story file → a script). `include:` brings the small files in — `rooms/*.yml`, `modes.yml`, `fx.yml`, `scenarios/*.yml` | 0.4 |
 | `regie mint home.yml` | writes every secret the house needs and does not have yet (a Zigbee network key, the broker's passwords…) — into *your* store, whatever it is | 0.1 |
 | `regie init DIR` | a starter house and its secrets, in an empty directory | 0.1 |
 | `regie up home.yml` | the rendered brain running on this host (the profile's runtime): units placed, images pulled when absent, a service restarted when its unit or its files changed, the pinned custom components fetched and verified by digest; `--check` prints the plan | 0.2 |
-| `regie apply home.yml` | **the conductor**: what only the API can set — the first boot (the owner, analytics off), the long-lived tokens the house names, the reverse proxy it trusts, floors and areas, the backup schedule, **one config entry per thing that names an `integration:`** (the broker rides the same walker; a box that is several things to Home Assistant lists them — `integration: [heos, denonavr]`) and the application credentials the OAuth ones take (secrets `<domain>_client_id` + `<domain>_client_secret`). Declarative, idempotent, keyed on names that survive a rebuild; `--check` prints the plan. A flow that needs a person — a PIN on a screen, a consent in a browser, read from the brain itself — is never started by a converge: the line says `by hand: regie link <thing>`; a thing that does not answer is `waiting`, tried again next time. Zigbee names/groups/bindings land with the walk | 0.2 · things 0.3 |
+| `regie apply home.yml` | **the conductor**: what only the API can set — the first boot (the owner, analytics off), the long-lived tokens the house names, the reverse proxy it trusts, floors and areas (with what people say for them; a room whose id changed is adopted by its old id, now an alias), the knobs the files seed once (the periods' times, the first mode — the UI's value kept after), the backup schedule, **one config entry per thing that names an `integration:`** (the broker rides the same walker; a box that is several things to Home Assistant lists them — `integration: [heos, denonavr]`) and the application credentials the OAuth ones take (secrets `<domain>_client_id` + `<domain>_client_secret`). Declarative, idempotent, keyed on names that survive a rebuild; `--check` prints the plan. A flow that needs a person — a PIN on a screen, a consent in a browser, read from the brain itself — is never started by a converge: the line says `by hand: regie link <thing>`; a thing that does not answer is `waiting`, tried again next time. Zigbee names/groups/bindings land with the walk | 0.2 · things 0.3 |
 | `regie link home.yml <thing>` | one thing's integration with a person at hand: the PIN typed from its screen, the consent's address printed for a browser and the brain's callback awaited — then the entry, the same walker. A consent comes back through `my.home-assistant.io` (Home Assistant's default) unless the house says `house.my: false` — then the brain's own door is the callback (`<url>/auth/external/callback`, the address a vendor's app registers) and `default_config` is rendered without `my` | 0.3 |
-| `regie backup` / `restore` / `doctor` | Home Assistant's own backup through its API; the brain's health, the pins against the tested ones, what drifted | 0.4 |
-| `regie pair --room <area>` | **the walk**: open the join window, reset each thing in the room, watch its row appear — the room is the session, the kind is the thing's own interview, the name is generated, the room's remotes bind to the room's group | 0.4 |
-| `regie suggest` | the mesh's opinion on rooms, from link quality — suggests, never assigns | 0.4 |
+| `regie backup` / `restore` / `doctor` | Home Assistant's own backup through its API; the brain's health, the pins against the tested ones, what drifted | 0.5 |
+| `regie pair --room <area> --role <role>` | **the walk**: open the join window, reset each thing in the room, watch its row appear — the room is the session, the kind is the thing's own interview, the role and the place are the flags, the name is generated, the room's remotes bind to the room's group | 0.5 |
+| `regie suggest` | the mesh's opinion on rooms, from link quality — suggests, never assigns | 0.5 |
 
 Secrets are **values** the engine is handed (`--secrets FILE`, or
 `REGIE_SECRET_<NAME>`); it never knows the store. sops, age, a password
@@ -64,8 +65,10 @@ podman run --rm -v "$PWD:/house" ghcr.io/tomblancdev/regie check /house/home.yml
 ```
 
 [`examples/maison-temoin`](examples/maison-temoin) is five rooms on two
-floors, one thing of every kind, two people, the product's pack and one of
-the house's own — rendered and validated on every commit. It is the
+floors, one thing of every kind, two people, the product's packs and one of
+the house's own, four room files, a modes file, a story — rendered and
+validated on every commit (and `check_config`'d in the pinned Home
+Assistant before a release). It is the
 documentation and the smoke test at once. Its addresses are the RFC
 documentation reserves: it describes nowhere.
 
@@ -74,12 +77,16 @@ documentation reserves: it describes nowhere.
 1. `regie init` (or copy the witness), edit `home.yml`: the rooms, the
    people, the radio's address, the door (`oidc:` if you have a provider —
    without it, Home Assistant's own login), the owner account, the packs.
+   Then the small files it `include:`s — one per room (`rooms/<room>.yml`:
+   its label, what people say, its **roles** and its scenes **by role**,
+   what "on" means per period and daylight), `modes.yml`, `fx.yml`, one
+   story per file — written before any bulb exists.
 2. `regie mint` → put the secrets in your store.
 3. `regie render --out /srv/home` on the host, `regie up` → an empty brain
    with its units, its broker, its Zigbee instance. `regie apply` → its
    people, its integrations, its dashboards.
-4. `regie pair --room living` → walk the room; the rows appear; the lights
-   are back.
+4. `regie pair --room living --role main` → walk the room; the rows appear
+   with their role; everything written by role lights up at once.
 5. Every later change is a line in `home.yml`, a `render`, an `up`, an
    `apply`. Automations are packages, read-only in the UI by Home
    Assistant's own rule; `automations.yaml` is rendered empty every time —
@@ -94,11 +101,11 @@ through the same code, so the fleet never has a feature the house lacks.
 
 | Part | What | Where |
 |---|---|---|
-| the engine | `check` · `render` · `up` · `apply` · `link` · `mint` · `init` — and the verbs declared for 0.4 | [`src/regie/`](src/regie) |
+| the engine | `check` · `render` · `up` · `apply` · `link` · `mint` · `init` — the include merger, the fx compiler — and the verbs declared for 0.5 | [`src/regie/`](src/regie) |
 | the schema | the contract every house writes to | [`src/regie/schema/`](src/regie/schema) |
 | the base | the config tree every profile renders | [`src/regie/base/`](src/regie/base) |
 | profiles | `ct` — Quadlet units, host networking | [`src/regie/profiles/`](src/regie/profiles) |
-| packs | `lighting` — room groups, motion lights, silent alerts, room cards | [`src/regie/packs/`](src/regie/packs) |
+| packs | `lighting` — room groups (+ per role, per layout row), motion lights, silent alerts, room cards · the vocabulary: `signals` · `modes` · `scenes` · `fx` (shapes/ the bricks, backends/ the envelopes) · `notify` · `scenarios` | [`src/regie/packs/`](src/regie/packs) |
 | labels | the family's words, per language | [`src/regie/labels/`](src/regie/labels) |
 | the witness | `maison-temoin` | [`examples/`](examples) |
 | the collection | `tomblancdev.regie` — the fleet driver | [`ansible/`](ansible) |

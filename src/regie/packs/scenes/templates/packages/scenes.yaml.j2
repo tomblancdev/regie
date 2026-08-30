@@ -1,0 +1,47 @@
+{% set plans = scene_plan(area) | selectattr('renders') | list %}
+{% set defaults = defaults_of(area) %}
+{% if plans or defaults %}
+# rendered by La Régie — {{ area.label }}: scenes by role (pack scenes — rooms/{{ area.id }}.yml, not the UI)
+{% if plans %}
+script:
+{% for p in plans %}
+{% set steps = [] %}
+{% for r in p.roles %}
+{% set data = {} %}
+{% for k, v in r.look.items() if k != 'on' %}{% set _ = data.update({k: v}) %}{% endfor %}
+{% set step = {'action': r.domain ~ '.turn_' ~ ('on' if r.look.on else 'off'), 'target': {'entity_id': r.entities}} %}
+{% if r.look.on and data and r.domain == 'light' %}{% set _ = step.update({'data': data}) %}{% endif %}
+{% set _ = steps.append(step) %}
+{% endfor %}
+{{ {area.id ~ '_' ~ p.id: {
+  'alias': area.label ~ ' — ' ~ p.id,
+  'description': ('every filled role off' if p.implicit else 'the look by role: ' ~ (p.roles | map(attribute='role') | join(', '))) ~ (' · waiting: ' ~ (p.unfilled | join(', ')) if p.unfilled else '') ~ ' (La Régie, pack scenes)',
+  'icon': 'mdi:palette',
+  'mode': 'restart',
+  'sequence': [{'parallel': steps}],
+}} | to_block(2) }}
+{% endfor %}
+  {{ area.id }}_default:
+    alias: {{ (area.label ~ ' — ' ~ labels.ui.default) | to_yaml }}
+    description: "what 'on' means now: the scene sensor.{{ area.id }}_default names (La Régie, pack scenes)"
+    icon: mdi:palette-outline
+    mode: restart
+    sequence:
+      - action: script.turn_on
+        continue_on_error: true
+        target:
+          entity_id: "script.{{ area.id }}_{{ '{{' }} states('sensor.{{ area.id }}_default') {{ '}}' }}"
+{% endif %}
+{% if defaults %}
+{% set first = (area.scenes | default({}) | list | first) | default('off') %}
+
+template:
+  - sensor:
+      - name: {{ area.id }}_default
+        unique_id: regie_{{ area.id }}_default
+        icon: mdi:palette-swatch-outline
+        state: >-
+          {{ '{%' }} set table = {{ defaults | tojson | replace('"', "'") }} {{ '%}' }}
+          {{ '{{' }} table.get(states('sensor.house_period'), {}).get(states('sensor.daylight'), '{{ first }}') {{ '}}' }}
+{% endif %}
+{% endif %}

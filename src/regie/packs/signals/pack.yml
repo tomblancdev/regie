@@ -1,0 +1,14 @@
+# Pack `signals` — the semantic sensors every client reasons on, rendered from
+# the things and the modes file: sensor.house_period (the four times the
+# family edits in the UI, seeded once from modes.yml), sensor.daylight (dark ·
+# dim · bright from the sun's elevation), binary_sensor.night,
+# binary_sensor.house_occupied, binary_sensor.house_quiet, and
+# binary_sensor.<room>_occupied wherever a room has a motion thing — a signal
+# that cannot be measured is absent, never "off".
+name: signals
+summary: the semantic sensors — house_period, daylight, night, house_occupied, house_quiet, <room>_occupied
+kinds: []
+services: []
+templates:
+  - { src: packages/signals.yaml.j2, dst: home-assistant/packages/signals.yaml }
+cards: []

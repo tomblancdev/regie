@@ -1,0 +1,9 @@
+# scenarios/wakeup.yml — a story: steps, in order. Its id is the file's stem.
+label: Réveil
+summary: the house wakes up
+steps:
+  - mode: home
+  - scene: living/evening
+  - fx: { shape: pulse, target: light.living_main, times: 2 }
+  - wait: 5
+  - tell: { message: Bonjour, severity: info }

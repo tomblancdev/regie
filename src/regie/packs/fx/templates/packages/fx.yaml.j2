@@ -1,0 +1,7 @@
+{% if fx_scripts %}
+# rendered by La Régie — effects (pack fx): shapes compiled for backend {{ fx.backend }}.
+# Each script takes `target` (a light or a role group) and the shape's own
+# fields; it snapshots the target, runs the steps, puts the snapshot back.
+script:
+{{ fx_scripts | to_block(2) }}
+{% endif %}

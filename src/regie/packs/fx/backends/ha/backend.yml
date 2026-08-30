@@ -1,0 +1,11 @@
+# ha — the generic light-service loop: one light.turn_on per step, a delay
+# between. Any light, the slowest rung. The step is a FLOOR (a message end to
+# end through Home Assistant, the integration and the radio), not a
+# measurement: a bench at the house's own lights writes the number.
+name: ha
+summary: the generic light-service loop — any light, the slowest rung
+envelope:
+  step: 0.2            # seconds — the finest hold compiled; finer asks are stretched and said
+  colour_in_motion: true
+  program: []          # nothing runs on the device
+compiler: engine       # src/regie/fx.py compiles for this one

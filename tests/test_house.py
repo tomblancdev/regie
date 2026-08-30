@@ -8,8 +8,17 @@ def test_witness_loads_with_one_of_every_kind(witness):
     kinds = set(witness.by_kind())
     assert kinds == witness.known_kinds, "the witness carries one thing of every known kind"
     assert len(witness.areas) == 5
-    assert [p.name for p in witness.packs] == ["lighting", "chalet"]
-    assert witness.packs[1].origin == "house"
+    assert [p.name for p in witness.packs] == [
+        "modes",
+        "signals",
+        "scenes",
+        "fx",
+        "notify",
+        "scenarios",
+        "lighting",
+        "chalet",
+    ]
+    assert witness.packs[-1].origin == "house"
     assert witness.labels.lang == "fr" and witness.labels.found
 
 
@@ -37,7 +46,12 @@ def test_coordinator_resolves_from_its_thing_and_groups_by_room(witness):
     )
     assert "bedroom_b_lamp" not in [t["id"] for t in c["things"]], "no ieee, not on the radio yet"
     groups = {g["area"]["id"]: [t["id"] for t in g["things"]] for g in c["groups"]}
-    assert groups["living"] == ["living_ceiling", "living_lamp"]
+    assert groups["living"] == [
+        "living_ceiling",
+        "living_ceiling_2",
+        "living_ceiling_3",
+        "living_lamp",
+    ]
     assert [g["number"] for g in c["groups"]] == [1, 2, 3, 4, 5]
 
 
@@ -100,7 +114,8 @@ def test_schema_errors_name_the_path(house_with):
 def test_unknown_pack_lists_the_known_ones(house_with):
     with pytest.raises(
         HouseError,
-        match=r"unknown pack 'voice' — product packs: lighting; house packs \(packs\): chalet",
+        match=r"unknown pack 'voice' — product packs: fx, lighting, modes, notify, scenarios, "
+        r"scenes, signals; house packs \(packs\): chalet",
     ):
         load_house(house_with(lambda d: d.update(packs=["voice"])))
 
@@ -141,7 +156,11 @@ def test_a_house_pack_may_not_shadow_a_product_pack(house_with, tmp_path):
 def test_pack_fragment_constrains_options(house_with):
     with pytest.raises(HouseError, match=r"things/\d+/options/off_after"):
         load_house(
-            house_with(lambda d: d["things"][10]["options"].update(off_after="five minutes"))
+            house_with(
+                lambda d: next(t for t in d["things"] if t["id"] == "hall_motion")[
+                    "options"
+                ].update(off_after="five minutes")
+            )
         )
 
 

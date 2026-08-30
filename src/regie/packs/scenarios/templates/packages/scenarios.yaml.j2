@@ -1,0 +1,29 @@
+{% if scenarios %}
+# rendered by La Régie — the stories (pack scenarios — scenarios/*.yml, not the UI)
+script:
+{% for s in scenarios %}
+{% set steps = [] %}
+{% for step in s.steps %}
+{% if 'mode' in step %}
+{% set _ = steps.append({'action': 'input_select.select_option', 'target': {'entity_id': 'input_select.house_mode'}, 'data': {'option': step.mode}}) %}
+{% elif 'scene' in step %}
+{% set _ = steps.append({'action': 'script.' ~ (step.scene | replace('/', '_')), 'continue_on_error': true}) %}
+{% elif 'fx' in step %}
+{% set data = {} %}
+{% for k, v in step.fx.items() if k != 'shape' %}{% set _ = data.update({k: v}) %}{% endfor %}
+{% set _ = steps.append({'action': 'script.fx_' ~ step.fx.shape, 'data': data}) %}
+{% elif 'wait' in step %}
+{% set _ = steps.append({'delay': step.wait}) %}
+{% elif 'tell' in step %}
+{% set _ = steps.append({'action': 'script.tell', 'data': step.tell}) %}
+{% endif %}
+{% endfor %}
+{{ {'scenario_' ~ s.id: {
+  'alias': s.label | default(s.id),
+  'description': (s.summary | default('a story')) ~ ' (La Régie, pack scenarios)',
+  'icon': s.icon | default('mdi:script-text-play-outline'),
+  'mode': 'restart',
+  'sequence': steps,
+}} | to_block(2) }}
+{% endfor %}
+{% endif %}

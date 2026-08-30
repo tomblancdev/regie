@@ -1,0 +1,8 @@
+# matter — Level Control is Zigbee's (tenths, move/step), unicast only from
+# Home Assistant (no group commands, no access to on-device scenes); over
+# Wi-Fi it escapes the broadcast budget, over Thread it does not. Not faster.
+name: matter
+summary: unicast only, tenths — the ha loop's envelope, no group
+envelope: { step: 0.1, colour_in_motion: true, program: [identify] }
+measured: false
+compiler: none

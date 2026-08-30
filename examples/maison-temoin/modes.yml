@@ -1,0 +1,23 @@
+# modes.yml — the house's state, one at a time. A mode's `scene` is what every
+# room takes when the house enters it (`default` = the room's default for the
+# period, `off` = every filled role off); `else` when a room lacks it;
+# `rooms:` a scene for one room instead. The periods' times SEED the helpers
+# the family edits in the UI (seeded once, never reset); the clock rules move
+# the mode only from the modes named; the daylight thresholds are the sun's
+# elevation in degrees.
+initial: home
+modes:
+  home:   { label: "À la maison", scene: default }
+  night:  { label: Nuit, quiet: true, scene: night, else: off }
+  away:   { label: Absents, quiet: true, away: true, scene: off }
+  guest:  { label: Invités }                       # no room has a guest scene yet: a hint
+  cinema: { label: Cinéma, scene: cinema, rooms: { bedroom_a: evening } }
+periods:
+  morning: { at: "06:30", label: Matin }
+  day:     "09:00"
+  evening: { at: "18:00", label: Soir }
+  night:   { at: "22:30", label: Nuit }
+clock:
+  night:   { to: night, from: [home] }
+  morning: { to: home, from: [night] }
+daylight: { dark_below: -6, bright_above: 10 }

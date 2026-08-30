@@ -22,6 +22,15 @@ EXPECTED = {
     "home-assistant/packages/lighting_kitchen.yaml",
     "home-assistant/packages/lighting_bedroom_a.yaml",
     "home-assistant/packages/lighting_bedroom_b.yaml",
+    "home-assistant/packages/signals.yaml",
+    "home-assistant/packages/modes.yaml",
+    "home-assistant/packages/scenes_living.yaml",
+    "home-assistant/packages/scenes_hall.yaml",
+    "home-assistant/packages/scenes_bedroom_a.yaml",
+    "home-assistant/packages/scenes_bedroom_b.yaml",
+    "home-assistant/packages/fx.yaml",
+    "home-assistant/packages/notify.yaml",
+    "home-assistant/packages/scenarios.yaml",
     "mosquitto/config/mosquitto.conf",
     "mosquitto/config/acl",
     "mosquitto/config/passwd",
@@ -95,12 +104,12 @@ def test_zigbee2mqtt_configuration(rendered):
         "friendly_name": "living_lamp",
         "description": "Lampadaire — Salon",
     }
-    assert "0x000d6ffffe000001" in devices and len(devices) == 16
+    assert "0x000d6ffffe000001" in devices and len(devices) == 18
     groups = yaml.safe_load((rendered / "zigbee2mqtt/main/groups.yaml").read_text(encoding="utf-8"))
     assert groups["2"] == {
         "friendly_name": "living",
         "description": "Salon",
-        "devices": ["living_ceiling", "living_lamp"],
+        "devices": ["living_ceiling", "living_ceiling_2", "living_ceiling_3", "living_lamp"],
     }
     secret = yaml.safe_load((rendered / "zigbee2mqtt/main/secret.yaml").read_text())
     assert secret["network_key"] == [1, 3, 5, 7, 9, 11, 13, 15, 0, 2, 4, 6, 8, 10, 12, 13]
@@ -136,7 +145,8 @@ def test_the_dashboard_has_a_card_per_room_and_the_house_pack_card(rendered):
         (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
     )
     cards = dash["views"][0]["cards"]
-    assert [c["type"] for c in cards] == ["entities"] * 5 + ["markdown"]
+    assert [c["type"] for c in cards] == ["entities"] * 6 + ["markdown"]
+    assert cards[0]["title"] == "Maison", "the house card (pack modes) comes first: packs order"
     living = next(c for c in cards if c["title"] == "Salon")
     assert living["entities"][0] == {"entity": "light.living_lights", "name": "lumières"}
     assert {"entity": "light.living_lamp", "name": "Lampadaire"} in living["entities"]
