@@ -458,8 +458,11 @@
           "description": "the entity id when it cannot be derived from the kind and the id"
         },
         "integration": {
-          "$ref": "#/$defs/id",
-          "description": "the Home Assistant integration that reaches it (a config entry — the conductor's business)"
+          "oneOf": [
+            { "$ref": "#/$defs/id" },
+            { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1, "uniqueItems": true }
+          ],
+          "description": "the Home Assistant integration(s) that reach it — one config entry each (the conductor's business); a list when one box is several things to Home Assistant (a receiver: heos + denonavr; a TV: androidtv_remote + cast)"
         },
         "bind": {
           "type": "array",

@@ -527,7 +527,7 @@ class Conductor:
             uid = str((f.get("context") or {}).get("unique_id") or "").lower()
             if mac and uid == mac:
                 return f["flow_id"]
-        rows = [t for t in self.house.things if t.get("integration") == domain]
+        rows = self.house.rows_of(domain)
         if len(flows) == 1 and len(rows) == 1:
             return flows[0]["flow_id"]
         return None
@@ -545,7 +545,7 @@ class Conductor:
         """Application credentials for the OAuth domains the rows name, from the
         secrets <domain>_client_id + <domain>_client_secret; keyed on the
         domain and the client id."""
-        wanted = {t["integration"] for t in self.house.things if t.get("integration")}
+        wanted = {d for t in self.house.things for d in self.house.integrations(t)}
         domains = sorted(wanted & self.oauth_domains(ws))
         if not domains:
             return
@@ -579,8 +579,8 @@ class Conductor:
         """One config entry per row that names an integration."""
         by_domain: dict[str, list[dict]] = {}
         for t in self.house.things:
-            if t.get("integration"):
-                by_domain.setdefault(t["integration"], []).append(t)
+            for d in self.house.integrations(t):
+                by_domain.setdefault(d, []).append(t)
         for domain, rows in sorted(by_domain.items()):
             have = self.domain_entries(domain)
             iot = self.iot_class(ws, domain)
@@ -591,7 +591,10 @@ class Conductor:
             )
             hand = self.asks_a_person(ws, domain)
             for n, t in enumerate(rows):
-                name = f"entry {t['id']}"
+                # a box that is several things to Home Assistant: one line per domain
+                name = f"entry {t['id']}" + (
+                    f" ({domain})" if len(self.house.integrations(t)) > 1 else ""
+                )
                 if n < len(have):
                     self.step(name, "ok", f"{domain} — {have[n].get('title')}{note}")
                     continue
@@ -736,24 +739,32 @@ def link(
     typed from the screen, the consent given in a browser. The brain must
     already be furnished (`apply` ran once): the conductor's token is on disk."""
     thing = house.thing(thing_id)
-    domain = thing.get("integration")
-    if not domain:
+    domains = house.integrations(thing)
+    if not domains:
         raise HouseError(f"{thing_id}: no integration on its row — nothing to link")
     c = Conductor(house, secrets, root, ha)
     ha.token = c.session_token()
     with ha.ws() as ws:
         c.credentials(ws)
-        flow_id = c.discovered(ws, domain, thing)
-    return walk(
-        ha,
-        domain,
-        c.thing_answers(thing),
-        flow_id=flow_id,
-        prompt=prompt,
-        on_url=on_url,
-        wait_external=wait_external,
-        verb=f"regie link {thing_id}",
-    )
+        pending = [(d, c.discovered(ws, d, thing)) for d in domains if not c.domain_entries(d)]
+    if not pending:
+        return Outcome("ok", f"{', '.join(domains)}: already set up")
+    last = Outcome("ok", "")
+    for domain, flow_id in pending:
+        last = walk(
+            ha,
+            domain,
+            c.thing_answers(thing),
+            flow_id=flow_id,
+            prompt=prompt,
+            on_url=on_url,
+            wait_external=wait_external,
+            verb=f"regie link {thing_id}",
+        )
+        last.detail = f"{domain}: {last.detail}"
+        if last.state not in ("changed", "ok"):
+            return last
+    return last
 
 
 def summary(steps: list[Step], check: bool) -> str:

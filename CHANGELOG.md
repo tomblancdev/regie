@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.4 — a box that is several things (2026-08-30)
+
+- **`integration:` takes a list** — one config entry per domain named: a
+  receiver is `[heos, denonavr]` (the music view and the amplifier's own
+  inputs, sound modes, zones), a TV `[androidtv_remote, cast]` (the remote
+  and the screen things are sent to); the step lines read `entry <thing>
+  (<domain>)`; `regie link <thing>` walks every domain of the row that has
+  no entry yet and skips the ones that do
+
 ## 0.3.3 — the brain's own door for a consent (2026-08-30)
 
 - **`house.my: false`** — Home Assistant's oauth2 helper sends every consent

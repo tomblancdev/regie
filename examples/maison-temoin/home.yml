@@ -55,7 +55,7 @@ things:
   - { id: living_lamp, area: living, kind: light, via: zigbee, label: Lampadaire, ieee: "0x000d6ffffe000002" }
   - { id: living_remote, area: living, kind: remote, via: zigbee, vendor: IKEA, model: E2001, ieee: "0x000d6ffffe000003", bind: [living] }
   - { id: living_thermostat, area: living, kind: thermostat, via: zigbee, ieee: "0x000d6ffffe000004" }
-  - { id: living_tv, area: living, kind: tv, via: wifi, integration: androidtv_remote, host: 192.0.2.20, mac: "00:00:5e:00:53:20" }
+  - { id: living_tv, area: living, kind: tv, via: wifi, integration: [androidtv_remote, cast], host: 192.0.2.20, mac: "00:00:5e:00:53:20" }
   - { id: living_cast, area: living, kind: cast, via: wifi, integration: cast, mac: "00:00:5e:00:53:21" }
   - { id: living_speaker, area: living, kind: speaker, via: wifi, integration: sonos, mac: "00:00:5e:00:53:22" }
   - { id: living_satellite, area: living, kind: satellite, via: wifi, integration: wyoming, host: 192.0.2.23 }

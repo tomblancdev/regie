@@ -80,6 +80,18 @@ class House:
                 return a
         raise HouseError(f"no area {area_id!r}")
 
+    @staticmethod
+    def integrations(thing: dict) -> list[str]:
+        """The integration(s) a thing names — one id, or a list of them."""
+        raw = thing.get("integration")
+        if not raw:
+            return []
+        return list(raw) if isinstance(raw, list) else [raw]
+
+    def rows_of(self, domain: str) -> list[dict]:
+        """The things that name this integration."""
+        return [t for t in self.things if domain in self.integrations(t)]
+
     def thing(self, thing_id: str) -> dict:
         for t in self.things:
             if t["id"] == thing_id:

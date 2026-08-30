@@ -151,10 +151,12 @@ class FakeHA(HomeAssistant):
                     {"name": "verify_ssl", "required": True, "default": False},
                 ],
             )
-        if d == "heos":
-            if self.entries.get("heos"):
+        if d in ("heos", "cast"):
+            if self.entries.get(d):
                 self.flows.pop(fid)
                 return 200, {"type": "abort", "flow_id": fid, "reason": "single_instance_allowed"}
+            if d == "cast":
+                return self._form(fid, "user", [])
             return self._form(fid, "user", [{"name": "host", "required": True}])
         if d == "androidtv_remote":
             return self._form(fid, "user", [{"name": "host", "required": True}])
@@ -546,9 +548,14 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
         "ssl": False,
         "verify_ssl": False,
     }
-    assert st["entry living_cast"] == st["entry kitchen_plug"] == "changed"
-    assert st["entry living_tv"] == "hand" and ha.pin_shown == 0 and not ha.flows
-    tv = next(s for s in steps if s.name == "entry living_tv")
+    assert st["entry kitchen_plug"] == "changed"
+    # the TV is two things to Home Assistant: its cast entry made (one for every
+    # cast on the lane - the puck's row is served by the same one), its remote a hand
+    assert st["entry living_tv (cast)"] == "changed" and st["entry living_cast"] == "ok"
+    assert len(ha.entries["cast"]) == 1
+    assert st["entry living_tv (androidtv_remote)"] == "hand"
+    assert ha.pin_shown == 0 and not ha.flows
+    tv = next(s for s in steps if s.name == "entry living_tv (androidtv_remote)")
     assert tv.detail == "androidtv_remote: a pin on its screen — regie link living_tv"
     hand = sum(1 for s in steps if s.state == "hand")
     assert summary(steps, False) == f"apply: {len(steps) - hand} changed, 0 ok, {hand} by hand"
@@ -714,13 +721,13 @@ def test_check_plans_the_entries_without_starting_a_flow(witness, secrets, tmp_p
     seen = len(ha.log)
     steps = apply(witness, secrets, tmp_path, ha, check=True)
     st = states(steps)
-    assert st["entry kitchen_printer"] == "would" and st["entry living_tv"] == "hand"
+    assert st["entry kitchen_printer"] == "would"
+    assert st["entry living_tv (androidtv_remote)"] == "hand"
+    assert st["entry living_tv (cast)"] == "would"
     printer = next(s for s in steps if s.name == "entry kitchen_printer")
     assert printer.detail == "set up ipp at 192.0.2.32"
     assert not ha.flows and ha.pin_shown == 0 and "POST " + FLOWS not in ha.log[seen:]
-    assert summary(steps, True).startswith(
-        "apply: 6 would change"
-    )  # the witness: 7 rows, 1 by hand
+    assert summary(steps, True).startswith("apply: 7 would change")  # 8 entries wanted, 1 by hand
 
 
 def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):
@@ -759,8 +766,22 @@ def test_a_pin_is_a_hand_for_apply_and_typed_by_link(witness, secrets, tmp_path)
     assert out.state == "changed" and asked == ["pin", "pin"] and ha.pin_shown == 1
     assert entry_titles(ha, "androidtv_remote") == ["TV"]
     assert ha.entries["androidtv_remote"][0]["_data"]["host"] == "192.0.2.20"
+    assert out.detail.startswith("androidtv_remote: set up")  # cast was in already: skipped
     again = apply(witness, secrets, tmp_path, ha, check=False)
-    assert states(again)["entry living_tv"] == "ok"
+    assert states(again)["entry living_tv (androidtv_remote)"] == "ok"
+    assert (
+        link(
+            witness,
+            {},
+            tmp_path,
+            ha,
+            "living_tv",
+            prompt=prompt,
+            on_url=lambda url: None,
+            wait_external=lambda fid: True,
+        ).state
+        == "ok"
+    )  # nothing left to link
 
 
 def test_a_consent_needs_credentials_then_a_browser(with_oven, secrets, tmp_path):
