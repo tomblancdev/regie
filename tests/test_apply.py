@@ -492,6 +492,7 @@ class FakeHA(HomeAssistant):
                 "name": payload["name"],
                 "aliases": payload["aliases"],
                 "floor_id": payload.get("floor_id"),
+                "icon": payload.get("icon"),
             }
             self.areas.append(a)
             return a
@@ -568,11 +569,16 @@ class FakeHA(HomeAssistant):
         if type_ == "config/entity_registry/list":
             return list(self.entities)
         if type_ == "config/entity_registry/update":
-            if any(e["entity_id"] == payload["new_entity_id"] for e in self.entities):
+            if "new_entity_id" in payload and any(
+                e["entity_id"] == payload["new_entity_id"] for e in self.entities
+            ):
                 raise HouseError("config/entity_registry/update: invalid_info — already exists")
             for e in self.entities:
                 if e["entity_id"] == payload["entity_id"]:
-                    e["entity_id"] = payload["new_entity_id"]
+                    if "new_entity_id" in payload:
+                        e["entity_id"] = payload["new_entity_id"]
+                    skip = ("entity_id", "new_entity_id")
+                    e.update({k: v for k, v in payload.items() if k not in skip})
                     return {"entity_entry": e}
             raise AssertionError(payload)
         if type_ == "matter/commission":
@@ -1367,3 +1373,41 @@ def test_the_house_policy_evicts_other_fabrics_at_every_apply(secrets, tmp_path,
     again = apply(house, secrets, tmp_path, ha, check=False)
     assert not [s for s in again if "evict" in s.detail]  # nothing left to evict
     assert states(again)["device living_bulb"] == "ok"
+
+
+def test_the_rooms_get_their_icons_and_the_groups_are_hidden(secrets, tmp_path, house_with):
+    def icons(d):
+        for a in d["areas"]:
+            if a["id"] == "living":
+                a["icon"] = "mdi:sofa"
+
+    house = load_house(house_with(icons))
+    ha = FakeHA()
+    # the group entities the packages render, as HA registers them at start
+    for g in ("light.living_lights", "light.living_main", "light.living_lamp"):
+        ha.entities.append(
+            {"entity_id": g, "device_id": None, "platform": "group", "hidden_by": None}
+        )
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    living = next(a for a in ha.areas if a["aliases"][0] == "living")
+    assert living.get("icon") == "mdi:sofa"
+    st = [s for s in steps if s.name == "plumbing"]
+    assert {s.detail.split()[1] for s in st} == {
+        "light.living_lights",
+        "light.living_main",
+        "light.living_lamp",
+    }
+    assert all(e.get("hidden_by") == "user" for e in ha.entities if e.get("platform") == "group")
+    again = apply(house, secrets, tmp_path, ha, check=False)
+    assert not [s for s in again if s.name == "plumbing"]  # hidden already
+
+
+def test_pair_ends_a_light_in_a_known_state(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    ha.matter_node("EX-000001", "00:00:5e:00:53:41")
+    ha.matter_node("EX-000002", "00:00:5e:00:53:42")
+    pair_matter(witness, secrets, tmp_path, ha, room="hall", role="main")
+    on = [x for x in ha.log if x == "POST /api/services/light/turn_on"]
+    off = [x for x in ha.log if x == "POST /api/services/light/turn_off"]
+    assert on and off, "the adoption blink: on bright, a breath, off - the state agrees after"

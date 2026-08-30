@@ -132,6 +132,26 @@ class House:
     def has_pack(self, name: str) -> bool:
         return any(p.name == name for p in self.packs)
 
+    def group_entities(self) -> set[str]:
+        """The light groups the lighting pack renders — the vocabulary's
+        plumbing (what a scene or an effect aims at), not lights a person
+        should see twice: light.<room>_lights, light.<room>_<role>, the
+        layout's row groups. The conductor hides them from the UI."""
+        out: set[str] = set()
+        if not self.has_pack("lighting"):
+            return out
+        for a in self.areas:
+            lights = [t for t in self.things_in(a["id"]) if t["kind"] == "light"]
+            if lights:
+                out.add(f"light.{a['id']}_lights")
+            for role, things in self.roles_in(a["id"]).items():
+                if things and all(t["kind"] == "light" for t in things):
+                    out.add(f"light.{a['id']}_{role}")
+            for role in self.declared_roles(a):
+                for g in self.layout_groups(a, role):
+                    out.add(f"light.{a['id']}_{role}_{g['prefix']}")
+        return out
+
     def matter_only_fabric(self) -> bool:
         return bool((self.data.get("matter") or {}).get("only_fabric", False))
 

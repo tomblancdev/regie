@@ -416,6 +416,7 @@ class Conductor:
             wanted = self.house.area_aliases(a)
             live = areas.get(a["id"])
             floor_id = floor_ids.get(a.get("floor") or "")
+            icon = a.get("icon")
             if not live:
                 # a room renamed (its old id now one of its aliases — `salon`
                 # became `living_room`), or Home Assistant's own area named
@@ -440,13 +441,10 @@ class Conductor:
                         f"area {a['id']}", "changed", f"adopt {found['name']} ({found['area_id']})"
                     )
                     if not self.check:
-                        ws.call(
-                            "config/area_registry/update",
-                            area_id=found["area_id"],
-                            name=a["label"],
-                            aliases=wanted,
-                            floor_id=floor_id,
-                        )
+                        payload = {"name": a["label"], "aliases": wanted, "floor_id": floor_id}
+                        if icon:
+                            payload["icon"] = icon
+                        ws.call("config/area_registry/update", area_id=found["area_id"], **payload)
                     continue
             if live:
                 taken.add(live["area_id"])
@@ -455,16 +453,14 @@ class Conductor:
                     live["name"] != a["label"]
                     or (live.get("floor_id") or None) != floor_id
                     or set(live.get("aliases", [])) != set(wanted)
+                    or (icon and live.get("icon") != icon)
                 ):
                     self.step(f"area {a['id']}", "changed", f"update {a['label']}")
                     if not self.check:
-                        ws.call(
-                            "config/area_registry/update",
-                            area_id=live["area_id"],
-                            name=a["label"],
-                            aliases=wanted,
-                            floor_id=floor_id,
-                        )
+                        payload = {"name": a["label"], "aliases": wanted, "floor_id": floor_id}
+                        if icon:
+                            payload["icon"] = icon
+                        ws.call("config/area_registry/update", area_id=live["area_id"], **payload)
                 else:
                     self.step(f"area {a['id']}", "ok", a["label"])
                 continue
@@ -473,6 +469,8 @@ class Conductor:
                 payload = {"name": a["label"], "aliases": wanted}
                 if floor_id:
                     payload["floor_id"] = floor_id
+                if icon:
+                    payload["icon"] = icon
                 made = ws.call("config/area_registry/create", **payload)
                 if isinstance(made, dict) and made.get("area_id"):
                     self.area_ids[a["id"]] = made["area_id"]
@@ -922,6 +920,23 @@ class Conductor:
                         new_entity_id=rename[1],
                     )
 
+    def plumbing(self, ws) -> None:
+        """The lighting pack's group entities are the vocabulary's plumbing
+        (a scene's target, an effect's) — hidden from the UI so a room shows
+        its real lights once (a person saw five lights where three bulbs
+        hung). Idempotent; a group a person unhid stays theirs? No: the
+        groups are the engine's, hidden every time."""
+        groups = self.house.group_entities()
+        if not groups:
+            return
+        entities = ws.call("config/entity_registry/list") or []
+        for e in entities:
+            if e["entity_id"] not in groups or e.get("hidden_by"):
+                continue
+            self.step("plumbing", "changed", f"hide {e['entity_id']} (a group, not a light)")
+            if not self.check:
+                ws.call("config/entity_registry/update", entity_id=e["entity_id"], hidden_by="user")
+
     def backup(self, ws) -> None:
         want = self.house.backup()
         info = ws.call("backup/config/info")
@@ -988,6 +1003,7 @@ class Conductor:
             self.credentials(ws)
             self.entries(ws)
             self.devices(ws)
+            self.plumbing(ws)
         return self.steps
 
 
@@ -1181,6 +1197,15 @@ def pair_matter(
         row["role"] = role
     if at:
         row["at"] = at
+    # a light ends the adoption in a known state: on bright, a breath, off —
+    # the blink says WHICH bulb was adopted, and the walk found live that a
+    # fresh H6008 lights up while reporting off (the store, not the LED):
+    # the two commands leave the bulb dark and the brain right
+    light = next((e["entity_id"] for e in entities if e["entity_id"].startswith("light.")), None)
+    if light:
+        ha.post("/api/services/light/turn_on", {"entity_id": light, "brightness_pct": 100})
+        time.sleep(1.5)
+        ha.post("/api/services/light/turn_off", {"entity_id": light})
     row["_found"] = {
         "device": dev.get("name_by_user") or dev.get("name"),
         "entities": sorted(e["entity_id"] for e in entities),

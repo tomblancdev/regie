@@ -1,5 +1,6 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema", "$comment": "no-environment: ok — the standard, not a network",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "no-environment: ok — the standard, not a network",
   "$id": "https://github.com/tomblancdev/regie/schema/home.schema.json",
   "title": "home.yml — a house, for La Régie (schema 1)",
   "description": "The contract every house writes to. Things are data: an id, a room, a kind, how it is reached, and since schema 1 / engine 0.4 what it is FOR (`role`). Packs add fields to a thing (their schema fragment is merged before validation); kinds, via and roles are OPEN vocabularies — an unknown value is a warning, never an error, so a new use case is a pack, not a schema bump. The vocabulary (rooms' scenes, modes, effects, scenarios) is the product's standard library: its shapes live here, `include:` brings them in from small files, the packs render them.",
@@ -429,6 +430,11 @@
         },
         "label": {
           "type": "string"
+        },
+        "icon": {
+          "type": "string",
+          "pattern": "^mdi:[a-z0-9-]+$",
+          "description": "the room's icon in Home Assistant (mdi:...), pushed by the conductor - a created area has none otherwise"
         },
         "floor": {
           "$ref": "#/$defs/id"
