@@ -31,6 +31,10 @@ A row that names an `integration:` becomes a config entry:
   browser and the brain's callback awaited (`data_entry_flow_progressed`),
   then the entry
 - the walk (`pair`, `suggest`) and `backup`/`restore`/`doctor` move to 0.4
+- the rendered files no longer carry the engine's version in their header (the
+  render manifest does): an engine bump whose templates did not change rewrites
+  nothing and restarts nothing — found live at the first 0.3 converge (10 files
+  rewritten, both services restarted, for a header)
 
 ## 0.2.0 — the brain (2026-08-29)
 

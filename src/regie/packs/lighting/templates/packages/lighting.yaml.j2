@@ -2,7 +2,7 @@
 {% set motions = kinds.get('motion', []) %}
 {% set watched = area_things | selectattr('kind', 'in', ['light', 'plug', 'switch', 'remote', 'motion']) | list %}
 {% if lights %}
-# rendered by La Régie {{ version }} — {{ area.label }}: lighting (pack lighting)
+# rendered by La Régie — {{ area.label }}: lighting (pack lighting)
 homeassistant:
   customize:
     light.{{ area.id }}_lights:

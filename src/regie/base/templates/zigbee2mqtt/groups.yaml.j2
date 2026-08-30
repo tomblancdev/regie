@@ -1,4 +1,4 @@
-# rendered by La Régie {{ version }} — one Zigbee group per room (the room's lights), so a bound remote drives the room
+# rendered by La Régie — one Zigbee group per room (the room's lights), so a bound remote drives the room
 {% for g in coordinator.groups %}
 '{{ g.number }}':
   friendly_name: {{ g.area.id }}

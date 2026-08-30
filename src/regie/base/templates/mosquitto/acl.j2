@@ -1,4 +1,4 @@
-# rendered by La Régie {{ version }} — one user per client, each on its own topics
+# rendered by La Régie — one user per client, each on its own topics
 {% for u in mqtt_users %}
 user {{ u.name }}
 {% for t in u.topics %}
