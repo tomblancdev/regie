@@ -1239,7 +1239,7 @@ def test_pair_matter_adopts_the_fresh_node_into_a_row(witness, secrets, tmp_path
     )
     found = row.pop("_found")
     assert row == {
-        "id": "hall_main",
+        "id": "hall_main_2",  # hall_ceiling fills main already; light.hall_main is the group
         "area": "hall",
         "kind": "light",
         "via": "matter",
@@ -1314,7 +1314,8 @@ def test_a_node_without_a_serial_is_keyed_on_its_address(witness, secrets, tmp_p
     bulb = ha.matter_node(None, "00:00:5e:00:53:52", model="Bulb")
     row = pair_matter(witness, secrets, tmp_path, ha, room="hall", role="lamp", only_fabric=True)
     found = row.pop("_found")
-    assert "serial" not in row and row["mac"] == "00:00:5e:00:53:52" and row["id"] == "hall_lamp"
+    assert "serial" not in row and row["mac"] == "00:00:5e:00:53:52"
+    assert row["id"] == "hall_lamp_1"  # light.hall_lamp is the role's group, never a bulb's
     assert found["evicted"] == ["Google LLC (fabric 1)"] and bulb["_fabrics"] == [
         (2, "Test Vendor")
     ]
@@ -1323,10 +1324,10 @@ def test_a_node_without_a_serial_is_keyed_on_its_address(witness, secrets, tmp_p
         house_with(lambda d: d["things"].append(row))
     )  # the row, where the house keeps them
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert states(steps)["device hall_lamp"] == "changed"
+    assert states(steps)["device hall_lamp_1"] == "changed"
     hall = next(a for a in ha.areas if a["aliases"][0] == "hall")
-    assert bulb["area_id"] == hall["area_id"] and bulb["name_by_user"] == "hall_lamp"
-    assert "light.hall_lamp" in {e["entity_id"] for e in ha.entities}
+    assert bulb["area_id"] == hall["area_id"] and bulb["name_by_user"] == "hall_lamp_1"
+    assert "light.hall_lamp_1" in {e["entity_id"] for e in ha.entities}
     # a second walk: the bulb is named now, nothing is fresh
     with pytest.raises(HouseError, match="no Matter device the house does not already name"):
         pair_matter(house, secrets, tmp_path, ha, room="hall")

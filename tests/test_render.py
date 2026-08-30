@@ -102,7 +102,7 @@ def test_zigbee2mqtt_configuration(rendered):
         (rendered / "zigbee2mqtt/main/devices.yaml").read_text(encoding="utf-8")
     )
     assert devices["0x000d6ffffe000002"] == {
-        "friendly_name": "living_lamp",
+        "friendly_name": "living_floor_lamp",
         "description": "Lampadaire — Salon",
     }
     assert "0x000d6ffffe000001" in devices and len(devices) == 18
@@ -110,7 +110,7 @@ def test_zigbee2mqtt_configuration(rendered):
     assert groups["2"] == {
         "friendly_name": "living",
         "description": "Salon",
-        "devices": ["living_ceiling", "living_ceiling_2", "living_ceiling_3", "living_lamp"],
+        "devices": ["living_ceiling", "living_ceiling_2", "living_ceiling_3", "living_floor_lamp"],
     }
     secret = yaml.safe_load((rendered / "zigbee2mqtt/main/secret.yaml").read_text())
     assert secret["network_key"] == [1, 3, 5, 7, 9, 11, 13, 15, 0, 2, 4, 6, 8, 10, 12, 13]
@@ -150,7 +150,7 @@ def test_the_dashboard_has_a_card_per_room_and_the_house_pack_card(rendered):
     assert cards[0]["title"] == "Maison", "the house card (pack modes) comes first: packs order"
     living = next(c for c in cards if c["title"] == "Salon")
     assert living["entities"][0] == {"entity": "light.living_lights", "name": "lumières"}
-    assert {"entity": "light.living_lamp", "name": "Lampadaire"} in living["entities"]
+    assert {"entity": "light.living_floor_lamp", "name": "Lampadaire"} in living["entities"]
     assert "pack `chalet`" in cards[-1]["content"]
 
 

@@ -19,7 +19,7 @@ def test_a_scene_renders_for_its_filled_roles_and_waits_for_the_rest(rendered):
         "target": {"entity_id": ["light.living_main"]},
         "data": {"brightness_pct": 60, "color_temp_kelvin": 2700},
     }
-    assert steps["light.living_lamp"]["action"] == "light.turn_on"
+    assert steps["light.living_lamp"]["action"] == "light.turn_on"  # the role group
     assert "data" not in steps["light.living_lamp"], "a plain `on`"
     cinema = pkg["script"]["living_cinema"]
     ids = [s["target"]["entity_id"][0] for s in cinema["sequence"][0]["parallel"]]

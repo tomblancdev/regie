@@ -51,7 +51,7 @@ def test_coordinator_resolves_from_its_thing_and_groups_by_room(witness):
         "living_ceiling",
         "living_ceiling_2",
         "living_ceiling_3",
-        "living_lamp",
+        "living_floor_lamp",
     ]
     assert [g["number"] for g in c["groups"]] == [1, 2, 3, 4, 5]
 
@@ -169,3 +169,13 @@ def test_unknown_language_falls_back_to_english_with_a_warning(house_with):
     h = load_house(house_with(lambda d: d["house"].update(lang="xx")))
     assert not h.labels.found and h.labels.kind("light") == "Light"
     assert any("no labels for lang 'xx'" in w for w in h.warnings)
+
+
+def test_a_light_may_not_wear_its_roles_name(house_with):
+    def add(d):
+        d["things"].append(
+            {"id": "hall_main", "area": "hall", "kind": "light", "via": "matter", "role": "main"}
+        )
+
+    with pytest.raises(HouseError, match=r"hall_main: a light may not wear its role's name"):
+        load_house(house_with(add))

@@ -15,7 +15,7 @@ def test_a_room_with_lights_gets_its_group_and_its_silent_alert(rendered):
         "light.living_ceiling",
         "light.living_ceiling_2",
         "light.living_ceiling_3",
-        "light.living_lamp",
+        "light.living_floor_lamp",
         "light.living_bulb",
     ]
     assert (
@@ -24,7 +24,7 @@ def test_a_room_with_lights_gets_its_group_and_its_silent_alert(rendered):
     )
     (silent,) = pkg["automation"]
     assert silent["id"] == "regie_living_silent"
-    assert "light.living_lamp" in silent["triggers"][0]["entity_id"]
+    assert "light.living_floor_lamp" in silent["triggers"][0]["entity_id"]
     assert "binary_sensor.hall_motion" not in silent["triggers"][0]["entity_id"], (
         "another room's thing"
     )
@@ -86,7 +86,7 @@ def test_a_role_gets_its_group_and_a_layout_its_rows(rendered):
         "light.living_ceiling_2",
         "light.living_ceiling_3",
     ]
-    assert groups["living_lamp"]["entities"] == ["light.living_lamp"]
+    assert groups["living_lamp"]["entities"] == ["light.living_floor_lamp"]  # the role, the bulb
     assert groups["living_main_front"]["entities"] == [
         "light.living_ceiling",
         "light.living_ceiling_2",

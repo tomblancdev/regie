@@ -1154,12 +1154,16 @@ def pair_matter(
     domains = {e["entity_id"].split(".", 1)[0] for e in entities}
     kind = next((k for k, d in KIND_OF_DOMAIN.items() if d in domains), None) or "device"
     row: dict = {}
+    # the name: <room>_<role>_<at> in a layout, <room>_<role>_<n> otherwise -
+    # never <room>_<role> itself, that is the ROLE's entity (the lighting
+    # pack's group every scene aims at; found live: the rename collided)
     if thing_id:
         row["id"] = thing_id
     elif role and at:
         row["id"] = f"{room}_{role}_{at}"
     elif role:
-        row["id"] = f"{room}_{role}"
+        n = len(house.roles_in(room).get(role, [])) + 1
+        row["id"] = f"{room}_{role}_{n}"
     else:
         n = sum(1 for t in house.things if t["area"] == room and t["kind"] == kind) + 1
         row["id"] = f"{room}_{kind}_{n}"

@@ -596,6 +596,11 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             )
         if t.get("at") and not t.get("role"):
             errors.append(f"{t['id']}: `at` without a `role` — a place belongs to a role's layout")
+        if t.get("role") and t["kind"] == "light" and t["id"] == f"{t['area']}_{t['role']}":
+            errors.append(
+                f"{t['id']}: a light may not wear its role's name — light.{t['id']} is the "
+                f"role's group (what a scene aims at); name it {t['id']}_1 or by its place"
+            )
         if t.get("role") and t["area"] in area_ids:
             area = house.area(t["area"])
             spec = (area.get("roles") or {}).get(t["role"]) or {}
