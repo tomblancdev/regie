@@ -1,0 +1,12 @@
+# fire — a flame: the level wanders between 40 and 90 % with short ramps, warm.
+# One message per step: `cycles` × ~0.4 s; on a Zigbee bulb that is a budget
+# question (the backend's envelope says), on a Yeelight flow or a WLED a
+# program (the per-protocol compilers, later).
+summary: a flame — wandering warm levels
+icon: mdi:fire
+tags: { kind: light, mood: warm }
+needs: { step: 0.1 }
+fields: { colour: "#ff7a1a", cycles: 40 }
+steps:
+  - { level: [40, 90], colour: $colour, transition: [0.1, 0.3], hold: [0.1, 0.3] }
+repeat: $cycles

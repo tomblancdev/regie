@@ -1,0 +1,11 @@
+# glitch — a glitching neon: bursts of flicker with a longer dark hold between
+# them; two to four bursts.
+summary: a glitching neon — bursts of flicker, dark between
+icon: mdi:flash-alert-outline
+tags: { kind: light, mood: nervous }
+needs: { step: 0.02 }
+fields: { colour: null }
+steps:
+  - { use: flicker, times: [3, 8], colour: $colour }
+  - { level: 0, hold: [0.2, 0.9] }
+repeat: [2, 4]

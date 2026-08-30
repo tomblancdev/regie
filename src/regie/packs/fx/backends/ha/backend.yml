@@ -1,11 +1,14 @@
 # ha — the generic light-service loop: one light.turn_on per step, a delay
-# between. Any light, the slowest rung. The step is a FLOOR (a message end to
-# end through Home Assistant, the integration and the radio), not a
-# measurement: a bench at the house's own lights writes the number.
+# between. Any light, the slowest rung. Home Assistant's own engine honours a
+# 50 ms delay and a turn_on returns once the integration has sent its message
+# — so the step is Home Assistant's floor; THE RADIO UNDERNEATH IS THE REAL
+# ONE (zigbee ~0.1, yeelight 0.05, wled 0.02 — the per-protocol envelopes,
+# measured at the bench, take over when the compiler picks the backend per
+# target). 0.2 s was 0.4.0's guess: a metronome, not lightning.
 name: ha
-summary: the generic light-service loop — any light, the slowest rung
+summary: the generic light-service loop — any light, Home Assistant's own floor
 envelope:
-  step: 0.2            # seconds — the finest hold compiled; finer asks are stretched and said
+  step: 0.05           # seconds — the finest hold compiled; finer asks are stretched and said
   colour_in_motion: true
   program: []          # nothing runs on the device
 compiler: engine       # src/regie/fx.py compiles for this one

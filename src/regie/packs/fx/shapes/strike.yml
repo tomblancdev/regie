@@ -1,12 +1,16 @@
-# strike — a lightning strike: three flashes of unequal weight and a fading
-# tail. Composed of bricks; it knows nothing of the protocol that will run it.
-summary: three flashes and a fading tail — a lightning strike
+# strike — one lightning strike, the way it looks: a leader flash, a dark gap,
+# one to three weaker after-flickers, the return stroke, a tail fading out.
+# Every number inside [lo, hi] is drawn at run time — the shape is the stroke
+# logic, the ranges are the leash. Whole strike ≈ 0.5–1.5 s, most of it the
+# tail; two runs never look the same.
+summary: a lightning strike — a leader, flickers, the return stroke, a fading tail
 icon: mdi:weather-lightning
 tags: { kind: light, mood: storm }
-needs: { step: 0.08 }
-fields: { colour: null }
+needs: { step: 0.04 }
+fields: { colour: null, intensity: 100 }
 steps:
-  - { use: flash, hold: 0.12, colour: $colour }
-  - { use: flash, level: 30, hold: 0.08, colour: $colour }
-  - { use: flash, hold: 0.12, colour: $colour }
-  - { use: fade, to: 0, over: 1 }
+  - { use: flash, level: $intensity, hold: [0.06, 0.12], colour: $colour }     # the leader
+  - { level: 0, hold: [0.04, 0.10] }                                            # dark
+  - { use: flash, level: [20, 50], hold: [0.04, 0.09], times: [1, 3], colour: $colour }   # the flickers
+  - { use: flash, level: [70, 100], hold: [0.08, 0.14], colour: $colour }      # the return stroke
+  - { use: fade, to: 0, over: [0.3, 0.8] }                                      # the tail

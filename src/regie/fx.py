@@ -7,8 +7,10 @@ measure, not a promise. The per-protocol backends are folders with their
 envelope written down and no compiler yet: a new protocol is a folder, never
 a rewrite.
 
-A shape's step says `$name` to read one of its fields at run time; a step
-that `use:`s another shape binds that shape's fields to numbers or to the
+A shape's step says `$name` to read one of its fields at run time, and
+`[lo, hi]` for a number drawn at run time inside those bounds — the leash on
+the randomness that makes a strike or a flicker feel natural; a step that
+`use:`s another shape binds that shape's fields to numbers, ranges or the
 outer fields. The compiler flattens the bricks, clamps every hold to the
 backend's step (and says so: a refusal is a line, never silence), and emits
 Home Assistant actions — a script per shape, its fields the shape's.
@@ -70,23 +72,58 @@ class Ref:
         return f"${self.name}"
 
 
+class Range:
+    """`[lo, hi]` in a shape — drawn at run time, inside the bounds the shape's
+    author wrote: the leash on the randomness."""
+
+    __slots__ = ("lo", "hi")
+
+    def __init__(self, lo: float, hi: float):
+        if hi < lo:
+            raise HouseError(f"fx: a range reads [lo, hi], not [{lo:g}, {hi:g}]")
+        self.lo, self.hi = lo, hi
+
+    def __repr__(self) -> str:
+        return f"[{self.lo:g}, {self.hi:g}]"
+
+
 def _value(raw, bindings: dict):
     """A step's value resolved through the bindings: a number, a string, None,
-    or a Ref to an outer field."""
+    a Ref to an outer field, or a Range."""
     if isinstance(raw, str) and raw.startswith("$"):
         name = raw[1:]
         if name not in bindings:
             raise HouseError(f"fx: ${name} is not a field of this shape")
         return bindings[name]
+    if (
+        isinstance(raw, list)
+        and len(raw) == 2
+        and all(isinstance(x, int | float) and not isinstance(x, bool) for x in raw)
+    ):
+        return Range(float(raw[0]), float(raw[1]))
     return raw
 
 
-def _template(v, default=None):
-    """What lands in the Home Assistant action: a constant, or a template
-    reading the script's field (with the shape's default when unset)."""
+def _expr(v, kind: str) -> str:
+    """A value as a Jinja EXPRESSION for Home Assistant (bare, no braces):
+    a constant, the script's field, or a draw inside a range — `time` in
+    seconds (drawn in milliseconds), `int` a level or a count."""
     if isinstance(v, Ref):
-        return "{{ " + v.name + " }}"
-    return default if v is None else v
+        return v.name
+    if isinstance(v, Range):
+        if kind == "time":
+            lo, hi = round(v.lo * 1000), round(v.hi * 1000)
+            return f"((range({lo}, {hi + 1}) | random) / 1000)"
+        return f"(range({int(v.lo)}, {int(v.hi) + 1}) | random)"
+    if v is None:
+        return "none"
+    if isinstance(v, float) and v.is_integer() and kind == "int":
+        return repr(int(v))
+    return repr(v)
+
+
+def _is_expr(v) -> bool:
+    return isinstance(v, Ref | Range)
 
 
 @dataclass
@@ -100,48 +137,54 @@ class Compiled:
 
 
 def _hold_action(hold, envelope_step: float, notes: list[str], where: str) -> dict | None:
+    """A hold as a delay — clamped to the backend's step: at compile time for a
+    number, at run time for a field or a range (the low end may sit under the
+    floor; the shape asked for what feels right, the backend says what it
+    honours — both are said)."""
     if hold is None:
         return None
+    shape_name = where.rsplit(" step", 1)[0]
     if isinstance(hold, Ref):
-        # clamped at run time: the field may be set finer than the backend honours
         return {"delay": "{{ [" + hold.name + " | float, " + str(envelope_step) + "] | max }}"}
+    if isinstance(hold, Range):
+        if hold.lo < envelope_step:
+            notes.append(
+                f"{shape_name}: holds down to {hold.lo:g} s asked, the backend gives "
+                f"{envelope_step:g} → the low end stretched"
+            )
+        return {"delay": "{{ [" + _expr(hold, "time") + ", " + str(envelope_step) + "] | max }}"}
     hold = float(hold)
     if hold < envelope_step:
         notes.append(
-            f"{where.rsplit(' step', 1)[0]}: holds of {hold:g} s asked, "
-            f"the backend gives {envelope_step:g} → stretched"
+            f"{shape_name}: holds of {hold:g} s asked, the backend gives "
+            f"{envelope_step:g} → stretched"
         )
         hold = envelope_step
     return {"delay": hold}
 
 
 def _set_action(level, colour, transition) -> dict:
-    lvl = _template(level, 100)
-    tr = _template(transition, 0)
+    """One light.turn_on: the level and the transition as an expression each
+    (a constant, a field, a draw); the colour a constant list, the script's
+    colour_rgb, or nothing."""
+    base = (
+        "{'brightness_pct': "
+        + _expr(level, "int")
+        + ", 'transition': "
+        + _expr(transition, "time")
+        + "}"
+    )
     if isinstance(colour, Ref):
-        colour_expr = "colour_rgb"
-    elif colour:
-        colour_expr = "[" + ", ".join(str(int(colour[i : i + 2], 16)) for i in (1, 3, 5)) + "]"
-    else:
-        colour_expr = None
-    base = "{'brightness_pct': " + _lit(lvl) + ", 'transition': " + _lit(tr) + "}"
-    if colour_expr is None:
-        data_t = "{{ " + base + " }}"
-    elif colour_expr == "colour_rgb":
         data_t = (
             "{% set d = " + base + " %}"
             "{% if colour_rgb %}{% set d = dict(d, rgb_color=colour_rgb) %}{% endif %}{{ d }}"
         )
+    elif colour:
+        rgb = "[" + ", ".join(str(int(colour[i : i + 2], 16)) for i in (1, 3, 5)) + "]"
+        data_t = "{{ dict(" + base + ", rgb_color=" + rgb + ") }}"
     else:
-        data_t = "{{ dict(" + base + ", rgb_color=" + colour_expr + ") }}"
+        data_t = "{{ " + base + " }}"
     return {"action": "light.turn_on", "target": {"entity_id": "{{ target }}"}, "data": data_t}
-
-
-def _lit(v) -> str:
-    """A value inside a Jinja expression: a template becomes the bare field."""
-    if isinstance(v, str) and v.startswith("{{ ") and v.endswith(" }}"):
-        return v[3:-3]
-    return repr(v)
 
 
 def _expand(
@@ -185,7 +228,7 @@ def _expand(
             actions.append(delay)
     repeat = _value(shape.get("repeat"), bindings)
     if repeat is not None and repeat != 1:
-        count = _template(repeat, 1)
+        count = "{{ " + _expr(repeat, "int") + " }}" if _is_expr(repeat) else int(repeat)
         actions = [{"repeat": {"count": count, "sequence": actions}}]
     return actions
 

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.1 — effects that feel natural (2026-08-30)
+
+Tom, on 0.4.0's strike: *"2 secs for a stroke is really a lot … random
+times and light, not too much random, it should keep a stroke logic … a
+glitch effect like a glitching neon … push to the limits of the ms."*
+
+- **the `ha` backend's floor is 0.05 s**, not 0.2: Home Assistant's own
+  engine honours a 50 ms delay and a `turn_on` returns once the integration
+  has sent its message — the radio underneath is the real floor (the
+  per-protocol envelopes, measured at the bench, take over when the
+  compiler picks a backend per target). 0.4.0's 0.2 was a guess that
+  stretched every stroke into a metronome
+- **ranges in the shape language** — any number in a step may be `[lo, hi]`
+  (a hold, a level, a transition, a repeat count), drawn at run time by the
+  script inside those bounds (`range(60, 121) | random`, milliseconds for a
+  time); the shape is the logic, the width of each range is the leash; a
+  range whose low end sits under the floor is clamped at run time and said
+  in `check` (*holds down to 0.04 s asked, the backend gives 0.05 → the low
+  end stretched*)
+- **`strike` rewritten as a stroke**: a leader flash (60–120 ms), a dark gap
+  (40–100 ms), one to three after-flickers at 20–50 % (40–90 ms), the return
+  stroke at 70–100 % (80–140 ms), a tail fading out over 0.3–0.8 s — ≈
+  0.5–1.5 s in all, two runs never the same
+- **new bricks**: `lightning` (a storm — 3 to 6 strikes with 2–9 s of dark
+  between), `flicker` (random short on/off at random levels — a faulty
+  contact), `glitch` (a glitching neon — bursts of flicker, dark between),
+  `neon` (a neon starting up: stutters, then on — `restore: false`), `fire`
+  (a flame — warm levels wandering 40–90 % with 100–300 ms ramps, one
+  message per step: a budget question on Zigbee, a program elsewhere later)
+- none of it has run on a light yet: the bench at the walk writes the real
+  floors into the envelopes
+
 ## 0.4.0 — the skeleton: the vocabulary by role (2026-08-30)
 
 The house's standard library, buildable before a single bulb exists — a

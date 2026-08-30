@@ -1,0 +1,11 @@
+# flicker — a brick: on and off at random levels and random short holds, a
+# few times. What a faulty contact does. glitch and neon build on it.
+summary: random short on/off at random levels
+icon: mdi:lightbulb-alert-outline
+tags: { kind: light, mood: nervous }
+needs: { step: 0.02 }
+fields: { colour: null, times: 6 }
+steps:
+  - { level: [30, 100], colour: $colour, hold: [0.02, 0.08] }
+  - { level: [0, 20], hold: [0.02, 0.15] }
+repeat: $times

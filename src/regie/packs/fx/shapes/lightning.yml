@@ -1,0 +1,12 @@
+# lightning — a storm: several strikes with dark between them, the wait drawn
+# each time. The offsets between rooms (the strike reaching the hall 250 ms
+# later) come with the stories (W8).
+summary: a storm — strikes with random dark between them
+icon: mdi:weather-lightning-rainy
+tags: { kind: light, mood: storm }
+needs: { step: 0.04 }
+fields: { colour: null }
+steps:
+  - { use: strike, colour: $colour }
+  - { level: 0, hold: [2, 9] }
+repeat: [3, 6]

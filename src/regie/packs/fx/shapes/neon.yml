@@ -1,0 +1,11 @@
+# neon — a neon starting up: it stutters a few times, then holds. Ends ON:
+# the snapshot is not put back (restore: false by default).
+summary: a neon starting up — stutters, then on
+icon: mdi:led-strip-variant
+tags: { kind: light, mood: nervous }
+needs: { step: 0.02 }
+fields: { colour: null, level: 100 }
+restore: false
+steps:
+  - { use: flicker, times: [3, 6], colour: $colour }
+  - { level: $level, colour: $colour, hold: 0.1 }
