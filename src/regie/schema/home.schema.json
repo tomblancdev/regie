@@ -257,6 +257,18 @@
         }
       }
     },
+    "matter": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the Matter server's policy (pack matter)",
+      "properties": {
+        "only_fabric": {
+          "type": "boolean",
+          "default": false,
+          "description": "the brain is a thing's only controller: apply removes every other fabric it finds on a node the house names (the phone's commissioning stack leaves one of its own; a vendor's app another) - said in the step, idempotent"
+        }
+      }
+    },
     "mqtt": {
       "type": "object",
       "additionalProperties": false,

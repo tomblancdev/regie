@@ -1346,3 +1346,23 @@ def test_other_fabrics_are_reported_and_kept_unless_asked(witness, secrets, tmp_
     row = pair_matter(witness, secrets, tmp_path, ha, room="hall")
     assert row["_found"]["other_fabrics"] == ["Google LLC (fabric 1)"]
     assert not row["_found"]["evicted"] and len(bulb["_fabrics"]) == 2
+
+
+def test_the_house_policy_evicts_other_fabrics_at_every_apply(secrets, tmp_path, house_with):
+    def policy(d):
+        d["matter"] = {"only_fabric": True}
+
+    house = load_house(house_with(policy))
+    ha = FakeHA()
+    apply(house, secrets, tmp_path, ha, check=False)
+    bulb = ha.matter_node("EX-000001", "00:00:5e:00:53:41")  # the witness's living_bulb
+    steps = apply(house, secrets, tmp_path, ha, check=True)
+    evict = [s for s in steps if s.name == "device living_bulb" and "evict" in s.detail]
+    assert evict and evict[0].state == "would" and len(bulb["_fabrics"]) == 2
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    evict = [s for s in steps if s.name == "device living_bulb" and "evict" in s.detail]
+    assert evict[0].detail == "evict Google LLC (fabric 1) — the brain's fabric only"
+    assert bulb["_fabrics"] == [(2, "Test Vendor")]
+    again = apply(house, secrets, tmp_path, ha, check=False)
+    assert not [s for s in again if "evict" in s.detail]  # nothing left to evict
+    assert states(again)["device living_bulb"] == "ok"

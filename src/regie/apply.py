@@ -785,20 +785,47 @@ class Conductor:
         ]
 
     @staticmethod
-    def matter_macs(ws, devices: list[dict]) -> dict[str, str]:
-        """The hardware address of every Matter node, from its diagnostics
-        (one call each - local, the brain's own server)."""
-        out: dict[str, str] = {}
+    def matter_diagnostics(ws, devices: list[dict]) -> dict[str, dict]:
+        """Every Matter node's diagnostics, by device id (one call each -
+        local, the brain's own server): its hardware address, its fabrics."""
+        out: dict[str, dict] = {}
         for d in devices:
             if not any(len(i) == 2 and i[0] == "matter" for i in d.get("identifiers", [])):
                 continue
             try:
-                diag = ws.call("matter/node_diagnostics", device_id=d["id"]) or {}
+                out[d["id"]] = ws.call("matter/node_diagnostics", device_id=d["id"]) or {}
             except HouseError:
                 continue
-            if diag.get("mac_address"):
-                out[d["id"]] = str(diag["mac_address"]).lower()
         return out
+
+    @staticmethod
+    def matter_macs(ws, devices: list[dict]) -> dict[str, str]:
+        """The hardware address of every Matter node, from its diagnostics."""
+        return {
+            k: str(v["mac_address"]).lower()
+            for k, v in Conductor.matter_diagnostics(ws, devices).items()
+            if v.get("mac_address")
+        }
+
+    @staticmethod
+    def other_fabrics(diag: dict) -> list[dict]:
+        ours = diag.get("active_fabric_index")
+        return [f for f in (diag.get("active_fabrics") or []) if f.get("fabric_index") != ours]
+
+    def evict(self, ws, thing: dict, dev: dict, diag: dict) -> None:
+        """The brain as the only controller (house `matter.only_fabric`):
+        every other fabric on a node the house names is removed."""
+        others = self.other_fabrics(diag)
+        if not others:
+            return
+        names = ", ".join(fabric_label(f) for f in others)
+        self.step(f"device {thing['id']}", "changed", f"evict {names} — the brain's fabric only")
+        if self.check:
+            return
+        for f in others:
+            ws.call(
+                "matter/remove_matter_fabric", device_id=dev["id"], fabric_index=f["fabric_index"]
+            )
 
     def entry_devices(self, devices: list[dict], thing: dict) -> list[dict]:
         """The devices under the config entries a row made (one entry per
@@ -835,13 +862,18 @@ class Conductor:
             return
         devices = ws.call("config/device_registry/list") or []
         entities = ws.call("config/entity_registry/list") or []
-        macs = self.matter_macs(ws, devices) if self.house.has_pack("matter") else {}
+        diags = self.matter_diagnostics(ws, devices) if self.house.has_pack("matter") else {}
+        macs = {k: str(v["mac_address"]).lower() for k, v in diags.items() if v.get("mac_address")}
         for t in rows:
             found = self.device_of(devices, t, macs)
             if not found:
                 found = self.entry_devices(devices, t)
             if not found:
                 continue
+            if self.house.matter_only_fabric():
+                for dev in found:
+                    if dev["id"] in diags:
+                        self.evict(ws, t, dev, diags[dev["id"]])
             area_id = self.area_ids.get(t["area"])
             label = t.get("label") or t["id"]
             entity = self.house.entity(t)

@@ -132,6 +132,9 @@ class House:
     def has_pack(self, name: str) -> bool:
         return any(p.name == name for p in self.packs)
 
+    def matter_only_fabric(self) -> bool:
+        return bool((self.data.get("matter") or {}).get("only_fabric", False))
+
     def wanted(self, row: dict) -> bool:
         """A template's or a directory's `when`: `pack:<name>` = the house
         carries that pack; absent = always."""
