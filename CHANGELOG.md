@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 — settings live in Réglages alone (2026-08-31)
+
+With `controls.panel` on, the house card (the rooms view) keeps only the
+mode and the two signals — the four period times no longer duplicate there:
+a setting has one home, the Réglages view.
+
 ## 0.6.0 — the family's controls (2026-08-31, W3b)
 
 Four asks from the house's owner, one block: `controls:` — every autonomous

@@ -88,8 +88,12 @@ def test_the_house_card(rendered):
     )
     card = next(c for c in dash["views"][0]["cards"] if c.get("title") == "Maison")
     ids = [e["entity"] for e in card["entities"]]
-    assert ids[:3] == ["input_select.house_mode", "sensor.house_period", "sensor.daylight"]
-    assert "input_datetime.house_period_evening" in ids
+    assert ids == ["input_select.house_mode", "sensor.house_period", "sensor.daylight"], (
+        "the times are settings: with the panel on they live on Réglages alone"
+    )
+    settings = next(v for v in dash["views"] if v["path"] == "settings")
+    house = next(c for c in settings["cards"] if c.get("title") == "Maison")
+    assert "input_datetime.house_period_evening" in [e["entity"] for e in house["entities"]]
 
 
 def test_a_mode_with_scene_none_is_a_pure_state_flip(house_with, secrets, tmp_path):

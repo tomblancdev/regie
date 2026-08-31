@@ -9,8 +9,11 @@
       name: {{ labels.ui.period | to_yaml }}
     - entity: sensor.daylight
       name: {{ labels.ui.daylight | to_yaml }}
+{% if not controls.panel %}
+{# the times are SETTINGS: with the panel they live on Réglages alone #}
 {% for p in modes.periods %}
     - entity: input_datetime.house_period_{{ p.id }}
       name: {{ (labels.ui.period_begins ~ ' — ' ~ p.label) | to_yaml }}
 {% endfor %}
+{% endif %}
 {% endif %}
