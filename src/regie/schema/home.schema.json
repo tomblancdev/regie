@@ -482,7 +482,7 @@
               }
             ]
           },
-          "description": "per period (the keys of modes.periods): the scene \"on\" means then — a scene id, or one per daylight (dark / dim / bright). sensor.<room>_default carries it; every turn-on path applies it"
+          "description": "what 'on' MEANS — a LOOK, never a state (H34): daylight-first — `dark` / `dim` / `bright` keys are the base the sun drives, period keys (modes.periods) override their stretch of the day (a scene, or a partial daylight map); or period-first (the original form). sensor.<room>_default carries it; every turn-on path applies it; a default that lights nothing (`off`, or a scene whose every look is off) is refused"
         },
         "behaviours": {
           "type": "object",
@@ -771,7 +771,7 @@
           "description": "the mouth stays silent in this mode unless the severity is alarm (binary_sensor.house_quiet)"
         },
         "scene": {
-          "description": "the scene every room takes when the house enters this mode: a scene id, `default` (the room's default for the period), or `off`",
+          "description": "the scene every room takes when the house enters this mode: a scene id, `default` (the room's default for the period), `off`, or `none` — the mode touches NO light, entering it is a pure state flip (H35: `home` only ends `away`; the auto-alarm's hook)",
           "oneOf": [
             {
               "$ref": "#/$defs/id"

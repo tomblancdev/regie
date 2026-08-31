@@ -4,4 +4,4 @@ id: bedroom_b
 roles: { lamp: {} }
 scenes:
   soft: { lamp: { brightness: 30, ct: warm } }
-defaults: { morning: soft, day: soft, evening: soft, night: soft }
+defaults: { dark: soft, dim: soft, bright: soft }   # daylight-first (H34): the sun drives, no period override

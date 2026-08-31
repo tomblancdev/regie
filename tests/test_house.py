@@ -179,3 +179,62 @@ def test_a_light_may_not_wear_its_roles_name(house_with):
 
     with pytest.raises(HouseError, match=r"hall_main: a light may not wear its role's name"):
         load_house(house_with(add))
+
+
+def test_daylight_first_defaults_cover_every_period(witness):
+    b = next(a for a in witness.areas if a["id"] == "bedroom_b")
+    table = witness.defaults_of(b)
+    assert set(table) == {"morning", "day", "evening", "night"}
+    assert all(row == {"dark": "soft", "dim": "soft", "bright": "soft"} for row in table.values())
+
+
+def test_a_period_key_overrides_the_daylight_base(house_with):
+    def mutate(d):
+        for a in d["areas"]:
+            if a["id"] == "hall":
+                a["defaults"] = {
+                    "dark": "dim",
+                    "dim": "dim",
+                    "bright": "dim",
+                    "night": {"dark": "dim"},
+                }
+
+    house = load_house(house_with(mutate))
+    hall = next(a for a in house.areas if a["id"] == "hall")
+    table = house.defaults_of(hall)
+    assert table["day"] == {"dark": "dim", "dim": "dim", "bright": "dim"}
+    # night's partial map rides the base for what it does not say
+    assert table["night"] == {"dark": "dim", "dim": "dim", "bright": "dim"}
+
+
+def test_a_default_that_lights_nothing_is_refused(house_with):
+    # the hall's defaults live in rooms/hall.yml (include: the file's keys win)
+    path = house_with(lambda d: None)
+    room = path.parent / "rooms" / "hall.yml"
+    room.write_text(
+        room.read_text(encoding="utf-8").replace(
+            "defaults: { morning: dim, day: dim, evening: dim, night: dim }",
+            "defaults: { morning: off, day: dim, evening: dim, night: dim }",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(HouseError, match="hall: default morning/dark is 'off', which lights"):
+        load_house(path)
+
+
+def test_a_default_naming_an_all_off_scene_is_refused(house_with):
+    path = house_with(lambda d: None)
+    room = path.parent / "rooms" / "hall.yml"
+    text = room.read_text(encoding="utf-8")
+    text = text.replace(
+        "defaults: { morning: dim, day: dim, evening: dim, night: dim }",
+        "defaults: { morning: blackout, day: dim, evening: dim, night: dim }",
+    )
+    text += "\n"  # the scene block sits under scenes: in the file
+    text = text.replace(
+        "  dim: { main: { brightness: 20, ct: warm } }",
+        "  dim: { main: { brightness: 20, ct: warm } }\n  blackout: { main: off }",
+    )
+    room.write_text(text, encoding="utf-8")
+    with pytest.raises(HouseError, match="is 'blackout', which lights nothing"):
+        load_house(path)

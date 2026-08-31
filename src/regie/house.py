@@ -66,9 +66,13 @@ def base_schema() -> dict:
 
 
 def scene_ref(value) -> str | None:
-    """A scene named in a file: YAML 1.1 reads a bare `off` as false — both mean off."""
+    """A scene named in a file: YAML 1.1 reads a bare `off` as false — both
+    mean off; `none` (or nothing) means NO scene — a mode that touches no
+    light (H35: entering `home` is a pure state flip)."""
     if value is False:
         return "off"
+    if value in (None, "none"):
+        return None
     return value
 
 
@@ -426,14 +430,38 @@ class House:
         return {p["id"] for p in self.scene_plan(area) if p["renders"]}
 
     def defaults_of(self, area: dict) -> dict[str, dict[str, str]]:
-        """The room's default per period, always as a map by daylight."""
+        """The room's default per period, always as a map by daylight.
+
+        Two forms (H34 — a default is a LOOK, what "on" means, never a
+        state): daylight-first — top-level `dark` / `dim` / `bright` keys
+        are the base the sun drives, period keys override it for their
+        stretch of the day (a scene for the whole period, or a partial
+        daylight map); period-first — the original form, period keys only.
+        With a daylight base the table covers every period of the modes."""
+        raw = area.get("defaults") or {}
+        if not raw:
+            return {}
+        base = {d: scene_ref(raw[d]) for d in DAYLIGHT if d in raw}
+        period_keys = [k for k in raw if k not in DAYLIGHT]
+        m = self.modes()
+        periods = [p["id"] for p in m["periods"]] if m else period_keys
         out = {}
-        for period, value in (area.get("defaults") or {}).items():
-            if not isinstance(value, dict):
-                out[period] = dict.fromkeys(DAYLIGHT, scene_ref(value))
+        for period in periods if base else period_keys:
+            value = raw.get(period)
+            if value is None:
+                row = dict(base)
+            elif not isinstance(value, dict):
+                row = dict.fromkeys(DAYLIGHT, scene_ref(value))
             else:
+                fallback = dict(base) if base else {}
                 first = scene_ref(next(iter(value.values())))
-                out[period] = {d: scene_ref(value.get(d, first)) for d in DAYLIGHT}
+                row = {d: scene_ref(value.get(d, fallback.get(d, first))) for d in DAYLIGHT}
+            missing = [d for d in DAYLIGHT if row.get(d) is None]
+            if missing and row:
+                first = next(v for v in row.values() if v is not None)
+                for d in missing:
+                    row[d] = first
+            out[period] = row
         return out
 
     def modes(self) -> dict | None:
@@ -477,6 +505,11 @@ class House:
             "clock": clock,
             "daylight": daylight,
             "follow": bool(m.get("follow", True)),
+            # the modes `follow` may act in: no imposed look — the mode's
+            # scene is `default` (the rooms are AT their defaults) or `none`
+            # (the mode has no opinion); a mode imposing a scene (night,
+            # cinema, off) is never fought by a boundary
+            "following": [x["id"] for x in modes if x["scene"] in (None, "default")],
         }
 
     def mode_scene(self, mode: dict, area: dict) -> str | None:
@@ -684,16 +717,32 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             hints.append(
                 f"{a['id']}: scene(s) {', '.join(waiting)} wait for their roles, no script yet"
             )
-        for period, value in house.defaults_of(a).items():
+        raw_defaults = a.get("defaults") or {}
+        has_base = any(d in raw_defaults for d in DAYLIGHT)
+        for period in raw_defaults:
+            if period in DAYLIGHT:
+                continue
             if period_ids and period not in period_ids:
                 errors.append(f"{a['id']}: defaults name period {period!r} — not in modes.periods")
+        lightless = {
+            s
+            for s, looks in (a.get("scenes") or {}).items()
+            if looks and all(not normalise_look(v)["on"] for v in looks.values())
+        }
+        for period, value in house.defaults_of(a).items():
             for d, scene in value.items():
                 if scene not in scenes and scene != "off":
                     errors.append(
                         f"{a['id']}: default {period}/{d} names scene {scene!r} — the room has none"
                     )
-        if a.get("defaults") and period_ids:
-            missing = [p for p in period_ids if p not in a["defaults"]]
+                elif scene == "off" or scene in lightless:
+                    errors.append(
+                        f"{a['id']}: default {period}/{d} is {scene!r}, which lights nothing — "
+                        "a default is what 'on' MEANS (H34); a person's off is the switch or "
+                        "the mode, never the clock"
+                    )
+        if raw_defaults and period_ids and not has_base:
+            missing = [p for p in period_ids if p not in raw_defaults]
             if missing:
                 warnings.append(
                     f"{a['id']}: no default for period(s) {', '.join(missing)} — "

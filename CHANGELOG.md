@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.2 — a default is a look, a mode may be a pure flip (2026-08-31)
+
+The house's first lived-in morning (three bulbs, one 06:30) re-cut the
+vocabulary's top layer. Two rules, from the owner's own words:
+
+- **defaults are LOOKS, daylight-first (H34)** — a room's `defaults:` may
+  now put `dark` / `dim` / `bright` at the top level: the base the sun
+  drives through the year with nothing to edit; period keys override their
+  stretch of the day (a scene, or a partial daylight map riding the base).
+  The period-first form stays valid. And a default may not light nothing:
+  `off`, or a scene whose every look is off, is **refused** by `check` — a
+  default is what "on" *means* when someone acts; a person's off is the
+  switch or the mode, never the clock
+- **`scene: none` on a mode (H35)** — entering it is a pure state flip: no
+  automation renders, no light is touched (`home` = ending `away`, the
+  auto-alarm's hook); `follow` still counts such a mode (it has no opinion
+  to fight) — the following set is computed in the engine now (modes whose
+  scene is `default` or `none`), not in the template
+- the witness's night scenes became looks (a 5 % glimmer, never all-off)
+
 ## 0.5.1 — a release carries its own pin (2026-08-30)
 
 The v0.5.0 tag's collection still said `regie_version: v0.4.1` in role

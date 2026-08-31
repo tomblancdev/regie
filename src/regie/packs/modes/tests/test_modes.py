@@ -85,3 +85,26 @@ def test_the_house_card(rendered):
     ids = [e["entity"] for e in card["entities"]]
     assert ids[:3] == ["input_select.house_mode", "sensor.house_period", "sensor.daylight"]
     assert "input_datetime.house_period_evening" in ids
+
+
+def test_a_mode_with_scene_none_is_a_pure_state_flip(house_with, secrets, tmp_path):
+    """H35: entering `home` only ends `away` — no automation, no light; and
+    `follow` still counts it (the mode has no opinion to fight)."""
+    from regie.house import load_house
+    from regie.render import render
+
+    path = house_with(lambda d: None)  # the modes live in modes.yml (include)
+    modes_file = path.parent / "modes.yml"
+    modes_file.write_text(
+        modes_file.read_text(encoding="utf-8").replace(
+            'home:   { label: "À la maison", scene: default }',
+            'home:   { label: "À la maison", scene: none }',
+        ),
+        encoding="utf-8",
+    )
+    house = load_house(path)
+    render(house, tmp_path, secrets)
+    pkg = yaml.safe_load((tmp_path / "home-assistant/packages/modes.yaml").read_text())
+    autos = {a["id"]: a for a in pkg["automation"]}
+    assert "regie_mode_home" not in autos, "nothing to do: no scene, no automation"
+    assert autos["regie_defaults_follow"]["conditions"][0]["state"] == ["home"]

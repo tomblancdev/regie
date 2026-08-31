@@ -2,5 +2,5 @@ id: bedroom_a
 roles: { main: {} }
 scenes:
   evening: { main: { brightness: 40, ct: warm } }
-  night:   { main: off }
+  night:   { main: { brightness: 5, ct: warm } }   # a LOOK (H34)
 defaults: { morning: evening, day: evening, evening: evening, night: night }

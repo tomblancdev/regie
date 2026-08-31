@@ -41,7 +41,7 @@ input_select:
 {% set _ = auto.update({'actions': [{'action': 'input_select.select_option', 'target': {'entity_id': 'input_select.house_mode'}, 'data': {'option': rule.to}}]}) %}
 {% set _ = ns.automations.append(auto) %}
 {% endfor %}
-{% set following = modes.modes | selectattr('scene', 'equalto', 'default') | map(attribute='id') | list %}
+{% set following = modes.following %}
 {% set lit_rooms = [] %}
 {% for a in areas if modes.follow and following and rendered_scenes(a) %}{% set _ = lit_rooms.append(a) %}{% endfor %}
 {% if lit_rooms %}

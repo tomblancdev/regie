@@ -15,7 +15,7 @@ scenes:
   day:     { main: on, lamp: off }
   evening: { main: { brightness: 60, ct: warm }, lamp: on }
   cinema:  { main: off, lamp: { brightness: 10, ct: warm }, strip: { color: "#200000" } }
-  night:   { main: off, lamp: off }
+  night:   { main: off, lamp: { brightness: 5, ct: warm } }   # a LOOK (H34): the night-light glimmer, never all-off
 defaults:                               # per period; a scene, or one per daylight
   morning: { dark: evening, dim: day, bright: day }
   day:     day
