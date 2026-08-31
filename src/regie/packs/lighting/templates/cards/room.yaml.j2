@@ -4,6 +4,18 @@
   title: {{ area.label | to_yaml }}
   state_color: true
   entities:
+{% if kinds.get('light', []) and area.get('defaults') %}
+    # the main gesture (W3b): "on" goes through the room's DEFAULT look;
+    # the raw rows below stay — they are the override path
+    - type: buttons
+      entities:
+        - entity: script.{{ area.id }}_default
+          name: {{ labels.ui.turn_on_default | to_yaml }}
+          icon: mdi:lightbulb-auto
+        - entity: script.{{ area.id }}_off
+          name: {{ labels.ui.turn_off | to_yaml }}
+          icon: mdi:lightbulb-off-outline
+{% endif %}
 {% if kinds.get('light', []) %}
     - entity: light.{{ area.id }}_lights
       name: {{ labels.ui.lights | to_yaml }}

@@ -21,18 +21,18 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 
 # verb → (what it will do, the release that builds it)
 NOT_YET = {
-    "backup": ("Home Assistant's own backup, now, through its API", "0.6 — the Zigbee walk"),
+    "backup": ("Home Assistant's own backup, now, through its API", "0.7 — the Zigbee walk"),
     "restore": (
         "Home Assistant's own backup file, restored through its API",
-        "0.6 — the Zigbee walk",
+        "0.7 — the Zigbee walk",
     ),
     "doctor": (
         "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.6 — the Zigbee walk",
+        "0.7 — the Zigbee walk",
     ),
     "suggest": (
         "the mesh's opinion on rooms, from link quality — suggests, never assigns",
-        "0.6 — the Zigbee walk",
+        "0.7 — the Zigbee walk",
     ),
     "migrate": ("move a home.yml to the current schema", "with the first schema bump"),
 }
@@ -75,6 +75,12 @@ def report(house: House, secrets: dict) -> None:
             f"{len(c['things'])} paired, {len(c['groups'])} room groups, topic {c['base_topic']}"
         )
     print("mqtt users: " + ", ".join(u["name"] for u in house.mqtt_users()))
+    c = house.controls()
+    if "controls" in house.data:
+        print(
+            "controls: "
+            + " · ".join(f"{k.replace('_', '-')} {'on' if v else 'off'}" for k, v in c.items())
+        )
     if house.has_pack("matter"):
         matter = [t for t in house.things if t["via"] in ("matter", "thread")]
         keyed = sum(1 for t in matter if t.get("serial"))
@@ -255,7 +261,7 @@ def cmd_pair(args) -> int:
     by a code, adopted into a proposed row. The Zigbee half lands in 0.6."""
     if not args.matter:
         print(
-            "regie pair: the Zigbee walk (the join window, the interviews) lands in 0.6 — "
+            "regie pair: the Zigbee walk (the join window, the interviews) lands in 0.7 — "
             "the Matter half is here: `regie pair home.yml --matter --room <area> "
             "[--role <role> --at <place>] [--code <code>]`",
             file=sys.stderr,
@@ -446,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
         "pair",
         help="the walk. --matter: a thing commissioned by the phone (or by --code) adopted "
         "into a proposed row — the room is the session, the role and the place the flags, "
-        "the serial the key. The Zigbee half: 0.6",
+        "the serial the key. The Zigbee half: 0.7",
     )
     s.add_argument("home", type=Path)
     s.add_argument("--matter", action="store_true", help="the Matter half of the walk")

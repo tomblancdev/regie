@@ -1,0 +1,13 @@
+{% if modes and defaults_base(area) and look_options(area) %}
+- type: entities
+  title: {{ area.label | to_yaml }}
+  entities:
+{% for d in ['dark', 'dim', 'bright'] %}
+    - entity: input_select.{{ area.id }}_look_{{ d }}
+      name: {{ labels.ui['look_' ~ d] | to_yaml }}
+{% endfor %}
+{% for period in modes.periods %}
+    - entity: input_select.{{ area.id }}_look_{{ period.id }}
+      name: {{ (labels.ui.look_period ~ ' ' ~ period.label) | to_yaml }}
+{% endfor %}
+{% endif %}

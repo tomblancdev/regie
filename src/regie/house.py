@@ -156,6 +156,41 @@ class House:
                     out.add(f"light.{a['id']}_{role}_{g['prefix']}")
         return out
 
+    def controls(self) -> dict:
+        """The family's controls (W3b): every switch explicit, defaults off —
+        a house opts in; `silent` is the one on by default (an alert is a
+        sane default; a house may hush it)."""
+        c = dict(self.data.get("controls") or {})
+        return {
+            "panel": bool(c.get("panel", False)),
+            "presence": bool(c.get("presence", False)),
+            "restore_default": bool(c.get("restore_default", False)),
+            "silent": bool(c.get("silent", True)),
+        }
+
+    def look_options(self, area: dict) -> list[str]:
+        """The scenes a room's default may take (the settings panel's
+        choices): rendered, and lighting something — H34's rule as a list."""
+        out = []
+        for scene_id, looks in (area.get("scenes") or {}).items():
+            if scene_id == "off" or not looks:
+                continue
+            if all(not normalise_look(v)["on"] for v in looks.values()):
+                continue
+            out.append(scene_id)
+        return out
+
+    def defaults_base(self, area: dict) -> dict[str, str]:
+        """The daylight base of a room's defaults (H34), filled: a missing
+        daylight takes the first named one."""
+        raw = area.get("defaults") or {}
+        base = {d: scene_ref(raw[d]) for d in DAYLIGHT if d in raw}
+        if base:
+            first = next(iter(base.values()))
+            for d in DAYLIGHT:
+                base.setdefault(d, first)
+        return base
+
     def matter_only_fabric(self) -> bool:
         return bool((self.data.get("matter") or {}).get("only_fabric", False))
 
@@ -552,6 +587,46 @@ class House:
                 "reads": lambda state: state,
             }
         )
+        controls = self.controls()
+        if controls["presence"]:
+            out.append(
+                {
+                    "entity": "input_boolean.presence_drives_mode",
+                    "action": "input_boolean/turn_on",
+                    "data": {},
+                    "value": "on",
+                    "reads": lambda state: state,
+                }
+            )
+        if controls["panel"]:
+            period_ids = [p["id"] for p in m["periods"]]
+            for a in self.areas:
+                raw = a.get("defaults") or {}
+                base = self.defaults_base(a)
+                if not base:
+                    continue
+                for d in DAYLIGHT:
+                    out.append(
+                        {
+                            "entity": f"input_select.{a['id']}_look_{d}",
+                            "action": "input_select/select_option",
+                            "data": {"option": base[d]},
+                            "value": base[d],
+                            "reads": lambda state: state,
+                        }
+                    )
+                for period in period_ids:
+                    value = raw.get(period)
+                    seed = scene_ref(value) if isinstance(value, str | bool) else "sun"
+                    out.append(
+                        {
+                            "entity": f"input_select.{a['id']}_look_{period}",
+                            "action": "input_select/select_option",
+                            "data": {"option": seed},
+                            "value": seed,
+                            "reads": lambda state: state,
+                        }
+                    )
         return out
 
     def fx(self) -> dict:
@@ -719,6 +794,21 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             )
         raw_defaults = a.get("defaults") or {}
         has_base = any(d in raw_defaults for d in DAYLIGHT)
+        if house.controls()["panel"] and raw_defaults:
+            if not has_base:
+                errors.append(
+                    f"{a['id']}: the settings panel (controls.panel) needs daylight-first "
+                    "defaults (H34) — a dark/dim/bright base the selects can carry"
+                )
+            partial = [
+                k for k, v in raw_defaults.items() if k not in DAYLIGHT and isinstance(v, dict)
+            ]
+            if partial:
+                errors.append(
+                    f"{a['id']}: the settings panel cannot carry a partial period map "
+                    f"({', '.join(partial)}) — a period override on the panel is a whole "
+                    "scene, or `sun`"
+                )
         for period in raw_defaults:
             if period in DAYLIGHT:
                 continue

@@ -22,7 +22,8 @@ def test_a_room_with_lights_gets_its_group_and_its_silent_alert(rendered):
         pkg["homeassistant"]["customize"]["light.living_lights"]["friendly_name"]
         == "Salon — lumières"
     )
-    (silent,) = pkg["automation"]
+    autos = {a["id"]: a for a in pkg["automation"]}
+    silent = autos["regie_living_silent"]
     assert silent["id"] == "regie_living_silent"
     assert "light.living_floor_lamp" in silent["triggers"][0]["entity_id"]
     assert "binary_sensor.hall_motion" not in silent["triggers"][0]["entity_id"], (
@@ -95,3 +96,38 @@ def test_a_role_gets_its_group_and_a_layout_its_rows(rendered):
     names = pkg["homeassistant"]["customize"]
     assert names["light.living_main"]["friendly_name"] == "Salon — Plafond"
     assert names["light.living_main_front"]["friendly_name"] == "Salon — Plafond front"
+
+
+def test_restore_default_and_the_silent_gate(rendered, house_with, secrets, tmp_path):
+    import yaml as _yaml
+
+    from regie.house import load_house
+    from regie.render import render as _render
+
+    pkg = _yaml.safe_load(
+        (rendered / "home-assistant/packages/lighting_living.yaml").read_text(encoding="utf-8")
+    )
+    autos = {a["id"]: a for a in pkg["automation"]}
+    restore = autos["regie_living_restore_default"]
+    assert {
+        "trigger": "state",
+        "entity_id": "light.living_floor_lamp",
+        "from": "unavailable",
+        "to": "on",
+    } in restore["triggers"]
+    assert restore["actions"][0]["target"]["entity_id"] == "script.living_default"
+    assert "regie_living_silent" in autos, "silent stays on by default"
+
+    hushed = load_house(
+        house_with(lambda d: d.update(controls={"silent": False, "restore_default": False}))
+    )
+    _render(hushed, tmp_path, secrets)
+    pkg2 = _yaml.safe_load(
+        (tmp_path / "home-assistant/packages/lighting_bedroom_a.yaml").read_text(encoding="utf-8")
+    )
+    assert "automation" not in pkg2, "no motions, no restore, silent off: no automation block"
+
+
+def test_the_room_card_leads_with_the_smart_on(rendered):
+    text = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    assert "script.living_default" in text and "script.living_off" in text

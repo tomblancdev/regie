@@ -2,4 +2,4 @@ id: hall
 roles: { main: {}, motion: {}, door: {} }
 scenes:
   dim: { main: { brightness: 20, ct: warm } }
-defaults: { morning: dim, day: dim, evening: dim, night: dim }
+defaults: { dark: dim, dim: dim, bright: dim }   # daylight-first (H34): always its one look

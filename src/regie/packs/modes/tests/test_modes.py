@@ -74,7 +74,12 @@ def test_a_house_with_no_filled_role_still_gets_the_machine(house_with, secrets,
     pkg = yaml.safe_load((tmp_path / "home-assistant/packages/modes.yaml").read_text())
     assert pkg["input_select"]["house_mode"]["options"][0] == "home"
     ids = [a["id"] for a in pkg["automation"]]
-    assert ids == ["regie_clock_night", "regie_clock_morning"], "the clock rules need no light"
+    assert ids == [
+        "regie_clock_night",
+        "regie_clock_morning",
+        "regie_presence_away",
+        "regie_presence_home",
+    ], "the clock rules and presence need no light"
 
 
 def test_the_house_card(rendered):
@@ -108,3 +113,21 @@ def test_a_mode_with_scene_none_is_a_pure_state_flip(house_with, secrets, tmp_pa
     autos = {a["id"]: a for a in pkg["automation"]}
     assert "regie_mode_home" not in autos, "nothing to do: no scene, no automation"
     assert autos["regie_defaults_follow"]["conditions"][0]["state"] == ["home"]
+
+
+def test_presence_drives_home_and_away_behind_its_kill_switch(rendered):
+    pkg = load(rendered)
+    assert "presence_drives_mode" in pkg["input_boolean"]
+    autos = {a["id"]: a for a in pkg["automation"]}
+    away = autos["regie_presence_away"]
+    assert away["triggers"][0] == {
+        "trigger": "numeric_state",
+        "entity_id": "zone.home",
+        "below": 1,
+        "for": "00:05:00",
+    }
+    states = [c["state"] for c in away["conditions"]]
+    assert "on" in states and "home" in states
+    home = autos["regie_presence_home"]
+    assert home["conditions"][1]["state"] == "away"
+    assert home["actions"][0]["data"] == {"option": "home"}

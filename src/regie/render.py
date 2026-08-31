@@ -124,6 +124,9 @@ def context(house: House, secrets: dict) -> dict:
         "defaults_of": house.defaults_of,
         "mode_scene": house.mode_scene,
         "area_aliases": house.area_aliases,
+        "controls": house.controls(),
+        "look_options": house.look_options,
+        "defaults_base": house.defaults_base,
     }
 
 
@@ -148,10 +151,10 @@ def item_context(house: House, key: str | None, item: dict | None, index: int) -
     return ctx
 
 
-def _render_cards(env: Environment, house: House, ctx: dict) -> list[str]:
+def _render_cards(env: Environment, house: House, ctx: dict, kind: str = "cards") -> list[str]:
     cards = []
     for p in house.packs:
-        for c in p.cards:
+        for c in p.cards if kind == "cards" else p.settings:
             for i, (key, item) in enumerate(each_items(house, c.get("each"))):
                 text = env.get_template(f"pack/{p.name}:{c['src']}").render(
                     ctx, **item_context(house, key, item, i)
@@ -194,6 +197,9 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
     env = make_env(house)
     ctx = context(house, secrets)
     ctx["cards"] = _render_cards(env, house, ctx)
+    ctx["settings_cards"] = (
+        _render_cards(env, house, ctx, kind="settings") if house.controls()["panel"] else []
+    )
 
     manifest_path = out / MANIFEST
     previous: set[str] = set()

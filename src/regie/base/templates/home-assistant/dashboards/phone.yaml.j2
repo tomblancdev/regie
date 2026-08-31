@@ -1,4 +1,5 @@
-# rendered by La Régie — the phone dashboard: one card per room, from the packs
+# rendered by La Régie — the phone dashboard: one card per room, from the
+# packs; a second view (Réglages) when the house carries controls.panel
 title: {{ labels.ui.home }}
 views:
   - title: {{ labels.ui.rooms }}
@@ -7,3 +8,12 @@ views:
 {% for card in cards %}
 {{ card | indent(6, first=True) }}
 {% endfor %}
+{% if settings_cards %}
+  - title: {{ labels.ui.settings }}
+    path: settings
+    icon: mdi:tune
+    cards:
+{% for card in settings_cards %}
+{{ card | indent(6, first=True) }}
+{% endfor %}
+{% endif %}

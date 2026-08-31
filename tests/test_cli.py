@@ -19,6 +19,7 @@ def test_check_reports_and_passes(witness_path, capsys):
     )
     assert "secrets: 9 needed, all present" in out
     assert "matter: the server beside the brain (ws://localhost:5580/ws), 1 thing(s)" in out
+    assert "controls: panel on · presence on · restore-default on · silent on" in out
     assert "not paired yet" in out and out.rstrip().endswith("ok")
 
 
@@ -54,10 +55,10 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
     assert main(["doctor", str(witness_path)]) == 2
-    assert "lands in 0.6 — the Zigbee walk" in capsys.readouterr().err
+    assert "lands in 0.7 — the Zigbee walk" in capsys.readouterr().err
     # pair is built for Matter; its Zigbee half says when it lands
     assert main(["pair", str(witness_path), "--room", "living"]) == 2
-    assert "lands in 0.6" in capsys.readouterr().err
+    assert "lands in 0.7" in capsys.readouterr().err
 
 
 def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):

@@ -368,9 +368,11 @@ class FakeHA(HomeAssistant):
             return 200, {"message": "API running."}
         if path.startswith("/api/states/"):
             entity = path.rsplit("/", 1)[1]
-            if entity.split(".")[0] not in ("input_datetime", "input_select"):
+            if entity.split(".")[0] not in ("input_datetime", "input_select", "input_boolean"):
                 return 404, {"message": "Entity not found."}
-            fresh = "00:00:00" if entity.startswith("input_datetime.") else "home"
+            fresh = {"input_datetime": "00:00:00", "input_select": "home", "input_boolean": "off"}[
+                entity.split(".")[0]
+            ]
             return 200, {"entity_id": entity, "state": self.states.get(entity, fresh)}
         if path.startswith("/api/config/config_entries/entry?domain="):
             return 200, [
@@ -414,7 +416,12 @@ class FakeHA(HomeAssistant):
             self.onboarded[step] = True
             return 200, {} if step != "integration" else {"auth_code": "x"}
         if path.startswith("/api/services/"):
-            self.states[body["entity_id"]] = body.get("time") or body.get("option")
+            if path.endswith("/turn_on") and body["entity_id"].startswith("input_boolean."):
+                self.states[body["entity_id"]] = "on"
+            elif path.endswith("/turn_off") and body["entity_id"].startswith("input_boolean."):
+                self.states[body["entity_id"]] = "off"
+            else:
+                self.states[body["entity_id"]] = body.get("time") or body.get("option")
             return 200, []
         if path == FLOWS:
             self.n += 1

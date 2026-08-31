@@ -270,6 +270,33 @@
         }
       }
     },
+    "controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the family's controls (W3b, H36): what the house exposes as simple forms and visible switches — every autonomous piece has an off-switch a person can reach",
+      "properties": {
+        "panel": {
+          "type": "boolean",
+          "default": false,
+          "description": "the settings view:each room's default LOOKS become selects the family edits (per daylight, and per period with `sun` = follow the sun) — seeded once from the files, the UI owns them after; needs daylight-first defaults (H34)"
+        },
+        "presence": {
+          "type": "boolean",
+          "default": false,
+          "description": "the phones drive home/away (zone.home: last one leaves → away, first one back → home) — behind input_boolean.presence_drives_mode, a visible kill-switch seeded on"
+        },
+        "restore_default": {
+          "type": "boolean",
+          "default": false,
+          "description": "a light coming back from power (the wall switch, an outage) takes its room's default look instead of its last state"
+        },
+        "silent": {
+          "type": "boolean",
+          "default": true,
+          "description": "the '<room> — ne répond plus' alerts (a thing unavailable an hour); off = no notification renders"
+        }
+      }
+    },
     "mqtt": {
       "type": "object",
       "additionalProperties": false,

@@ -149,7 +149,10 @@ def test_the_dashboard_has_a_card_per_room_and_the_house_pack_card(rendered):
     assert [c["type"] for c in cards] == ["entities"] * 6 + ["markdown"]
     assert cards[0]["title"] == "Maison", "the house card (pack modes) comes first: packs order"
     living = next(c for c in cards if c["title"] == "Salon")
-    assert living["entities"][0] == {"entity": "light.living_lights", "name": "lumières"}
+    # the smart-on leads (W3b); the raw rows follow as the override path
+    assert living["entities"][0]["type"] == "buttons"
+    assert living["entities"][0]["entities"][0]["entity"] == "script.living_default"
+    assert living["entities"][1] == {"entity": "light.living_lights", "name": "lumières"}
     assert {"entity": "light.living_floor_lamp", "name": "Lampadaire"} in living["entities"]
     assert "pack `chalet`" in cards[-1]["content"]
 

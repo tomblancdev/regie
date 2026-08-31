@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0 — the family's controls (2026-08-31, W3b)
+
+Four asks from the house's owner, one block: `controls:` — every autonomous
+piece explicit, every one with an off-switch a person can reach.
+
+- **`panel`** — the settings view (« Réglages » on the phone dashboard):
+  each room's default LOOKS become selects the family edits with a simple
+  form — one per daylight (`dark` / `dim` / `bright`) and one per period
+  whose first choice is **`sun`** (= follow the sun, no override). Seeded
+  once from the files (the knob pattern), the UI owns them after; the
+  room's default sensor reads the selects. Needs daylight-first defaults
+  (H34); a partial period map cannot ride a form — `check` says so
+- **`presence`** — the phones drive home/away: last one leaves (zone.home
+  = 0, five quiet minutes) → `away`; first one back → `home`; only ever
+  between those two, and only while the visible kill-switch
+  (`input_boolean.presence_drives_mode`, seeded on) is on
+- **`restore_default`** — a light coming back from power (the wall switch,
+  an outage) takes its room's **default look**, never its last state
+- **`silent: false`** — the "ne répond plus" alerts hushed (the notify
+  story is a later choice); on by default in the product
+- the Zigbee walk moves to 0.7
+
 ## 0.5.2 — a default is a look, a mode may be a pure flip (2026-08-31)
 
 The house's first lived-in morning (three bulbs, one 06:30) re-cut the

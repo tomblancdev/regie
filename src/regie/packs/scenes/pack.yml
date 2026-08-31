@@ -11,4 +11,6 @@ kinds: []
 services: []
 templates:
   - { src: packages/scenes.yaml.j2, dst: "home-assistant/packages/scenes_{{ area.id }}.yaml", each: areas }
+settings:
+  - { src: settings/room.yaml.j2, each: areas }
 cards: []

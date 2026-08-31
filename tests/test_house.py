@@ -189,17 +189,20 @@ def test_daylight_first_defaults_cover_every_period(witness):
 
 
 def test_a_period_key_overrides_the_daylight_base(house_with):
-    def mutate(d):
-        for a in d["areas"]:
-            if a["id"] == "hall":
-                a["defaults"] = {
-                    "dark": "dim",
-                    "dim": "dim",
-                    "bright": "dim",
-                    "night": {"dark": "dim"},
-                }
-
-    house = load_house(house_with(mutate))
+    # the hall's defaults live in rooms/hall.yml (include: the file's keys
+    # win); a PARTIAL period map cannot ride the settings panel, so it is
+    # turned off for this house
+    path = house_with(lambda d: d.update(controls={"panel": False}))
+    room = path.parent / "rooms" / "hall.yml"
+    room.write_text(
+        room.read_text(encoding="utf-8").replace(
+            "defaults: { dark: dim, dim: dim, bright: dim }   "
+            "# daylight-first (H34): always its one look",
+            "defaults: { dark: dim, dim: dim, bright: dim, night: { dark: dim } }",
+        ),
+        encoding="utf-8",
+    )
+    house = load_house(path)
     hall = next(a for a in house.areas if a["id"] == "hall")
     table = house.defaults_of(hall)
     assert table["day"] == {"dark": "dim", "dim": "dim", "bright": "dim"}
@@ -213,8 +216,9 @@ def test_a_default_that_lights_nothing_is_refused(house_with):
     room = path.parent / "rooms" / "hall.yml"
     room.write_text(
         room.read_text(encoding="utf-8").replace(
-            "defaults: { morning: dim, day: dim, evening: dim, night: dim }",
-            "defaults: { morning: off, day: dim, evening: dim, night: dim }",
+            "defaults: { dark: dim, dim: dim, bright: dim }   "
+            "# daylight-first (H34): always its one look",
+            "defaults: { dark: off, dim: dim, bright: dim }",
         ),
         encoding="utf-8",
     )
@@ -227,14 +231,58 @@ def test_a_default_naming_an_all_off_scene_is_refused(house_with):
     room = path.parent / "rooms" / "hall.yml"
     text = room.read_text(encoding="utf-8")
     text = text.replace(
-        "defaults: { morning: dim, day: dim, evening: dim, night: dim }",
-        "defaults: { morning: blackout, day: dim, evening: dim, night: dim }",
+        "defaults: { dark: dim, dim: dim, bright: dim }   "
+        "# daylight-first (H34): always its one look",
+        "defaults: { dark: blackout, dim: dim, bright: dim }",
     )
-    text += "\n"  # the scene block sits under scenes: in the file
     text = text.replace(
         "  dim: { main: { brightness: 20, ct: warm } }",
         "  dim: { main: { brightness: 20, ct: warm } }\n  blackout: { main: off }",
     )
     room.write_text(text, encoding="utf-8")
     with pytest.raises(HouseError, match="is 'blackout', which lights nothing"):
+        load_house(path)
+
+
+def test_the_knobs_carry_the_panel_and_the_presence_switch(witness):
+    knobs = {k["entity"]: k["value"] for k in witness.knobs()}
+    assert knobs["input_boolean.presence_drives_mode"] == "on"
+    assert knobs["input_select.living_look_dark"] == "evening"
+    assert knobs["input_select.living_look_bright"] == "day"
+    assert knobs["input_select.living_look_night"] == "night"
+    assert knobs["input_select.living_look_morning"] == "sun"  # no override: follow the sun
+    assert knobs["input_select.hall_look_night"] == "sun"
+    # 4 rooms with a base × (3 daylights + 4 periods) + 4 times + mode + presence
+    assert len(knobs) == 4 * 7 + 6
+
+
+def test_the_panel_needs_a_daylight_base(house_with):
+    path = house_with(lambda d: None)
+    room = path.parent / "rooms" / "hall.yml"
+    room.write_text(
+        room.read_text(encoding="utf-8").replace(
+            "defaults: { dark: dim, dim: dim, bright: dim }   "
+            "# daylight-first (H34): always its one look",
+            "defaults: { morning: dim, day: dim, evening: dim, night: dim }",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(HouseError, match="hall: the settings panel .* needs daylight-first"):
+        load_house(path)
+
+
+def test_the_panel_refuses_a_partial_period_map(house_with):
+    path = house_with(lambda d: None)
+    room = path.parent / "rooms" / "hall.yml"
+    room.write_text(
+        room.read_text(encoding="utf-8").replace(
+            "defaults: { dark: dim, dim: dim, bright: dim }   "
+            "# daylight-first (H34): always its one look",
+            "defaults: { dark: dim, dim: dim, bright: dim, night: { dark: dim } }",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        HouseError, match="hall: the settings panel cannot carry a partial period map"
+    ):
         load_house(path)

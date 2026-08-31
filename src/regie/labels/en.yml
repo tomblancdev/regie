@@ -41,6 +41,14 @@ ui:
   period_begins: Begins
   daylight: Daylight
   default: default
+  settings: Settings
+  turn_on_default: Turn on
+  turn_off: Turn off
+  look_dark: When it is dark
+  look_dim: Low light
+  look_bright: Full daylight
+  look_period: Override
+  presence: Location drives the mode
   night: Night
   occupied: occupied
   quiet: quiet

@@ -41,6 +41,39 @@ input_select:
 {% set _ = auto.update({'actions': [{'action': 'input_select.select_option', 'target': {'entity_id': 'input_select.house_mode'}, 'data': {'option': rule.to}}]}) %}
 {% set _ = ns.automations.append(auto) %}
 {% endfor %}
+{% if controls.presence %}
+# the phones drive home/away (controls.presence, W3b): last one leaves →
+# away, first one back → home — never another mode, and only while the
+# visible kill-switch is on (seeded on once; the UI owns it)
+input_boolean:
+  presence_drives_mode:
+    name: {{ labels.ui.presence | to_yaml }}
+    icon: mdi:map-marker-radius
+{% set _ = ns.automations.append({
+  'id': 'regie_presence_away',
+  'alias': labels.ui.presence ~ ' → ' ~ 'away',
+  'description': 'everyone left (zone.home = 0 for five minutes): the house goes away (La Régie, controls.presence — the kill-switch input_boolean.presence_drives_mode)',
+  'mode': 'single',
+  'triggers': [{'trigger': 'numeric_state', 'entity_id': 'zone.home', 'below': 1, 'for': '00:05:00'}],
+  'conditions': [
+    {'condition': 'state', 'entity_id': 'input_boolean.presence_drives_mode', 'state': 'on'},
+    {'condition': 'state', 'entity_id': 'input_select.house_mode', 'state': 'home'},
+  ],
+  'actions': [{'action': 'input_select.select_option', 'target': {'entity_id': 'input_select.house_mode'}, 'data': {'option': 'away'}}],
+}) %}
+{% set _ = ns.automations.append({
+  'id': 'regie_presence_home',
+  'alias': labels.ui.presence ~ ' → ' ~ 'home',
+  'description': 'the first phone is back (zone.home > 0): the house comes home — a pure state flip, H35 (La Régie, controls.presence)',
+  'mode': 'single',
+  'triggers': [{'trigger': 'numeric_state', 'entity_id': 'zone.home', 'above': 0}],
+  'conditions': [
+    {'condition': 'state', 'entity_id': 'input_boolean.presence_drives_mode', 'state': 'on'},
+    {'condition': 'state', 'entity_id': 'input_select.house_mode', 'state': 'away'},
+  ],
+  'actions': [{'action': 'input_select.select_option', 'target': {'entity_id': 'input_select.house_mode'}, 'data': {'option': 'home'}}],
+}) %}
+{% endif %}
 {% set following = modes.following %}
 {% set lit_rooms = [] %}
 {% for a in areas if modes.follow and following and rendered_scenes(a) %}{% set _ = lit_rooms.append(a) %}{% endfor %}

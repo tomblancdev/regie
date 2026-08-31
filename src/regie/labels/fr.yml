@@ -45,6 +45,14 @@ ui:
   period_begins: Début
   daylight: Lumière du jour
   default: par défaut
+  settings: Réglages
+  turn_on_default: Allumer
+  turn_off: Éteindre
+  look_dark: Quand il fait sombre
+  look_dim: Lumière basse
+  look_bright: Plein jour
+  look_period: Forcer
+  presence: La position gère le mode
   night: Nuit
   occupied: occupée
   quiet: silence

@@ -45,8 +45,7 @@ def test_off_is_implicit_and_default_reads_its_sensor(rendered):
     assert default["sequence"][0]["continue_on_error"] is True
     sensor = pkg["template"][0]["sensor"][0]
     assert sensor["name"] == "living_default"
-    assert "'evening': {'bright': 'day', 'dark': 'evening', 'dim': 'day'}" in sensor["state"]
-    assert "'night': {'bright': 'night', 'dark': 'night', 'dim': 'night'}" in sensor["state"]
+    assert "input_select.living_look_" in sensor["state"], "the panel's selects drive it (W3b)"
 
 
 def test_a_room_with_no_filled_role_keeps_its_default_sensor_only(rendered):
@@ -81,3 +80,29 @@ def test_a_color_and_a_switch_role(house_with, secrets, tmp_path):
     by = {s["action"]: s for s in steps}
     assert by["switch.turn_on"]["target"]["entity_id"] == ["switch.kitchen_plug"]
     assert by["light.turn_on"]["data"] == {"rgb_color": [32, 0, 0]}
+
+
+def test_without_the_panel_the_sensor_bakes_the_table(house_with, secrets, tmp_path):
+    from regie.house import load_house
+    from regie.render import render as _render
+
+    house = load_house(house_with(lambda d: d.update(controls={"panel": False})))
+    _render(house, tmp_path, secrets)
+    pkg = yaml.safe_load(
+        (tmp_path / "home-assistant/packages/scenes_living.yaml").read_text(encoding="utf-8")
+    )
+    assert "input_select" not in pkg
+    state = pkg["template"][0]["sensor"][0]["state"]
+    assert "table" in state and "'dark': 'evening'" in state
+
+
+def test_the_panel_renders_the_look_selects_and_the_sensor_reads_them(rendered):
+    pkg = yaml.safe_load(
+        (rendered / "home-assistant/packages/scenes_living.yaml").read_text(encoding="utf-8")
+    )
+    sel = pkg["input_select"]
+    assert sel["living_look_dark"]["options"] == ["day", "evening", "cinema", "night"]
+    assert sel["living_look_night"]["options"][0] == "sun", "the first choice = follow the sun"
+    body = pkg["template"][0]["sensor"][0]["state"]
+    assert "input_select.living_look_" in body and "sun" in body
+    assert "table" not in body, "the panel's sensor reads the selects, not a baked table"

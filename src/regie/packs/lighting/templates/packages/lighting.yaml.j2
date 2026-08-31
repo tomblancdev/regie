@@ -53,7 +53,9 @@ light:
 {% endif %}
 {% endfor %}
 
+{% if motions or controls.silent or (controls.restore_default and lights) %}
 automation:
+{% endif %}
 {% for m in motions %}
 {% set targets = m.options.lights | default([]) %}
   - id: regie_{{ area.id }}_{{ m.id }}_motion_light
@@ -95,6 +97,26 @@ automation:
             - light.{{ area.id }}_lights
 {% endfor %}
 {% endfor %}
+{% if controls.restore_default and kinds.get('light', []) %}
+  # a light back from power takes the room's DEFAULT look, never its last
+  # state (controls.restore_default, W3b: "default on first startup")
+  - id: regie_{{ area.id }}_restore_default
+    alias: {{ (area.label ~ ' — ' ~ labels.ui.default) | to_yaml }}
+    description: a light of this room came back from power (the wall switch, an outage) — the room takes its default look (La Régie, controls.restore_default)
+    mode: restart
+    triggers:
+{% for t in kinds.get('light', []) if entity(t) %}
+      - trigger: state
+        entity_id: {{ entity(t) }}
+        from: unavailable
+        to: 'on'
+{% endfor %}
+    actions:
+      - action: script.turn_on
+        target:
+          entity_id: script.{{ area.id }}_default
+{% endif %}
+{% if controls.silent %}
   - id: regie_{{ area.id }}_silent
     alias: {{ (area.label ~ ' — ' ~ labels.ui.silent) | to_yaml }}
     description: a thing of this room unavailable for an hour (La Régie, pack lighting)
@@ -113,4 +135,5 @@ automation:
           notification_id: "regie_silent_{{ '{{ trigger.entity_id }}' }}"
           title: {{ area.label | to_yaml }}
           message: "{{ '{{ trigger.to_state.name }}' }} {{ labels.ui.silent }}"
+{% endif %}
 {% endif %}

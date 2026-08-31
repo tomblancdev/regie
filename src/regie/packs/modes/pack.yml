@@ -10,5 +10,7 @@ kinds: []
 services: []
 templates:
   - { src: packages/modes.yaml.j2, dst: home-assistant/packages/modes.yaml }
+settings:
+  - { src: settings/house.yaml.j2 }
 cards:
   - { src: cards/house.yaml.j2 }

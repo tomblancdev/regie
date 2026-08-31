@@ -34,6 +34,42 @@ script:
 {% endif %}
 {% if defaults %}
 {% set first = (area.scenes | default({}) | list | first) | default('off') %}
+{% if controls.panel and modes and defaults_base(area) %}
+{% set options = look_options(area) %}
+
+# the settings panel (controls.panel, W3b): the family edits what "on" MEANS
+# with a simple form — one select per daylight, one per period (`sun` =
+# follow the sun); seeded once from the room's file, the UI owns them after
+input_select:
+{% for d in ['dark', 'dim', 'bright'] %}
+  {{ area.id }}_look_{{ d }}:
+    name: {{ (area.label ~ ' — ' ~ labels.ui['look_' ~ d]) | to_yaml }}
+    icon: mdi:{{ {'dark': 'weather-night', 'dim': 'weather-sunset', 'bright': 'weather-sunny'}[d] }}
+    options:
+{% for o in options %}
+      - {{ o }}
+{% endfor %}
+{% endfor %}
+{% for period in modes.periods %}
+  {{ area.id }}_look_{{ period.id }}:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.look_period ~ ' ' ~ period.label) | to_yaml }}
+    icon: mdi:clock-outline
+    options:
+      - sun
+{% for o in options %}
+      - {{ o }}
+{% endfor %}
+{% endfor %}
+
+template:
+  - sensor:
+      - name: {{ area.id }}_default
+        unique_id: regie_{{ area.id }}_default
+        icon: mdi:palette-swatch-outline
+        state: >-
+          {{ '{%' }} set p = states('input_select.{{ area.id }}_look_' ~ states('sensor.house_period')) {{ '%}' }}
+          {{ '{%' }} if p not in ('sun', 'unknown', 'unavailable') {{ '%}' }}{{ '{{' }} p {{ '}}' }}{{ '{%' }} else {{ '%}' }}{{ '{{' }} states('input_select.{{ area.id }}_look_' ~ states('sensor.daylight')) {{ '}}' }}{{ '{%' }} endif {{ '%}' }}
+{% else %}
 
 template:
   - sensor:
@@ -43,5 +79,6 @@ template:
         state: >-
           {{ '{%' }} set table = {{ defaults | tojson | replace('"', "'") }} {{ '%}' }}
           {{ '{{' }} table.get(states('sensor.house_period'), {}).get(states('sensor.daylight'), '{{ first }}') {{ '}}' }}
+{% endif %}
 {% endif %}
 {% endif %}

@@ -49,6 +49,11 @@ class Pack:
         return list(self.data.get("cards", []))
 
     @property
+    def settings(self) -> list[dict]:
+        """The cards of the settings view (controls.panel) — same shape as cards."""
+        return list(self.data.get("settings", []))
+
+    @property
     def templates_dir(self) -> Path:
         return self.path / "templates"
 
