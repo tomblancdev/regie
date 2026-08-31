@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.2 — a serial is any identifier a device gives (2026-08-31)
+
+A cast speaker (the corridor's Xiaomi L05G) carries no MAC connection and
+no serial_number in Home Assistant's registry — its one stable key is the
+cast UUID in `identifiers`. `device_of` now also matches a row's `serial:`
+against any device identifier value, so such a thing is roomed and named
+like every other. Matter serials and MAC keys are untouched.
+
+And the `no-environment` gate's own findings, excused where the value is
+genuinely someone's published name, not a house's: Home Assistant's own
+home-zone entity id, the JSON-schema dialect URL, a link-local address in
+a test (the hatch the gate itself provides).
+
 ## 0.6.1 — settings live in Réglages alone (2026-08-31)
 
 With `controls.panel` on, the house card (the rooms view) keeps only the
@@ -18,8 +31,8 @@ piece explicit, every one with an off-switch a person can reach.
   once from the files (the knob pattern), the UI owns them after; the
   room's default sensor reads the selects. Needs daylight-first defaults
   (H34); a partial period map cannot ride a form — `check` says so
-- **`presence`** — the phones drive home/away: last one leaves (zone.home
-  = 0, five quiet minutes) → `away`; first one back → `home`; only ever
+- **`presence`** — the phones drive home/away: last one leaves (the home
+  zone empties, five quiet minutes) → `away`; first one back → `home`; only ever
   between those two, and only while the visible kill-switch
   (`input_boolean.presence_drives_mode`, seeded on) is on
 - **`restore_default`** — a light coming back from power (the wall switch,

@@ -602,7 +602,7 @@ class FakeHA(HomeAssistant):
                 "node_id": 1,
                 "network_type": "wifi",
                 "mac_address": dev.get("_mac"),
-                "ip_adresses": ["fe80::1%eth0"] if dev.get("_mac") else [],
+                "ip_adresses": ["fe80::1%eth0"] if dev.get("_mac") else [],  # no-environment: ok
                 "available": True,
                 "active_fabrics": [
                     {"fabric_index": i, "vendor_name": v} for i, v in dev.get("_fabrics", [])
@@ -1218,6 +1218,33 @@ def test_a_device_not_there_yet_is_skipped_in_silence(witness, secrets, tmp_path
     ha = FakeHA()
     steps = apply(witness, secrets, tmp_path, ha, check=False)
     assert "device living_bulb" not in states(steps)
+
+
+def test_a_device_with_no_address_is_keyed_on_an_identifier(secrets, tmp_path, house_with):
+    """A cast speaker gives the registry no MAC and no serial_number - its
+    identifier value (the cast UUID) is the serial its row keys on (0.6.2)."""
+    ha = FakeHA()
+    speaker = ha.network_device("", "Mi Smart Speaker", platform="cast")
+    ident = speaker["identifiers"][0][1]
+    home = house_with(
+        lambda d: d["things"].append(
+            {
+                "id": "hall_speaker",
+                "area": "hall",
+                "kind": "speaker",
+                "via": "wifi",
+                "label": "Enceinte",
+                "integration": "cast",
+                "serial": ident,
+            }
+        )
+    )
+    steps = apply(load_house(home), secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["device hall_speaker"] == "changed"
+    hall = next(a for a in ha.areas if a["aliases"][0] == "hall")
+    assert speaker["area_id"] == hall["area_id"] and speaker["name_by_user"] == "Enceinte"
+    assert "media_player.hall_speaker" in {e["entity_id"] for e in ha.entities}
 
 
 def test_check_plans_the_room_and_touches_nothing(witness, secrets, tmp_path):

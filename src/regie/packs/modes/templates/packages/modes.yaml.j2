@@ -1,3 +1,4 @@
+{% set zone_home = 'zone.home' %}{# no-environment: ok - Home Assistant's own zone entity, not a house name #}
 {% if modes %}
 # rendered by La Régie — the modes (pack modes): the house's state machine.
 # The selector's first value is seeded once by the conductor (modes.yml
@@ -54,7 +55,7 @@ input_boolean:
   'alias': labels.ui.presence ~ ' → ' ~ 'away',
   'description': 'everyone left (zone.home = 0 for five minutes): the house goes away (La Régie, controls.presence — the kill-switch input_boolean.presence_drives_mode)',
   'mode': 'single',
-  'triggers': [{'trigger': 'numeric_state', 'entity_id': 'zone.home', 'below': 1, 'for': '00:05:00'}],
+  'triggers': [{'trigger': 'numeric_state', 'entity_id': zone_home, 'below': 1, 'for': '00:05:00'}],
   'conditions': [
     {'condition': 'state', 'entity_id': 'input_boolean.presence_drives_mode', 'state': 'on'},
     {'condition': 'state', 'entity_id': 'input_select.house_mode', 'state': 'home'},
@@ -66,7 +67,7 @@ input_boolean:
   'alias': labels.ui.presence ~ ' → ' ~ 'home',
   'description': 'the first phone is back (zone.home > 0): the house comes home — a pure state flip, H35 (La Régie, controls.presence)',
   'mode': 'single',
-  'triggers': [{'trigger': 'numeric_state', 'entity_id': 'zone.home', 'above': 0}],
+  'triggers': [{'trigger': 'numeric_state', 'entity_id': zone_home, 'above': 0}],
   'conditions': [
     {'condition': 'state', 'entity_id': 'input_boolean.presence_drives_mode', 'state': 'on'},
     {'condition': 'state', 'entity_id': 'input_select.house_mode', 'state': 'away'},

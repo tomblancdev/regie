@@ -126,7 +126,7 @@ def test_presence_drives_home_and_away_behind_its_kill_switch(rendered):
     away = autos["regie_presence_away"]
     assert away["triggers"][0] == {
         "trigger": "numeric_state",
-        "entity_id": "zone.home",
+        "entity_id": "zone.home",  # no-environment: ok (HA's zone entity)
         "below": 1,
         "for": "00:05:00",
     }

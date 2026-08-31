@@ -757,7 +757,9 @@ class Conductor:
     @staticmethod
     def device_of(devices: list[dict], thing: dict, macs: dict | None = None) -> list[dict]:
         """The Home Assistant device(s) a row is: by its serial (Matter's
-        `serial_<sn>` identifier, or the device's own serial field), else by
+        `serial_<sn>` identifier, the device's own serial field, or an
+        identifier value a domain reports - a cast speaker's UUID: the key
+        of a device that carries no address at all, 0.6.2), else by
         its hardware address (a `mac` connection; for a Matter node, the
         address its diagnostics report - `macs`, by device id - since Home
         Assistant's Matter device carries none, and a bulb may carry no
@@ -767,7 +769,11 @@ class Conductor:
         if serial:
             for d in devices:
                 ids = {tuple(i) for i in d.get("identifiers", []) if len(i) == 2}
-                if ("matter", f"serial_{serial}") in ids or d.get("serial_number") == serial:
+                if (
+                    ("matter", f"serial_{serial}") in ids
+                    or d.get("serial_number") == serial
+                    or any(v == serial for _, v in ids)
+                ):
                     return [d]
             return []
         mac = (thing.get("mac") or "").lower()

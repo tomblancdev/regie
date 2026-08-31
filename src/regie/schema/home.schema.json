@@ -626,7 +626,7 @@
         "serial": {
           "type": "string",
           "minLength": 1,
-          "description": "a Matter thing's serial number (its BasicInformation cluster) — the key that survives a rebuilt fabric; `pair --matter` reads it, `apply` rooms and names the device by it"
+          "description": "a Matter thing's serial number (its BasicInformation cluster) — the key that survives a rebuilt fabric; `pair --matter` reads it, `apply` rooms and names the device by it. Also matches a device identifier value for a thing that reports no address and no serial (a cast speaker's UUID, 0.6.2)"
         },
         "host": {
           "type": "string",
