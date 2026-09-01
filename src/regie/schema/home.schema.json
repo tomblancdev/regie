@@ -258,6 +258,36 @@
         }
       }
     },
+    "thread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_name",
+        "border_routers"
+      ],
+      "description": "the Thread mesh: the network the house owns, and the border router(s) holding it. The DATASET (the key, the PAN ids, the mesh-local prefix) is not here and never will be - it is minted into the secrets and pushed onto the router by the fleet; the engine only introduces the router to Home Assistant, and only while it is already holding this network.",
+      "properties": {
+        "network_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "description": "the network's name (<= 16 chars by the spec) - the engine refuses to introduce a border router holding any other, because Home Assistant MINTS a network of its own on a router that holds none"
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 11,
+          "maximum": 26,
+          "description": "fixed before the first join, like Zigbee's; on a two-radio box it may not be the Zigbee channel"
+        },
+        "border_routers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/border_router"
+          }
+        }
+      }
+    },
     "matter": {
       "type": "object",
       "additionalProperties": false,
@@ -538,6 +568,32 @@
         "phone": {
           "$ref": "#/$defs/id",
           "description": "the companion app's notify slug (notify.mobile_app_<phone>) — makes the person a target of the mouth (notify.<person>, notify.household)"
+        }
+      }
+    },
+    "border_router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "description": "one Thread border router, reached over its REST API. Its address comes from the thing it names (on a two-radio box that is the SAME thing as the Zigbee coordinator - one box, one row, two radios) or from `host`.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "thing": {
+          "$ref": "#/$defs/id",
+          "description": "the thing whose `host` is the router's address"
+        },
+        "host": {
+          "type": "string",
+          "description": "the router's address, when it is not a thing"
+        },
+        "port": {
+          "type": "integer",
+          "default": 8080,
+          "description": "the OpenThread REST API's port ON THE ROUTER"
         }
       }
     },

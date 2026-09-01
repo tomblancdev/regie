@@ -40,6 +40,7 @@ from .flows import PERSON_FIELDS, Outcome, fill_form, walk
 from .ha import HomeAssistant
 from .host import STATE
 from .house import House
+from .otbr import Otbr
 from .z2m import Z2M
 
 CLIENT_NAME = "regie"
@@ -755,6 +756,66 @@ class Conductor:
             raise HouseError(f"matter: {out.detail}")
         self.step("entry matter", "changed", f"set up the server on the loopback ({MATTER_URL})")
 
+    # --- Thread ---------------------------------------------------------------
+    # the seam the tests replace: a border router is a box on the lane, not a
+    # service of ours (the same shape as `z2m_of`)
+    def otbr_of(self, border_router: dict) -> Otbr:
+        return Otbr(border_router["url"])
+
+    def thread(self) -> None:
+        """The Thread border router's config entry (`otbr`): the brain is
+        pointed at the REST API the box serves on the lane. Keyed on the
+        router's border agent id by Home Assistant itself.
+
+        The guard is the point of this step. Home Assistant's flow reads the
+        router's active dataset, and **on a router holding none it mints a
+        network of its own** — a random PAN id and a key nobody wrote down.
+        So the conductor introduces a border router only while it is already
+        holding the house's network: the dataset goes on BEFORE anything is
+        commissioned (home.md §4.3), and this is that sentence made
+        mechanical. A router that is off, or that holds somebody else's
+        network, WAITS — it does not fail the fleet (0.7.3's rule); the
+        watcher is what goes red."""
+        want = self.house.thread_network_name()
+        if not want:
+            return
+        for b in self.house.border_routers():
+            name = f"thread {b['id']}"
+            try:
+                held = self.otbr_of(b).network_name()
+            except HouseError as exc:
+                self.step(name, "waiting", f"{exc} — tried again at the next apply")
+                continue
+            if held != want:
+                self.step(
+                    name,
+                    "waiting",
+                    f"the border router at {b['url']} holds "
+                    + (f"the network {held!r}" if held else "no network at all")
+                    + f", not {want!r}: Home Assistant would MINT a network of its own here. "
+                    "The house's dataset is pushed by the fleet, and nothing is commissioned "
+                    "until it is on — tried again at the next apply",
+                )
+                continue
+            if self.domain_entries("otbr"):
+                self.step(name, "ok", f"the border router at {b['url']}, holding {want}")
+                continue
+            if self.check:
+                self.step(name, "changed", f"set up the border router at {b['url']}")
+                continue
+            out = walk(self.ha, "otbr", {"url": b["url"]})
+            if out.state == "waiting":
+                self.step(
+                    name,
+                    "waiting",
+                    f"the REST API at {b['url']} did not answer Home Assistant "
+                    "— tried again at the next apply",
+                )
+                continue
+            if out.state != "changed":
+                raise HouseError(f"otbr: {out.detail}")
+            self.step(name, "changed", f"set up the border router at {b['url']}, holding {want}")
+
     # --- the mesh -----------------------------------------------------------
     # `up` restarts Zigbee2MQTT when the render changed one of its files, and
     # the frontend's socket comes up seconds AFTER the unit does — so the
@@ -1263,6 +1324,7 @@ class Conductor:
         self.knobs()
         self.mqtt()
         self.matter()
+        self.thread()
         self.zigbee()
         with self.ha.ws() as ws:
             self.credentials(ws)

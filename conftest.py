@@ -22,6 +22,22 @@ def _no_patience_in_tests(monkeypatch):
     monkeypatch.setattr(Conductor, "z2m_wait", 0)
 
 
+@pytest.fixture(autouse=True)
+def _border_router_holds_the_house_network(monkeypatch):
+    """The witness house declares a Thread border router (`maison-temoin`), and
+    the conductor READS it before introducing it to Home Assistant. Left alone
+    every test in the suite would reach for 192.0.2.10 — a documentation
+    address that answers nothing — and wait out a real timeout. So the default
+    router holds the house's network; the tests that care about the guard
+    replace it (test_thread.py)."""
+
+    class _Holding:
+        def network_name(self):
+            return "maison-temoin"
+
+    monkeypatch.setattr(Conductor, "otbr_of", lambda self, border_router: _Holding())
+
+
 @pytest.fixture(scope="session")
 def witness_path() -> Path:
     return WITNESS / "home.yml"

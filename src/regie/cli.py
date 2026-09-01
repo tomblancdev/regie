@@ -85,6 +85,16 @@ def report(house: House, secrets: dict) -> None:
             f"matter: the server beside the brain (ws://localhost:5580/ws), "
             f"{len(matter)} thing(s), {keyed} keyed by serial"
         )
+    if house.thread_network_name():
+        thread = house.data.get("thread", {})
+        for b in house.border_routers():
+            print(
+                f"thread {b['id']}: {b['url']} (REST), network "
+                f"{house.thread_network_name()}"
+                + (f", channel {thread['channel']}" if thread.get("channel") else "")
+                + f", {sum(1 for t in house.things if t['via'] == 'thread')} thing(s)"
+            )
+
     pins = house.pins()
     print("pins: " + ", ".join(f"{k} {v}" for k, v in pins.items()))
     names = house.secret_names()

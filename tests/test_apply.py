@@ -81,6 +81,7 @@ class FakeHA(HomeAssistant):
         self.devices: list[dict] = []  # the device registry
         self.entities: list[dict] = []  # the entity registry
         self.matter_down = False  # the Matter server does not answer on the loopback
+        self.otbr_down = False  # the border router's REST API does not answer HA
         self.commissionable: dict[str, dict] = {}  # a pairing code -> the node it makes
         self.commissioned: list[str] = []
         self.states: dict[str, str] = {}  # the helpers' states (the knobs): unknown until set
@@ -155,6 +156,11 @@ class FakeHA(HomeAssistant):
                 "manual",
                 [{"name": "url", "required": True, "default": "ws://localhost:5580/ws"}],
             )
+        if d == "otbr":
+            if self.entries.get(d):
+                self.flows.pop(fid)
+                return 200, {"type": "abort", "flow_id": fid, "reason": "already_configured"}
+            return self._form(fid, "user", [{"name": "url", "required": True}])
         if d == "ipp":
             return self._form(
                 fid,
@@ -219,6 +225,12 @@ class FakeHA(HomeAssistant):
                     fid, "manual", [{"name": "url", "required": True}], {"base": "cannot_connect"}
                 )
             return self._create(fid, flow, "Matter", body)
+        if d == "otbr":
+            if self.otbr_down:
+                return self._form(
+                    fid, "user", [{"name": "url", "required": True}], {"base": "cannot_connect"}
+                )
+            return self._create(fid, flow, "Open Thread Border Router", body)
         if d == "heos":
             if body.get("host") in self.off:
                 return self._form(
@@ -965,8 +977,8 @@ def test_check_plans_the_entries_without_starting_a_flow(witness, secrets, tmp_p
     printer = next(s for s in steps if s.name == "entry kitchen_printer")
     assert printer.detail == "set up ipp at 192.0.2.32"
     assert not ha.flows and ha.pin_shown == 0 and "POST " + FLOWS not in ha.log[seen:]
-    # 8 entries wanted + the Matter server's, 1 by hand
-    assert summary(steps, True).startswith("apply: 8 would change")
+    # 8 entries wanted + the Matter server's + the border router's, 1 by hand
+    assert summary(steps, True).startswith("apply: 9 would change")
 
 
 def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):

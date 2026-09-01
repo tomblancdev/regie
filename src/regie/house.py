@@ -344,6 +344,37 @@ class House:
             )
         return out
 
+    def border_routers(self) -> list[dict]:
+        """The Thread border routers, resolved: an id, an address, a port and
+        the URL of the REST API the brain will be pointed at.
+
+        The same seam as `coordinators()` — the address comes from the thing
+        the row names, never typed twice — because on a two-radio box it is
+        literally the same thing: one row, one reservation, one alias, two
+        radios (home.md §4.3)."""
+        out = []
+        for b in self.data.get("thread", {}).get("border_routers", []):
+            host = b.get("host")
+            if b.get("thing"):
+                host = self.thing(b["thing"]).get("host")
+            port = b.get("port", 8080)
+            out.append(
+                {
+                    "id": b["id"],
+                    "thing": b.get("thing"),
+                    "host": host,
+                    "port": port,
+                    "url": f"http://{host}:{port}",
+                }
+            )
+        return out
+
+    def thread_network_name(self) -> str | None:
+        """The name of the Thread network the house owns, or None if it owns
+        none. It is the whole of what the engine checks a border router
+        against: the dataset itself is the fleet's to mint and to push."""
+        return (self.data.get("thread") or {}).get("network_name")
+
     def mqtt_users(self) -> list[dict]:
         """One broker user per client, each on its own topics: the brain, one
         per radio, one per thing that pushes (via: mqtt) — a pushing thing
@@ -798,6 +829,43 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                 errors.append(f"coordinator {c['id']}: thing {c['thing']!r} has no host")
         elif not c.get("host"):
             errors.append(f"coordinator {c['id']}: neither a thing nor a host")
+
+    thread = data.get("thread") or {}
+    for b in thread.get("border_routers", []):
+        if b.get("thing"):
+            if b["thing"] not in thing_ids:
+                errors.append(f"border router {b['id']}: thing {b['thing']!r} does not exist")
+            elif not house.thing(b["thing"]).get("host"):
+                errors.append(f"border router {b['id']}: thing {b['thing']!r} has no host")
+        elif not b.get("host"):
+            errors.append(f"border router {b['id']}: neither a thing nor a host")
+    if thread and not house.has_pack("matter"):
+        # a Thread thing reaches the brain through the MATTER fabric: the
+        # border router carries the packets, the Matter server speaks to the
+        # device. A border router with no fabric behind it is a mesh nothing
+        # can join (home.md 4.3)
+        errors.append(
+            "thread: the house declares a border router but carries no `matter` pack — "
+            "a Thread thing reaches the brain through the Matter fabric; add matter to packs:"
+        )
+    # THE CHANNEL GUARD. Zigbee and Thread are both 802.15.4 in the 2.4 GHz
+    # band, and on a two-radio box they are two aerials centimetres apart: the
+    # same channel is two meshes shouting over each other, and the failure is
+    # silent - things drop, nothing logs a cause. Home Assistant has a
+    # collision check of its own, but it only ever fires for ZHA behind a
+    # multiprotocol add-on, which is not this house. Nothing else watches it.
+    zig_channel = data.get("zigbee", {}).get("channel", 25)
+    thread_channel = thread.get("channel")
+    if thread_channel is not None and thread.get("border_routers"):
+        shared = {b["thing"] for b in thread["border_routers"] if b.get("thing")} & {
+            c["thing"] for c in data.get("zigbee", {}).get("coordinators", []) if c.get("thing")
+        }
+        if shared and thread_channel == zig_channel:
+            errors.append(
+                f"thread: channel {thread_channel} is the Zigbee channel, and "
+                f"{', '.join(sorted(shared))} carries both radios — two 802.15.4 meshes on one "
+                "box on one channel drown each other, and nothing logs a cause; move one"
+            )
 
     # --- the vocabulary ----------------------------------------------------------
     modes = house.modes()

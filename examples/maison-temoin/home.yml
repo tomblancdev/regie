@@ -44,6 +44,14 @@ zigbee:
   channel: 25
   coordinators:
     - { id: main, thing: coordinator_main, port: 6638, adapter: zstack }
+# the same box's other radio (home.md 4.3): the border router the brain is
+# pointed at. The DATASET is never here - the fleet mints it and pushes it;
+# the engine only introduces a router that is already holding this network.
+thread:
+  network_name: maison-temoin
+  channel: 15
+  border_routers:
+    - { id: main, thing: coordinator_main, port: 8080 }
 mqtt:
   host: 192.0.2.5
 floors:

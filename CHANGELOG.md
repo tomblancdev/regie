@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.8.0 — the brain learns the border router (2026-09-01, W1b-thread)
+
+The Thread mesh's plumbing landed on the fleet's side the same day: an
+SLZB-MR4U running OpenThread on its own second radio, holding the house's
+network, watched. What was still missing is the half only the conductor can
+do — **Home Assistant's `otbr` config entry**, pointed at the REST API the box
+serves on the lane. Nothing can be commissioned onto a Thread network the
+brain has never been introduced to.
+
+**A `thread:` block, mirroring `zigbee:`** — hardware the house has, not a
+pack. The dataset is not in it and never will be: the key, the PAN ids and the
+mesh-local prefix are minted into the secrets and pushed onto the router by
+the fleet.
+
+```yaml
+thread:
+  network_name: maison-temoin
+  channel: 15
+  border_routers:
+    - { id: main, thing: coordinator_main, port: 8080 }
+```
+
+The address comes from the thing the row names — the same seam as a
+coordinator, because on a two-radio box it is literally the same thing: one
+row, one reservation, one alias, two radios.
+
+**The guard is the feature.** Home Assistant's `otbr` flow reads the router's
+active dataset when the entry is made, and **on a router holding none it MINTS
+a network of its own** — a random PAN id, a generated name, a key nobody wrote
+down. The day a border router is factory-reset, an innocent converge would
+hand the house a Thread network it cannot reproduce. So `apply` reads the
+router's `/node` first and introduces it **only while it is already holding
+the house's network**; anything else `waits`, saying which network it actually
+found. The house's dataset goes on before anything is commissioned, never
+after, and this is that sentence made mechanical.
+
+A router that is off, or that holds the wrong network, **waits — it does not
+fail the fleet** (0.7.3's rule): a box on the lane is not the fleet's health,
+and the watcher is what goes red.
+
+**`check` gained two refusals the house is the only one that can make:**
+
+- **Thread and Zigbee may not share a channel on one box.** Two 802.15.4
+  meshes, two aerials centimetres apart, one channel: things drop and nothing
+  logs a cause. Home Assistant has a collision check of its own, but it only
+  ever fires for ZHA behind a multiprotocol add-on — never for a house running
+  Zigbee2MQTT. Nothing else was watching it.
+- **A border router with no `matter` pack behind it** is a mesh nothing can
+  join: a Thread thing reaches the brain through the Matter fabric.
+
+**Two things the wire taught us**, both live on SLZB-OS v3.3.1:
+
+- **An unknown path answers `200`, with a body that says 404.** A status code
+  proves nothing on this firmware — the network name is read out of the body,
+  and a body carrying none is *no border router at this door*, not a network
+  named `None`. (The same trap fools `python-otbr-api`'s key-format probe,
+  which reads `/api/actions`: it concludes camelCase where the box answers
+  PascalCase. Harmless on the read-only path the entry needs — reads are
+  normalised either way — but it means this house's dataset can only ever come
+  from the fleet's play, never from Home Assistant's UI.)
+- **The keys come back PascalCase** where the same REST API upstream has
+  spoken camelCase since Sept 2025, so the reader takes either spelling rather
+  than pinning the one box we own today.
+
+`regie status` prints the border router, its network and its channel. 174
+tests.
+
 ## 0.7.3 — a thing that does not answer waits; it does not fail the fleet (2026-09-01, W1's walk)
 
 One bulb, unscrewed from its socket to reset another one in it, **failed the

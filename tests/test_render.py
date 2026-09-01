@@ -272,6 +272,7 @@ def test_without_the_matter_pack_no_server_unit(house_with, secrets, tmp_path):
     def drop(d):
         d["packs"].remove("matter")
         d["things"] = [t for t in d["things"] if t.get("via") != "matter"]
+        d.pop("thread")  # no fabric, no border router (check refuses the pair)
 
     house = load_house(house_with(drop))
     render(house, tmp_path, secrets)
