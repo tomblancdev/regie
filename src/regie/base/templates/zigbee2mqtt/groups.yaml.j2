@@ -1,12 +1,16 @@
-# rendered by La Régie — one Zigbee group per room (the room's lights), so a bound remote drives the room
+# rendered by La Régie — one Zigbee group per room that has Zigbee lights, so
+# a bound wall control drives the whole room inside the mesh, brain or no
+# brain. The number is derived from the room's id and never moves (house.py:
+# zigbee_group_id) — it lives in each member bulb's own group table.
+# MEMBERSHIP IS NOT IN THIS FILE, and that is Zigbee2MQTT's shape, not a
+# shortcut: since 2.0 a group here carries `friendly_name` alone, and who
+# belongs to it is the radio's business (each member holds the group in its
+# table; herdsman's database mirrors it). `apply` puts the members in through
+# the API — a `devices:` list here would be dropped the next time
+# Zigbee2MQTT writes the file, and would have added nobody in the meantime.
 {% for g in coordinator.groups %}
 '{{ g.number }}':
   friendly_name: {{ g.area.id }}
-  description: {{ g.area.label | to_yaml }}
-  devices:
-{% for t in g.things %}
-    - {{ t.id }}
-{% endfor %}
 {% endfor %}
 {% if not coordinator.groups %}
 {}

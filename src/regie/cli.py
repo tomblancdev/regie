@@ -21,18 +21,15 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 
 # verb → (what it will do, the release that builds it)
 NOT_YET = {
-    "backup": ("Home Assistant's own backup, now, through its API", "0.7 — the Zigbee walk"),
-    "restore": (
-        "Home Assistant's own backup file, restored through its API",
-        "0.7 — the Zigbee walk",
-    ),
+    "backup": ("Home Assistant's own backup, now, through its API", "0.8"),
+    "restore": ("Home Assistant's own backup file, restored through its API", "0.8"),
     "doctor": (
         "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.7 — the Zigbee walk",
+        "0.8",
     ),
     "suggest": (
         "the mesh's opinion on rooms, from link quality — suggests, never assigns",
-        "0.7 — the Zigbee walk",
+        "0.8 — it reads a walked mesh, so it follows the walk",
     ),
     "migrate": ("move a home.yml to the current schema", "with the first schema bump"),
 }
@@ -257,22 +254,48 @@ def cmd_link(args) -> int:
 
 
 def cmd_pair(args) -> int:
-    """The walk. Its Matter half (0.5): the thing commissioned by the phone or
-    by a code, adopted into a proposed row. The Zigbee half lands in 0.6."""
-    if not args.matter:
-        print(
-            "regie pair: the Zigbee walk (the join window, the interviews) lands in 0.7 — "
-            "the Matter half is here: `regie pair home.yml --matter --room <area> "
-            "[--role <role> --at <place>] [--code <code>]`",
-            file=sys.stderr,
-        )
-        return 2
-    from .apply import pair_matter
+    """The walk: the room is the session, the thing introduces itself, the row
+    is printed for the house's file. Its Zigbee half (0.7) opens the radio's
+    join window and reads the interview; its Matter half (0.5) adopts what the
+    phone (or a code) commissioned."""
     from .ha import HomeAssistant
 
     house = load_house(args.home)
     secrets = load_secrets(args.secrets)
     root = Path(args.root) if args.root else Path(house.root())
+    if not args.matter:
+        from .apply import pair_zigbee
+
+        row = pair_zigbee(
+            house,
+            secrets,
+            root,
+            HomeAssistant(args.url),
+            room=args.room,
+            role=args.role,
+            at=args.at,
+            thing_id=args.id,
+            coordinator=args.coordinator,
+            seconds=args.time,
+            adopt=args.adopt,
+            say=lambda line: print(line, flush=True),
+        )
+        found = row.pop("_found")
+        print(
+            f"paired: {found['description'] or found['name']} — {found['type']}"
+            + (f", {found['power']}" if found["power"] else "")
+            + (", bindable" if found["bindable"] else "")
+        )
+        print("  it exposes: " + (", ".join(found["exposes"]) or "nothing"))
+        if found["supported"] is False:
+            print(
+                "  NOT in Zigbee2MQTT's database: it is paired, but its capabilities are "
+                "generic — check the model's page before counting on it"
+            )
+        say_row(row)
+        return 0
+    from .apply import pair_matter
+
     row = pair_matter(
         house,
         secrets,
@@ -298,13 +321,19 @@ def cmd_pair(args) -> int:
             f"also on: {', '.join(found['other_fabrics'])} — another controller keeps a fabric "
             "on it (--only-fabric removes them)"
         )
-    print("the proposed row (add it to home.yml's things, then `regie apply`):")
-    fields = ", ".join(f"{k}: {_yaml_scalar(v)}" for k, v in row.items())
-    print(f"  - {{ {fields} }}")
+    say_row(row)
     return 0
 
 
+def say_row(row: dict) -> None:
+    print("the proposed row (add it to home.yml's things, then `regie apply`):")
+    fields = ", ".join(f"{k}: {_yaml_scalar(v)}" for k, v in row.items())
+    print(f"  - {{ {fields} }}")
+
+
 def _yaml_scalar(value) -> str:
+    if isinstance(value, list):
+        return "[" + ", ".join(_yaml_scalar(v) for v in value) + "]"
     text = str(value)
     if text and all(c.isalnum() or c in "_-" for c in text) and not text[0].isdigit():
         return text
@@ -456,6 +485,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("home", type=Path)
     s.add_argument("--matter", action="store_true", help="the Matter half of the walk")
+    s.add_argument(
+        "--time",
+        type=int,
+        default=254,
+        help="how long the Zigbee join window stays open, in seconds (default 254, the most a "
+        "radio allows); it is closed again whatever happens",
+    )
+    s.add_argument(
+        "--coordinator", help="which radio to walk (default: the house's first coordinator)"
+    )
+    s.add_argument(
+        "--adopt",
+        help="a thing ALREADY in the mesh that no row names, by address or name — writes its "
+        "row without a new join (an interrupted walk)",
+    )
     s.add_argument("--room", required=True, help="the area the thing is in (the session)")
     s.add_argument("--role", help="what it is for in its room (main, lamp, wall...)")
     s.add_argument("--at", help="its place in the role's layout (left, front_right...)")

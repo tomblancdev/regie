@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.7.0 — the Zigbee walk (2026-09-01, W1)
+
+The mesh half, built against a real radio and a real 2.x Zigbee2MQTT — and
+the four things that were wrong in the seams 0.1 left, each found by the
+thing refusing to start rather than by reading the diff.
+
+- **`pair --room <room>`, the walk's Zigbee half.** The room is the session:
+  the join window opens on the radio, a person holds the thing's reset
+  button, and the thing introduces itself. Its **kind is read from its own
+  interview** (`definition.exposes`: a `light` expose is a light, a `switch`
+  with a state a plug, `occupancy` a motion, `contact` a door, an `action`
+  enum a remote, a measured value a sensor), its vendor and model come with
+  it, the name is generated (`<room>_<role>_<at>` in a layout,
+  `<room>_<role>_<n>`, else `<room>_<kind>_<n>`) and **the row is printed,
+  never written** — the house's file is the human's. A control that can send
+  commands is proposed **bound to its room**. A light blinks and ends dark:
+  it says which one it was. The window is closed again whatever happens —
+  an open window is a stranger's door. `--adopt <address>` writes the row for
+  a thing already in the mesh (an interrupted walk), `--time` shortens the
+  window, `--coordinator` picks the radio.
+- **`apply` makes the mesh match the rows.** Every thing wears its row's id
+  (a live Zigbee2MQTT does not re-read its files — the rename goes through
+  the API), every room with Zigbee lights has its group holding exactly its
+  lights, and every `bind:` is a binding inside the mesh. A binding the house
+  does not name is **removed only when its target is ours** (a room's group,
+  a thing with a row): what the vendor shipped is reported and left alone. A
+  thing paired with no row is reported, never removed — the pairing is not
+  ours to undo. A radio that does not answer is `waiting`, not a failure.
+- **A room's Zigbee group number is DERIVED from the room's id**, not
+  counted. The number lives in each member bulb's own group table, so
+  numbering in order would renumber half a flat the day a room gains its
+  first light — every bulb still answering on an id nothing addresses any
+  more, a silent break in the half that must work with the brain down.
+  `check` refuses the collision.
+
+**Four corrections that only a running Zigbee2MQTT could produce** (2.x, read
+from its own source after it refused to start):
+
+- **`!secret` is a STRING now, not a YAML tag.** Since 2.0 the settings are
+  read with plain js-yaml: `network_key: !secret network_key` is an unknown
+  tag, the file fails to parse, and the error names neither the key nor the
+  line — only "your configuration file is invalid". The form is
+  `"!secret network_key"`, and it is resolved for **five keys only**:
+  `mqtt.server`, `mqtt.user`, `mqtt.password`, `advanced.network_key`,
+  `frontend.auth_token`.
+- **`pan_id` and `ext_pan_id` are rendered in the clear**, and that is the
+  honest shape: Zigbee2MQTT takes no reference for them (its own validation
+  refuses a string that is not `GENERATE`), and a Zigbee beacon carries both
+  **unencrypted** — anyone with a sniffer in the street reads them. They are
+  minted and kept because they are identity (the same values rebuild the same
+  network), not because they are confidential. The network key, which
+  encrypts every frame, stays in the secret file.
+- **A group has no `devices:` and a device no `description:`** in the 2.x
+  schema. Membership lives in the bulbs' own group tables (`apply` puts it
+  there through the API); a key the schema does not know is dropped the next
+  time Zigbee2MQTT writes the file, and the two would disagree for ever.
+- **`version:` is Zigbee2MQTT's settings-schema version** (5 for 2.13), not
+  ours: an older one is migrated and backed up at every start, a newer one
+  refuses to boot. It moves with the image pin, in the same release.
+
+Also: the frontend port is derived once (`coordinator.frontend_port`) instead
+of in the template; `backup`, `restore`, `doctor` and `suggest` say 0.8 —
+`suggest` reads a walked mesh, so it follows the walk rather than leads it.
+14 new tests against a Zigbee2MQTT that mutates, so a second `apply` reading
+`ok` proves idempotence instead of asserting it. 158 tests.
+
 ## 0.6.2 — a serial is any identifier a device gives (2026-08-31)
 
 A cast speaker (the corridor's Xiaomi L05G) carries no MAC connection and

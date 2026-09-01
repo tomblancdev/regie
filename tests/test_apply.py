@@ -720,8 +720,14 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert tv.detail == "androidtv_remote: a pin on its screen — regie link living_tv"
     hand = sum(1 for s in steps if s.state == "hand")
     ok = sum(1 for s in steps if s.state == "ok")  # the puck's cast row: served by the TV's entry
-    assert ok == 1
-    assert summary(steps, False) == f"apply: {len(steps) - hand - ok} changed, 1 ok, {hand} by hand"
+    # the mesh: no Zigbee2MQTT answers in a test, so the radio's step waits
+    # (the walk's own half has its own file, test_zigbee.py)
+    waiting = sum(1 for s in steps if s.state == "waiting")
+    assert ok == 1 and waiting == 1
+    assert summary(steps, False) == (
+        f"apply: {len(steps) - hand - ok - waiting} changed, 1 ok, {hand} by hand, "
+        f"{waiting} waiting"
+    )
 
     # the knobs: the files seed the helpers once (a fresh time helper reads
     # 00:00, not unknown — the conductor's own mark says it has spoken)
@@ -732,7 +738,7 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert marks["input_datetime.house_period_morning"] == "06:30"
 
     again = apply(witness, secrets, tmp_path, ha, check=False)
-    assert set(states(again).values()) == {"ok", "hand"}, states(again)
+    assert set(states(again).values()) == {"ok", "hand", "waiting"}, states(again)
     assert states(again)["entry kitchen_printer"] == "ok"
     assert len(ha.entries["ipp"]) == 1 and len(ha.entries["cast"]) == 1  # keyed on the domain
 
@@ -871,7 +877,7 @@ def test_home_assistants_own_first_areas_are_adopted_by_name(witness, secrets, t
         st["area (chambre)"] == "ok" and "area (cuisine)" not in st
     )  # Chambre reported, left alone
     again = apply(witness, secrets, tmp_path, ha, check=False)
-    assert set(states(again).values()) == {"ok", "hand"}
+    assert set(states(again).values()) == {"ok", "hand", "waiting"}  # + the mesh, absent here
 
 
 def test_a_trial_that_fails_at_the_door_is_not_promoted(witness, secrets, tmp_path, monkeypatch):
@@ -970,7 +976,7 @@ def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, t
     printer = next(s for s in steps if s.name == "entry kitchen_printer")
     assert printer.state == "waiting" and "192.0.2.32 does not answer" in printer.detail
     assert "ipp" not in ha.entries and not ha.flows  # nothing made, nothing left open
-    assert ", 1 waiting" in summary(steps, False)
+    assert ", 2 waiting" in summary(steps, False)  # the printer, and the mesh no test answers for
     ha.off.clear()  # powered on: the next apply makes the entry
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert states(again)["entry kitchen_printer"] == "changed"

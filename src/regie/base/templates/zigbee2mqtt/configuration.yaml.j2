@@ -1,26 +1,49 @@
 # rendered by La Régie — edit home.yml, not this file.
-# Zigbee2MQTT writes this file too (a pairing, a rename in its UI): a render
-# puts it back, and `regie check` shows what drifted in between.
-version: 4
+# Zigbee2MQTT owns this file too: it re-writes it whenever a setting changes
+# (a pairing, a rename in its UI). It compares the PARSED document, so a
+# render that matches what it would write is a no-op for it — and a render
+# puts the house's version back when they disagree; `regie check` shows what
+# drifted in between.
+#
+# `version` is Zigbee2MQTT's own settings-schema version (CURRENT_VERSION in
+# its settings.js), not ours: an older one is migrated (and backed up) at
+# every start until it is written back, a newer one refuses to start. It
+# moves with the image pin, in the same release.
+version: 5
 homeassistant:
   enabled: true
 frontend:
   enabled: true
   host: 127.0.0.1
-  port: {{ 8080 + index }}
+  port: {{ coordinator.frontend_port }}
 mqtt:
   base_topic: {{ coordinator.base_topic }}
   server: mqtt://127.0.0.1:{{ data.mqtt.port | default(1883) }}
   user: zigbee2mqtt_{{ coordinator.id }}
-  password: !secret mqtt_password
+  # A VALUE REFERENCE, and a quoted string on purpose: since 2.0 Zigbee2MQTT
+  # reads this file with plain js-yaml, where `!secret x` is an unknown TAG
+  # and the whole file fails to parse ("configuration file is invalid" - the
+  # error names no line). The string form `!<file> <key>` is resolved by the
+  # engine itself, for these keys alone: mqtt.server, mqtt.user,
+  # mqtt.password, advanced.network_key, frontend.auth_token.
+  password: "!secret mqtt_password"
 serial:
   port: tcp://{{ coordinator.host }}:{{ coordinator.port }}
   adapter: {{ coordinator.adapter }}
 advanced:
   channel: {{ data.zigbee.channel | default(25) }}
-  network_key: !secret network_key
-  pan_id: !secret pan_id
-  ext_pan_id: !secret ext_pan_id
+  # the one true secret of a Zigbee network: it encrypts every frame
+  network_key: "!secret network_key"
+  # THE TWO IDENTIFIERS ARE NOT SECRETS, and they are here in the clear on
+  # purpose: a Zigbee beacon carries the pan id and the extended pan id
+  # UNENCRYPTED - anyone with a sniffer in the street reads them off the air.
+  # Zigbee2MQTT will not take a reference for them either (it resolves one
+  # only for the five keys above, and its own validation refuses a string
+  # that is not GENERATE). They are minted once and kept in the house's store
+  # because they are IDENTITY - the same values rebuild the same network - not
+  # because they are confidential.
+  pan_id: {{ secrets['zigbee_' ~ coordinator.id ~ '_pan_id'] | to_yaml }}
+  ext_pan_id: {{ secrets['zigbee_' ~ coordinator.id ~ '_ext_pan_id'] | to_yaml }}
   last_seen: ISO_8601
   log_level: info
 availability:

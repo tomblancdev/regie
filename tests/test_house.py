@@ -1,7 +1,7 @@
 import pytest
 
 from regie.errors import HouseError
-from regie.house import load_house
+from regie.house import load_house, zigbee_group_id
 
 
 def test_witness_loads_with_one_of_every_kind(witness):
@@ -53,7 +53,14 @@ def test_coordinator_resolves_from_its_thing_and_groups_by_room(witness):
         "living_ceiling_3",
         "living_floor_lamp",
     ]
-    assert [g["number"] for g in c["groups"]] == [1, 2, 3, 4, 5]
+    # the numbers are DERIVED from the rooms' ids, never counted: they live in
+    # the bulbs' own group tables, so a room gaining its first light may not
+    # renumber the rest of the flat
+    assert [g["number"] for g in c["groups"]] == [
+        zigbee_group_id(g["area"]["id"]) for g in c["groups"]
+    ]
+    assert zigbee_group_id("living") == zigbee_group_id("living") != zigbee_group_id("kitchen")
+    assert all(1 <= n <= 65534 for n in (zigbee_group_id(x) for x in ("a", "b", "living")))
 
 
 def test_mqtt_users_and_secret_names(witness):

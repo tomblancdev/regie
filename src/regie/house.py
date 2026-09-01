@@ -9,6 +9,7 @@ a hint, never an error."""
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from collections import Counter
 from dataclasses import dataclass, field
@@ -50,6 +51,24 @@ DOMAIN: dict[str, str | None] = {
     "coordinator": None,
     "proxy": None,
 }
+
+
+def zigbee_group_id(area_id: str) -> int:
+    """A room's Zigbee group number, DERIVED from its id and nothing else.
+
+    The number is written into every member bulb's own group table, so it may
+    never move: numbering the groups in order (1, 2, 3…) would renumber half
+    the flat the day a room gains its first light, and every bulb would keep
+    answering on an id nothing addresses any more — a silent break, in the
+    hardware, of the thing that must work with the brain down. A hash of the
+    room's id is stable whatever else the house grows; `check` refuses the
+    collision (1 in 65534 per pair of rooms) rather than leaving two rooms one
+    switch.
+    """
+    digest = hashlib.sha256(area_id.encode("utf-8")).digest()
+    return 1 + int.from_bytes(digest[:2], "big") % 65534
+
+
 DAYLIGHT = ("dark", "dim", "bright")
 # what the implicit `off` scene switches off: the lights and the switches — a
 # screen or a speaker goes off only when a scene names it (a TV must not go
@@ -306,7 +325,7 @@ class House:
             for a in self.areas:
                 lights = [t for t in things if t["area"] == a["id"] and t["kind"] == "light"]
                 if lights:
-                    groups.append({"number": len(groups) + 1, "area": a, "things": lights})
+                    groups.append({"number": zigbee_group_id(a["id"]), "area": a, "things": lights})
             out.append(
                 {
                     "id": c_id,
@@ -316,6 +335,9 @@ class House:
                     "adapter": c.get("adapter", "zstack"),
                     "base_topic": c.get("base_topic")
                     or ("zigbee2mqtt" if i == 0 else f"zigbee2mqtt_{c_id}"),
+                    # the instance's own UI, on the loopback: the door the
+                    # engine walks and binds through (one per radio, in order)
+                    "frontend_port": 8080 + i,
                     "things": things,
                     "groups": groups,
                 }
@@ -756,6 +778,18 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
     zigbee_things = [t for t in house.things if t["via"] == "zigbee"]
     if zigbee_things and not coordinator_ids:
         errors.append(f"{len(zigbee_things)} zigbee thing(s) but no zigbee.coordinators")
+    # the derived group numbers, checked for the collision they can have: two
+    # rooms on one number would share a switch and a scene, in the bulbs'
+    # own group tables, where nothing in this file would show it
+    by_number: dict[int, list[str]] = {}
+    for a in house.areas:
+        by_number.setdefault(zigbee_group_id(a["id"]), []).append(a["id"])
+    for number, rooms in by_number.items():
+        if len(rooms) > 1:
+            errors.append(
+                f"rooms {', '.join(sorted(rooms))} derive the same Zigbee group number "
+                f"({number}) — rename one of them (the number comes from the id)"
+            )
     for c in data.get("zigbee", {}).get("coordinators", []):
         if c.get("thing"):
             if c["thing"] not in thing_ids:

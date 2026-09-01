@@ -1,8 +1,15 @@
-# rendered by La Régie — the things on this radio, by address; the friendly name IS the thing's id
+# rendered by La Régie — the things on this radio, by address; the friendly
+# name IS the thing's id (one name for the topic, the entity and this file).
+# Zigbee2MQTT owns this file too: it adds a device the moment it joins, under
+# its address as a name. That is the walk's normal middle — the row lands in
+# home.yml, the next render writes the name here and `apply` renames the
+# running instance (a live Zigbee2MQTT does not re-read the file).
+# `friendly_name` is the only key of a device the 2.x schema knows: a
+# `description:` (1.x) is dropped the next time Zigbee2MQTT writes the file,
+# and the two would disagree for ever.
 {% for t in coordinator.things %}
 '{{ t.ieee }}':
   friendly_name: {{ t.id }}
-  description: {{ ((t.label | default(labels.kind(t.kind))) ~ ' — ' ~ house.area(t.area).label) | to_yaml }}
 {% endfor %}
 {% if not coordinator.things %}
 {}

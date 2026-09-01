@@ -55,10 +55,7 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
     assert main(["doctor", str(witness_path)]) == 2
-    assert "lands in 0.7 — the Zigbee walk" in capsys.readouterr().err
-    # pair is built for Matter; its Zigbee half says when it lands
-    assert main(["pair", str(witness_path), "--room", "living"]) == 2
-    assert "lands in 0.7" in capsys.readouterr().err
+    assert "lands in 0.8" in capsys.readouterr().err
 
 
 def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):

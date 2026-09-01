@@ -40,6 +40,7 @@ from .flows import PERSON_FIELDS, Outcome, fill_form, walk
 from .ha import HomeAssistant
 from .host import STATE
 from .house import House
+from .z2m import Z2M
 
 CLIENT_NAME = "regie"
 MATTER_URL = "ws://localhost:5580/ws"  # the server beside the brain (pack matter)
@@ -754,6 +755,208 @@ class Conductor:
             raise HouseError(f"matter: {out.detail}")
         self.step("entry matter", "changed", f"set up the server on the loopback ({MATTER_URL})")
 
+    # --- the mesh -----------------------------------------------------------
+    def z2m_of(self, coordinator: dict) -> Z2M:
+        return Z2M(f"ws://127.0.0.1:{coordinator['frontend_port']}/api")
+
+    def zigbee(self) -> None:
+        """The mesh, made to match the rows: every thing wears its id, every
+        room with Zigbee lights has its group with exactly its lights in it,
+        and every `bind:` is a binding INSIDE the mesh — the half that keeps
+        working with the brain down (home.md 4.1). Zigbee2MQTT's files are
+        rendered too, but a running instance does not re-read them: what is
+        live is set through its API, here."""
+        for c in self.house.coordinators():
+            name = f"zigbee {c['id']}"
+            z = self.z2m_of(c)
+            try:
+                z.open(timeout=10)
+            except HouseError as exc:
+                self.step(name, "waiting", f"{exc} — tried again at the next apply")
+                continue
+            try:
+                if not z.online:
+                    self.step(name, "waiting", "the bridge is not online yet (the radio?)")
+                    continue
+                before = len(self.steps)
+                self.zigbee_names(name, z, c)
+                self.zigbee_groups(name, z, c)
+                self.zigbee_binds(name, z, c)
+                self.zigbee_strangers(name, z, c)
+                if len(self.steps) == before:
+                    # a radio with nothing to do still says it is there: an
+                    # empty mesh before the walk reads the same as a silence
+                    self.step(
+                        name,
+                        "ok",
+                        f"{len(c['things'])} thing(s), {len(c['groups'])} group(s) — "
+                        f"{z.info.get('version', '?')} on {c['host']}:{c['port']}",
+                    )
+            finally:
+                z.close()
+
+    def zigbee_names(self, name: str, z: Z2M, c: dict) -> None:
+        """A thing wears its row's id in the mesh: the friendly name, the MQTT
+        topic and the Home Assistant entity are one name (decision H8). The
+        walk pairs a thing under its address; this is where it gets its own."""
+        for t in c["things"]:
+            dev = z.device(t["ieee"])
+            if dev is None:
+                self.step(
+                    f"{name} {t['id']}",
+                    "waiting",
+                    f"{t['ieee']} is in the house but not in the mesh — paired to another "
+                    "radio, or lost (re-pair it)",
+                )
+                continue
+            if dev.get("friendly_name") == t["id"]:
+                continue
+            was = dev.get("friendly_name")
+            if not self.check:
+                z.request(
+                    "device/rename",
+                    {"from": was, "to": t["id"], "homeassistant_rename": True},
+                )
+            self.step(f"{name} {t['id']}", "changed", f"named (was {was})")
+
+    def zigbee_groups(self, name: str, z: Z2M, c: dict) -> None:
+        """One group per room that has Zigbee lights, holding exactly them.
+        The number is derived from the room's id (house.zigbee_group_id) and
+        lives in each bulb's own table — it never moves."""
+        live = {g["id"]: g for g in z.groups}
+        for g in c["groups"]:
+            number, room = g["number"], g["area"]["id"]
+            what = f"{name} group {room}"
+            group = live.get(number)
+            if group is None:
+                if not self.check:
+                    z.request("group/add", {"friendly_name": room, "id": number})
+                    group = {"id": number, "friendly_name": room, "members": []}
+                self.step(what, "changed", f"created (number {number})")
+            elif group.get("friendly_name") != room:
+                if not self.check:
+                    z.request("group/rename", {"from": group["friendly_name"], "to": room})
+                self.step(what, "changed", f"named {room} (was {group['friendly_name']})")
+            members = {m.get("ieee_address") for m in (group or {}).get("members", [])}
+            want = {t["ieee"] for t in g["things"]}
+            for t in g["things"]:
+                if t["ieee"] in members:
+                    continue
+                if not self.check:
+                    z.request("group/members/add", {"group": room, "device": t["id"]})
+                self.step(f"{what} {t['id']}", "changed", "in the room's group")
+            for ieee in sorted(members - want):
+                if not self.check:
+                    z.request("group/members/remove", {"group": room, "device": ieee})
+                self.step(
+                    f"{what} {ieee}", "changed", "out of the room's group (no row puts it there)"
+                )
+            if not (want - members) and not (members - want):
+                self.step(what, "ok", f"{len(want)} light(s), number {number}")
+
+    def zigbee_binds(self, name: str, z: Z2M, c: dict) -> None:
+        """`bind: [...]` on a control, made real: the command travels
+        remote → bulb (or → the room's group) inside the mesh, and the brain
+        only watches. A binding the house does not name is REMOVED only when
+        its target is one of ours (a room's group, a thing with a row); a
+        binding the vendor shipped is reported and left alone — it is not
+        ours to undo."""
+        ours = {g["number"]: g["area"]["id"] for g in c["groups"]}
+        by_ieee = {t["ieee"]: t for t in c["things"]}
+        for t in c["things"]:
+            targets = list(t.get("bind") or [])
+            dev = z.device(t["ieee"])
+            if dev is None:
+                continue
+            live: dict[str, set] = {}
+            for ep in (dev.get("endpoints") or {}).values():
+                for b in ep.get("bindings") or []:
+                    tgt = b.get("target") or {}
+                    key = (
+                        f"group:{tgt.get('id')}"
+                        if tgt.get("type") == "group"
+                        else f"device:{tgt.get('ieee_address')}"
+                    )
+                    live.setdefault(key, set()).add(b.get("cluster"))
+            for target in targets:
+                key = self.bind_key(target, c)
+                if key is None:
+                    self.step(
+                        f"{name} bind {t['id']}",
+                        "hand",
+                        f"target {target!r} is neither a room with Zigbee lights nor a paired "
+                        "thing on this radio",
+                    )
+                    continue
+                if key in live:
+                    self.step(f"{name} bind {t['id']} -> {target}", "ok", "bound in the mesh")
+                    continue
+                if not self.check:
+                    out = z.request("device/bind", {"from": t["id"], "to": target}, timeout=60)
+                    got = ", ".join(out.get("clusters") or []) or "nothing"
+                    failed = ", ".join(out.get("failed") or [])
+                    self.step(
+                        f"{name} bind {t['id']} -> {target}",
+                        "changed",
+                        f"bound: {got}" + (f" (refused: {failed})" if failed else ""),
+                    )
+                else:
+                    self.step(f"{name} bind {t['id']} -> {target}", "changed", "bind in the mesh")
+            wanted = {self.bind_key(x, c) for x in targets}
+            for key in sorted(live):
+                if key in wanted:
+                    continue
+                kind, _, ident = key.partition(":")
+                mine = (kind == "group" and int(ident or 0) in ours) or (
+                    kind == "device" and ident in by_ieee
+                )
+                if not mine:
+                    self.step(
+                        f"{name} bind {t['id']}",
+                        "ok",
+                        f"a binding to {key} the house does not name — the thing came with it, "
+                        "left alone",
+                    )
+                    continue
+                target = ours[int(ident)] if kind == "group" else by_ieee[ident]["id"]
+                if not self.check:
+                    z.request("device/unbind", {"from": t["id"], "to": target}, timeout=60)
+                self.step(
+                    f"{name} bind {t['id']} -> {target}", "changed", "unbound (no row names it)"
+                )
+
+    def bind_key(self, target: str, c: dict) -> str | None:
+        """What a `bind:` target is in the mesh: a room = its group's number,
+        a thing = its address."""
+        for g in c["groups"]:
+            if g["area"]["id"] == target:
+                return f"group:{g['number']}"
+        for t in c["things"]:
+            if t["id"] == target:
+                return f"device:{t['ieee']}"
+        return None
+
+    def zigbee_strangers(self, name: str, z: Z2M, c: dict) -> None:
+        """A thing in the mesh the house does not name. Never removed - the
+        pairing is not ours to undo (a projection marks its own, and this one
+        did not make it): it is REPORTED, with the one command that ends it."""
+        known = {t["ieee"] for t in c["things"]}
+        strangers = [
+            d
+            for d in z.devices
+            if d.get("type") != "Coordinator" and d["ieee_address"] not in known
+        ]
+        if not strangers:
+            return
+        for d in strangers:
+            what = d.get("definition") or {}
+            self.step(
+                f"{name} {d['ieee_address']}",
+                "hand",
+                f"paired, no row: {what.get('vendor', '?')} {what.get('model', '?')} "
+                f"(as {d.get('friendly_name')}) — `regie pair --room <room>` writes its row",
+            )
+
     @staticmethod
     def device_of(devices: list[dict], thing: dict, macs: dict | None = None) -> list[dict]:
         """The Home Assistant device(s) a row is: by its serial (Matter's
@@ -1005,6 +1208,7 @@ class Conductor:
         self.knobs()
         self.mqtt()
         self.matter()
+        self.zigbee()
         with self.ha.ws() as ws:
             self.credentials(ws)
             self.entries(ws)
@@ -1220,6 +1424,230 @@ def pair_matter(
         "evicted": [fabric_label(f) for f in evicted],
     }
     return row
+
+
+# --- the walk's Zigbee half (home.md 5.1, decision H13) ----------------------
+# What a thing IS comes from its own interview: Zigbee2MQTT hands over the
+# definition's `exposes`, the thing's capability list. The first of these its
+# exposes answer to is its kind - a composite type before a single property,
+# because a light that also reports power is a light.
+KIND_BY_EXPOSE_TYPE = (
+    ("light", "light"),
+    ("switch", "plug"),
+    ("cover", "cover"),
+    ("lock", "lock"),
+    ("climate", "thermostat"),
+)
+KIND_BY_PROPERTY = (("occupancy", "motion"), ("contact", "door"), ("action", "remote"))
+SENSOR_PROPERTIES = {
+    "temperature",
+    "humidity",
+    "pressure",
+    "illuminance",
+    "pm25",
+    "co2",
+    "voc",
+    "water_leak",
+    "smoke",
+    "vibration",
+    "battery",
+}
+# the clusters a control SENDS: a thing carrying one of them as an output can
+# be bound to a bulb or a group and drive it with the brain down (home.md 4.1)
+CONTROL_CLUSTERS = {"genOnOff", "genLevelCtrl", "lightingColorCtrl", "genScenes"}
+
+
+def zigbee_kind(exposes: list[dict]) -> str:
+    types = {e.get("type") for e in exposes}
+    names = {e.get("name") for e in exposes if e.get("name")}
+    for expose_type, kind in KIND_BY_EXPOSE_TYPE:
+        if expose_type in types:
+            return kind
+    for prop, kind in KIND_BY_PROPERTY:
+        if prop in names:
+            return kind
+    if names & SENSOR_PROPERTIES:
+        return "sensor"
+    return "device"
+
+
+def zigbee_bindable(device: dict) -> bool:
+    for ep in (device.get("endpoints") or {}).values():
+        if CONTROL_CLUSTERS & set((ep.get("clusters") or {}).get("output") or []):
+            return True
+    return False
+
+
+def pair_zigbee(
+    house: House,
+    secrets: dict,
+    root: Path,
+    ha: HomeAssistant,
+    *,
+    room: str,
+    role: str | None = None,
+    at: str | None = None,
+    thing_id: str | None = None,
+    coordinator: str | None = None,
+    seconds: int = 254,
+    adopt: str | None = None,
+    say: Callable[[str], None] = lambda _line: None,
+) -> dict:
+    """`regie pair --room <room>` — the walk, one thing at a time.
+
+    The room is the session: the join window opens on the radio, the human
+    holds the thing's reset button, and everything the thing says about
+    itself is read from its own interview (its vendor, its model, its
+    capability list) instead of typed. The name is generated, the row is
+    PRINTED - nothing is written: the row goes into the house's file, and
+    `apply` is what makes the mesh match it (the name, the room's group, the
+    bindings). The window is closed again whatever happens.
+
+    `adopt` takes a thing already in the mesh that no row names (an
+    interrupted walk, a re-run) without asking anyone to press anything.
+    """
+    area = next((a for a in house.areas if a["id"] == room), None)
+    if area is None:
+        raise HouseError(f"room {room!r}: no such area in home.yml")
+    if at and not role:
+        raise HouseError("--at needs a --role (a place belongs to a role's layout)")
+    coordinators = house.coordinators()
+    if not coordinators:
+        raise HouseError("the house has no zigbee.coordinators — no radio to walk")
+    if coordinator:
+        radio = next((c for c in coordinators if c["id"] == coordinator), None)
+        if radio is None:
+            raise HouseError(f"coordinator {coordinator!r}: no such radio in home.yml")
+    else:
+        radio = coordinators[0]
+    known = {t["ieee"] for t in house.things if t.get("ieee")}
+
+    with Z2M(f"ws://127.0.0.1:{radio['frontend_port']}/api") as z:
+        if not z.online:
+            raise HouseError(
+                f"zigbee2mqtt {radio['id']} is not online — it answers, but the radio does not "
+                "(check the unit's log)"
+            )
+        strangers = [
+            d
+            for d in z.devices
+            if d.get("type") != "Coordinator" and d["ieee_address"] not in known
+        ]
+        if adopt:
+            dev = next(
+                (d for d in strangers if adopt in (d["ieee_address"], d.get("friendly_name"))),
+                None,
+            )
+            if dev is None:
+                raise HouseError(
+                    f"{adopt!r} is not a thing in the mesh that the house leaves unnamed"
+                )
+            ieee = dev["ieee_address"]
+        else:
+            if strangers:
+                say(
+                    f"note: {len(strangers)} thing(s) already in the mesh with no row "
+                    f"({', '.join(d['ieee_address'] for d in strangers)}) — `--adopt <address>` "
+                    "writes a row for one without a new join"
+                )
+            ieee = _join(z, known, seconds, say)
+            dev = z.device(ieee)
+        if dev is None:
+            raise HouseError(f"{ieee}: interviewed, but the bridge does not list it yet")
+
+        definition = dev.get("definition") or {}
+        kind = zigbee_kind(definition.get("exposes") or [])
+        row: dict = {}
+        if thing_id:
+            row["id"] = thing_id
+        elif role and at:
+            row["id"] = f"{room}_{role}_{at}"
+        elif role:
+            n = len(house.roles_in(room).get(role, [])) + 1
+            row["id"] = f"{room}_{role}_{n}"
+        else:
+            n = sum(1 for t in house.things if t["area"] == room and t["kind"] == kind) + 1
+            row["id"] = f"{room}_{kind}_{n}"
+        row.update({"area": room, "kind": kind, "via": "zigbee"})
+        if definition.get("vendor"):
+            row["vendor"] = definition["vendor"]
+        if definition.get("model"):
+            row["model"] = definition["model"]
+        row["ieee"] = ieee
+        if radio["id"] != coordinators[0]["id"]:
+            row["coordinator"] = radio["id"]
+        if role:
+            row["role"] = role
+        if at:
+            row["at"] = at
+        # a control is bound to the room by default (home.md 5.1): its
+        # commands then travel inside the mesh, and the wall switch keeps
+        # working when the brain is down
+        if kind != "light" and zigbee_bindable(dev):
+            row["bind"] = [room]
+        # the same courtesy as the Matter half: a light says which one it is,
+        # and ends dark and in sync
+        if kind == "light":
+            z.publish(f"{dev.get('friendly_name') or ieee}/set", {"state": "ON", "brightness": 254})
+            time.sleep(1.5)
+            z.publish(f"{dev.get('friendly_name') or ieee}/set", {"state": "OFF"})
+        row["_found"] = {
+            "name": dev.get("friendly_name"),
+            "description": definition.get("description"),
+            "power": dev.get("power_source"),
+            "type": dev.get("type"),
+            "supported": dev.get("supported"),
+            "exposes": sorted(
+                {e.get("name") or e.get("type") for e in (definition.get("exposes") or [])}
+            ),
+            "bindable": zigbee_bindable(dev),
+        }
+        return row
+
+
+def _join(z: Z2M, known: set, seconds: int, say: Callable[[str], None]) -> str:
+    """Open the window and follow `bridge/event` until one thing the house
+    does not name finishes its interview. Returns its address."""
+    say(
+        f"the join window is open for {seconds} s — reset the thing now "
+        "(a bulb: the switch off/on the number of times its manual says; a remote: hold "
+        "its pairing button until it blinks)"
+    )
+    end = time.monotonic() + seconds
+    with z.join_window(seconds):
+        while time.monotonic() < end:
+            got = z.recv(timeout=max(1, end - time.monotonic()))
+            if got is None:
+                continue
+            topic, payload = got
+            if topic != "bridge/event" or not isinstance(payload, dict):
+                continue
+            event, data = payload.get("type"), payload.get("data") or {}
+            ieee = data.get("ieee_address")
+            if event == "device_joined":
+                say(f"joined: {ieee} — interviewing (this takes a few seconds)…")
+            elif event == "device_interview":
+                status = data.get("status")
+                if status == "started":
+                    continue
+                if status == "failed":
+                    say(
+                        f"interview FAILED for {ieee} — leave it powered and close to the "
+                        "coordinator; it usually retries by itself"
+                    )
+                    continue
+                definition = data.get("definition") or {}
+                what = f"{definition.get('vendor', '?')} {definition.get('model', '?')}"
+                if ieee in known:
+                    say(f"{ieee} ({what}) re-joined — the house already names it; still waiting")
+                    continue
+                say(f"interviewed: {what} — {definition.get('description') or 'no description'}")
+                return ieee
+    raise HouseError(
+        f"nothing new joined in {seconds} s — the window is closed again. "
+        "Reset the thing first, then run the walk (some things only join in the first "
+        "seconds after a reset)"
+    )
 
 
 def fabric_label(f: dict) -> str:

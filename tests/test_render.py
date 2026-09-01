@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from regie.errors import HouseError
-from regie.house import load_house
+from regie.house import load_house, zigbee_group_id
 from regie.render import render
 
 EXPECTED = {
@@ -92,29 +92,40 @@ def test_home_assistant_configuration(rendered):
 
 def test_zigbee2mqtt_configuration(rendered):
     text = (rendered / "zigbee2mqtt/main/configuration.yaml").read_text()
-    assert "port: tcp://192.0.2.10:6638" in text and "adapter: zstack" in text
-    assert "channel: 25" in text and "network_key: !secret network_key" in text
-    assert "user: zigbee2mqtt_main" in text and "base_topic: zigbee2mqtt" in text
-    assert "host: 127.0.0.1\n  port: 8080" in text, (
+    conf = yaml.safe_load(text)  # plain YAML: what Zigbee2MQTT itself reads it with
+    assert conf["serial"] == {"port": "tcp://192.0.2.10:6638", "adapter": "zstack"}
+    assert conf["version"] == 5
+    # a value reference is a STRING, never a tag: `!secret x` unquoted is an
+    # unknown tag to js-yaml and the whole file fails to parse
+    assert conf["advanced"]["network_key"] == "!secret network_key"
+    assert conf["mqtt"]["password"] == "!secret mqtt_password"
+    # the two identifiers ride the beacons in the clear: they are rendered as
+    # values, and Zigbee2MQTT takes a reference for neither
+    assert conf["advanced"]["pan_id"] == 6754
+    assert conf["advanced"]["ext_pan_id"] == [221, 221, 221, 221, 221, 221, 221, 221]
+    assert conf["advanced"]["channel"] == 25
+    assert (
+        conf["mqtt"]["user"] == "zigbee2mqtt_main" and conf["mqtt"]["base_topic"] == "zigbee2mqtt"
+    )
+    assert conf["frontend"]["host"] == "127.0.0.1" and conf["frontend"]["port"] == 8080, (
         "the UI listens on the loopback: an admin's tunnel, not a door"
     )
     devices = yaml.safe_load(
         (rendered / "zigbee2mqtt/main/devices.yaml").read_text(encoding="utf-8")
     )
-    assert devices["0x000d6ffffe000002"] == {
-        "friendly_name": "living_floor_lamp",
-        "description": "Lampadaire — Salon",
-    }
+    # friendly_name alone: `description` is not a key of the 2.x schema, and
+    # would be dropped the next time Zigbee2MQTT writes the file
+    assert devices["0x000d6ffffe000002"] == {"friendly_name": "living_floor_lamp"}
     assert "0x000d6ffffe000001" in devices and len(devices) == 18
     groups = yaml.safe_load((rendered / "zigbee2mqtt/main/groups.yaml").read_text(encoding="utf-8"))
-    assert groups["2"] == {
-        "friendly_name": "living",
-        "description": "Salon",
-        "devices": ["living_ceiling", "living_ceiling_2", "living_ceiling_3", "living_floor_lamp"],
-    }
+    number = str(zigbee_group_id("living"))
+    # no `devices:` either: membership lives in the bulbs' own group tables,
+    # and `apply` is what puts it there
+    assert groups[number] == {"friendly_name": "living"}
     secret = yaml.safe_load((rendered / "zigbee2mqtt/main/secret.yaml").read_text())
+    assert set(secret) == {"network_key", "mqtt_password"}
     assert secret["network_key"] == [1, 3, 5, 7, 9, 11, 13, 15, 0, 2, 4, 6, 8, 10, 12, 13]
-    assert secret["pan_id"] == 6754 and secret["mqtt_password"] == "example-z2m-password"
+    assert secret["mqtt_password"] == "example-z2m-password"
 
 
 def test_mosquitto_users(rendered):
