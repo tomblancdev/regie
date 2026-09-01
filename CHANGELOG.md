@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.1 — a rendered group is the API's to leave alone (2026-09-01, W1's walk)
+
+Found with thirteen bulbs in the mesh and the converge dying on the first
+room's group: **`apply` must never `group/add` a group its own render has
+already declared.**
+
+- **The mechanism, read from Zigbee2MQTT's own code.** `groups.yaml` is
+  where a group's *name* lives, so `settings.addGroup` refuses a name the
+  file already carries — *"friendly_name 'living_room' is already in use"* —
+  and the converge fails there. Meanwhile the **radio's** group object does
+  not exist yet, so `bridge/groups` is empty and the old code read that
+  emptiness as "not created". Both halves were telling the truth about
+  different registers.
+- **The group is made by its first member.** `zigbee.js` creates the
+  herdsman group lazily the first time the name is resolved — *"If group
+  does not exist, create it (since it's already in configuration.yaml)"* —
+  which the `group/members/add` that follows already does. So the fix is a
+  deletion: declare in the file, populate through the API, never add.
+- **The fake was the reason the tests missed it.** `FakeZ2M` let
+  `group/add` succeed, which the real one never would. It now carries
+  `declared` (what the render wrote), refuses `group/add` for a name in it,
+  and materialises the group on the first member — the shape of the real
+  thing. 159 tests.
+
 ## 0.7.0 — the Zigbee walk (2026-09-01, W1)
 
 The mesh half, built against a real radio and a real 2.x Zigbee2MQTT — and

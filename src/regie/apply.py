@@ -829,10 +829,18 @@ class Conductor:
             what = f"{name} group {room}"
             group = live.get(number)
             if group is None:
-                if not self.check:
-                    z.request("group/add", {"friendly_name": room, "id": number})
-                    group = {"id": number, "friendly_name": room, "members": []}
-                self.step(what, "changed", f"created (number {number})")
+                # NOT `group/add`. The render already declared this group in
+                # groups.yaml, and settings is where Zigbee2MQTT keeps a
+                # group's NAME: adding it would be refused outright
+                # ("friendly_name '<room>' is already in use", settings.js
+                # addGroup). The radio's own group object is made LAZILY, the
+                # first time the name is resolved — "If group does not exist,
+                # create it (since it's already in configuration.yaml)"
+                # (zigbee.js) — which the members/add below is. So a declared
+                # group is absent from `bridge/groups` until it has a member,
+                # and that is not a fault to repair.
+                group = {"id": number, "friendly_name": room, "members": []}
+                self.step(what, "changed", f"declared (number {number}) — made by its first member")
             elif group.get("friendly_name") != room:
                 if not self.check:
                     z.request("group/rename", {"from": group["friendly_name"], "to": room})

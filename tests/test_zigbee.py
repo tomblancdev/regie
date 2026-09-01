@@ -21,9 +21,16 @@ from .test_apply import (
 class FakeZ2M:
     """Zigbee2MQTT's frontend, as the engine uses it."""
 
-    def __init__(self, devices=(), groups=(), events=(), online=True):
+    def __init__(self, devices=(), groups=(), events=(), online=True, declared=None):
         self.mesh = [dict(d) for d in devices]
         self.groups_ = [dict(g) for g in groups]
+        # what groups.yaml declares: Zigbee2MQTT's SETTINGS know these
+        # names, its runtime does not — the radio's group object is made
+        # lazily, the first time the name is resolved (zigbee.js: "If
+        # group does not exist, create it (since it's already in
+        # configuration.yaml)"). A rendered group is therefore absent from
+        # `groups` AND refused by `group/add`.
+        self.declared = dict(declared or {})
         self.script = list(events)
         self.calls: list[tuple[str, dict]] = []
         self.published: list[tuple[str, dict]] = []
@@ -82,19 +89,34 @@ class FakeZ2M:
             None,
         )
 
+    def _materialise(self, key):
+        """Resolving a declared group is what creates it on the radio."""
+        number = next((n for n, room in self.declared.items() if room == key), None)
+        if number is None:
+            return None
+        self.groups_.append({"id": number, "friendly_name": key, "members": []})
+        return self.groups_[-1]
+
     def request(self, name, payload=None, timeout=30):
         payload = payload or {}
         self.calls.append((name, payload))
         if name == "device/rename":
             self.by_name(payload["from"])["friendly_name"] = payload["to"]
         elif name == "group/add":
+            if payload["friendly_name"] in self.declared.values() or self.group(
+                payload["friendly_name"]
+            ):
+                raise HouseError(
+                    "zigbee2mqtt group/add: friendly_name "
+                    f"'{payload['friendly_name']}' is already in use"
+                )
             self.groups_.append(
                 {"id": payload["id"], "friendly_name": payload["friendly_name"], "members": []}
             )
         elif name == "group/rename":
             self.group(payload["from"])["friendly_name"] = payload["to"]
         elif name in ("group/members/add", "group/members/remove"):
-            group = self.group(payload["group"])
+            group = self.group(payload["group"]) or self._materialise(payload["group"])
             dev = self.by_name(payload["device"]) or self.device(payload["device"])
             member = {"ieee_address": dev["ieee_address"], "endpoint": 1}
             if name.endswith("add"):
@@ -141,6 +163,7 @@ def mesh_of(house, **kwargs):
         for t in c["things"]
     ]
     devices.append({"ieee_address": "0x00124b0000000000", "type": "Coordinator"})
+    kwargs.setdefault("declared", {g["number"]: g["area"]["id"] for g in c["groups"]})
     return FakeZ2M(devices=devices, **kwargs)
 
 
@@ -190,6 +213,23 @@ def test_the_mesh_is_made_to_match_the_rows(witness, secrets, tmp_path, furnishe
     again = apply(witness, secrets, tmp_path, FakeHA(), check=False)
     assert len(z.calls) == before
     assert {s.state for s in again if s.name.startswith("zigbee ")} == {"ok"}
+
+
+def test_a_rendered_group_is_never_re_added(witness, secrets, tmp_path, furnished):
+    """The render declares the room's group in groups.yaml, so Zigbee2MQTT's
+    SETTINGS already carry the name while its runtime does not: `group/add`
+    would be refused ("friendly_name '<room>' is already in use") and the
+    converge would die there. The radio's group object is made lazily by the
+    first member — found live at W1's walk, 2026-09-01, with seven bulbs in
+    the mesh and the converge failing on Le QG's group."""
+    z = furnished(mesh_of(witness))
+    assert z.groups == [], "a declared group is not on the bridge until it has a member"
+    steps = apply(witness, secrets, tmp_path, FakeHA(), check=False)
+    assert not [c for c in z.calls if c[0] == "group/add"], "group/add is Zigbee2MQTT's to refuse"
+    living = z.group("living")
+    assert living["id"] == zigbee_group_id("living")
+    assert {m["ieee_address"] for m in living["members"]}, "its members made it real"
+    assert states(steps)["zigbee main group living"] == "changed"
 
 
 def test_check_plans_the_mesh_and_touches_nothing(witness, secrets, tmp_path, furnished):

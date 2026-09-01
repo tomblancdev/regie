@@ -8,6 +8,12 @@
 # table; herdsman's database mirrors it). `apply` puts the members in through
 # the API — a `devices:` list here would be dropped the next time
 # Zigbee2MQTT writes the file, and would have added nobody in the meantime.
+# AND THE GROUP HERE IS NEVER `group/add`ed (0.7.1): this file is where a
+# group's NAME lives, so Zigbee2MQTT refuses to add one it already reads here
+# ("friendly_name '<room>' is already in use"). Its runtime group object is
+# made LAZILY, by the first member the API adds — which is why a room's group
+# is absent from `bridge/groups` until it holds a light, and that is not a
+# fault to repair.
 {% for g in coordinator.groups %}
 '{{ g.number }}':
   friendly_name: {{ g.area.id }}
