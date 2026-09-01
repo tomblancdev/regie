@@ -756,6 +756,11 @@ class Conductor:
         self.step("entry matter", "changed", f"set up the server on the loopback ({MATTER_URL})")
 
     # --- the mesh -----------------------------------------------------------
+    # `up` restarts Zigbee2MQTT when the render changed one of its files, and
+    # the frontend's socket comes up seconds AFTER the unit does — so the
+    # conductor waits for the door instead of skipping the mesh (0.7.2).
+    z2m_wait = 60
+
     def z2m_of(self, coordinator: dict) -> Z2M:
         return Z2M(f"ws://127.0.0.1:{coordinator['frontend_port']}/api")
 
@@ -770,7 +775,7 @@ class Conductor:
             name = f"zigbee {c['id']}"
             z = self.z2m_of(c)
             try:
-                z.open(timeout=10)
+                z.open(timeout=10, wait=0 if self.check else self.z2m_wait)
             except HouseError as exc:
                 self.step(name, "waiting", f"{exc} — tried again at the next apply")
                 continue

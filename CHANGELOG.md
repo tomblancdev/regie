@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.2 — the conductor waits for a door being restarted under it (2026-09-01, W1's walk)
+
+The converge renders Zigbee2MQTT's files, `up` restarts it when they
+changed, and `apply` follows immediately — but the frontend binds its socket
+seconds after the unit starts. So the connection was REFUSED and **the whole
+mesh half was skipped** (names, the room's group, every binding) while the
+run still reported success: `~ zigbee main: … Connection refused — tried
+again at the next apply`. Any converge touching a Z2M file needed a second
+one, and nothing said so out loud.
+
+- **`Z2M.open(wait=…)`** retries while the door is *refused* — a socket not
+  listening yet — and still fails at once on anything else, which is a door
+  that is wrong rather than late. The conductor asks for 60 s; `check` asks
+  for none.
+- **The suite keeps no patience** (`conftest`): a test meets a door that is
+  simply absent, and a minute of waiting each is a suite that hangs — found
+  the hard way, three containers still spinning. The wait has its own test
+  instead: refused twice then answered, and `wait=0` failing on the first try.
+
 ## 0.7.1 — a rendered group is the API's to leave alone (2026-09-01, W1's walk)
 
 Found with thirteen bulbs in the mesh and the converge dying on the first

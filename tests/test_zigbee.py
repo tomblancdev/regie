@@ -40,7 +40,7 @@ class FakeZ2M:
         self.info = {"version": "2.13.0"}
 
     # --- the connection ---
-    def open(self, timeout=20):
+    def open(self, timeout=20, wait=0):
         self.opened = True
         return self
 
@@ -293,7 +293,7 @@ def test_a_radio_that_does_not_answer_is_waiting_not_a_fault(
 ):
     def refuse(self, coordinator):
         class Shut(FakeZ2M):
-            def open(self, timeout=20):
+            def open(self, timeout=20, wait=0):
                 raise HouseError("ws://127.0.0.1:8080/api: no Zigbee2MQTT at that door")
 
         return Shut()
@@ -440,6 +440,41 @@ def test_an_interrupted_walk_is_adopted_without_a_new_join(witness, secrets, tmp
     row = pair_zigbee(witness, secrets, tmp_path, FakeHA(), room="hall", adopt=ieee)
     assert row["kind"] == "motion" and row["id"] == "hall_motion_2"
     assert z.windows == [], "no window opens for a thing already in the mesh"
+
+
+def test_a_door_not_listening_yet_is_waited_for_not_skipped(monkeypatch):
+    """`up` restarts Zigbee2MQTT when the render changed one of its files and
+    the conductor follows at once, but the frontend binds its socket seconds
+    after the unit starts. A REFUSED connection is a door not open yet: wait.
+    Anything else is a door that is wrong: fail now. Found at W1's walk,
+    2026-09-01 — the converge reported success while the whole mesh half
+    (names, the room's group, the bindings) had been skipped."""
+    from regie import z2m as z2m_mod
+
+    tries = []
+
+    class Sock:
+        def send(self, _raw): ...
+        def recv(self, timeout=None):
+            raise TimeoutError
+
+        def close(self): ...
+
+    def refuse_then_answer(url, **kwargs):
+        tries.append(url)
+        if len(tries) < 3:
+            raise ConnectionRefusedError(111, "Connection refused")
+        return Sock()
+
+    monkeypatch.setattr("websockets.sync.client.connect", refuse_then_answer)
+    monkeypatch.setattr(z2m_mod.time, "sleep", lambda _s: None)
+    z2m_mod.Z2M("ws://127.0.0.1:8080/api").open(timeout=1, wait=30)
+    assert len(tries) == 3, "it waited through the refusals"
+
+    tries.clear()
+    with pytest.raises(HouseError, match="no Zigbee2MQTT at that door"):
+        z2m_mod.Z2M("ws://127.0.0.1:8080/api").open(timeout=1, wait=0)
+    assert len(tries) == 1, "no patience asked for, none spent"
 
 
 def test_the_kind_comes_from_the_capability_list():

@@ -4,12 +4,22 @@ from pathlib import Path
 import pytest
 import yaml
 
+from regie.apply import Conductor
 from regie.house import load_house
 from regie.render import render
 from regie.secrets import load_secrets
 
 ROOT = Path(__file__).parent
 WITNESS = ROOT / "examples" / "maison-temoin"
+
+
+@pytest.fixture(autouse=True)
+def _no_patience_in_tests(monkeypatch):
+    """The conductor waits for a Zigbee2MQTT frontend that is not listening
+    yet (0.7.2) — a door being restarted by `up` under it. A test meets a
+    door that is simply not there, and waiting a minute for each is a suite
+    that hangs; the wait itself is proved by its own test in test_zigbee.py."""
+    monkeypatch.setattr(Conductor, "z2m_wait", 0)
 
 
 @pytest.fixture(scope="session")

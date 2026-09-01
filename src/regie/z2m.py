@@ -40,16 +40,36 @@ class Z2M:
     _n: int = 0
 
     # --- the connection ------------------------------------------------------
-    def open(self, timeout: int = 20) -> Z2M:
+    def open(self, timeout: int = 20, wait: float = 0) -> Z2M:
+        """`wait` seconds of patience for a door that is not listening YET.
+
+        The converge renders Zigbee2MQTT's files, `up` restarts it when they
+        changed, and `apply` follows immediately — but the frontend binds its
+        socket seconds after the unit starts, so the connection is REFUSED and
+        the whole mesh half (names, the room's group, the bindings) is skipped
+        while the run still reports success. Found at W1's walk, 2026-09-01:
+        every converge that touches a Z2M file would have needed a second one,
+        silently. A refused connection is a door not open yet; anything else
+        is a door that is wrong, and fails at once."""
         from websockets.sync.client import connect
 
-        try:
-            self.conn = connect(self.url, open_timeout=timeout, max_size=None)
-        except Exception as exc:  # noqa: BLE001 - one message, whatever the transport said
-            raise HouseError(
-                f"{self.url}: no Zigbee2MQTT at that door ({exc}) — is zigbee2mqtt running, "
-                "and is this the right radio's port?"
-            ) from exc
+        deadline = time.monotonic() + wait
+        while True:
+            try:
+                self.conn = connect(self.url, open_timeout=timeout, max_size=None)
+                break
+            except (ConnectionRefusedError, OSError) as exc:
+                if time.monotonic() >= deadline:
+                    raise HouseError(
+                        f"{self.url}: no Zigbee2MQTT at that door ({exc}) — is zigbee2mqtt "
+                        "running, and is this the right radio's port?"
+                    ) from exc
+                time.sleep(1)
+            except Exception as exc:  # noqa: BLE001 - one message, whatever the transport said
+                raise HouseError(
+                    f"{self.url}: no Zigbee2MQTT at that door ({exc}) — is zigbee2mqtt running, "
+                    "and is this the right radio's port?"
+                ) from exc
         self.drain(timeout=timeout)
         return self
 
