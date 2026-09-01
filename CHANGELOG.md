@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.8.1 — a Zigbee thing wears its name in Home Assistant too (2026-09-01)
+
+**The bug this fixes had made every scene in a real house a no-op.** A look is
+rendered by role against `light.<thing id>`; a role's group lists the same
+names. In a house whose lights came through the Zigbee walk, not one of those
+entities existed — every group read `unavailable`, and `script.<room>_<scene>`
+turned nothing on or off. Read from Home Assistant's own registry, a bulb was
+`light.0x8c8b48fffe68957a`.
+
+**Why, and it is worth writing down.** Home Assistant mints an entity id
+**once**, when a device is first announced. The bridge announces a thing at
+its **interview** — while its friendly name is still its radio address. `pair`
+renames it a moment later; the *device* follows (which is why the UI reads the
+right label and nothing looks wrong), but an entity id belongs to the user, so
+the address sticks for ever. A Matter thing is commissioned already named,
+which is why those came out right and these did not — the same conductor, two
+orders of operations.
+
+`apply`'s device step already did exactly the right thing: room a row's
+device, name it, and rename the entity of the thing's own domain to the
+house's id. **Zigbee rows never reached it** — the step selected rows carrying
+a `serial`, a `mac` or an `integration:`, and a Zigbee row carries an `ieee`.
+
+- **`device_of` learned the radio address**: a Zigbee row matches the device
+  whose identifier is its `ieee`, alone or behind the instance's prefix
+  (`zigbee2mqtt_0x…` — the prefix is the instance's, not the protocol's, so
+  either form matches).
+- **The step's rows now include `ieee:`.** A Zigbee thing is roomed, named and
+  its entity renamed like every other thing; its diagnostics (linkquality,
+  battery) are untouched, as before.
+- Unchanged where it was already right: a device that is **two** entities of
+  the thing's domain is roomed and named but never renamed — which one would
+  be the row? — and a row whose device is not there yet is skipped in silence.
+
+Landing this on a house that has already walked is a one-time move of every
+Zigbee entity id, and the report names each one. Recorder history keyed on the
+old id does not follow.
+
 ## 0.8.0 — the brain learns the border router (2026-09-01, W1b-thread)
 
 The Thread mesh's plumbing landed on the fleet's side the same day: an

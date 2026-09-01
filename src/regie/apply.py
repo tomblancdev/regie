@@ -1082,8 +1082,10 @@ class Conductor:
         its hardware address (a `mac` connection; for a Matter node, the
         address its diagnostics report - `macs`, by device id - since Home
         Assistant's Matter device carries none, and a bulb may carry no
-        serial at all). Several devices for one row = a box that is several
-        things to Home Assistant."""
+        serial at all), else by its RADIO address (a Zigbee row's `ieee`: the
+        bridge publishes it as its device's identifier, alone or behind the
+        instance's prefix — `zigbee2mqtt_0x…`). Several devices for one row =
+        a box that is several things to Home Assistant."""
         serial = thing.get("serial")
         if serial:
             for d in devices:
@@ -1096,15 +1098,25 @@ class Conductor:
                     return [d]
             return []
         mac = (thing.get("mac") or "").lower()
-        if not mac:
+        if mac:
+            macs = macs or {}
+            return [
+                d
+                for d in devices
+                if ("mac", mac)
+                in {(c[0], str(c[1]).lower()) for c in d.get("connections", []) if len(c) == 2}
+                or macs.get(d["id"]) == mac
+            ]
+        ieee = str(thing.get("ieee") or "").lower()
+        if not ieee:
             return []
-        macs = macs or {}
         return [
             d
             for d in devices
-            if ("mac", mac)
-            in {(c[0], str(c[1]).lower()) for c in d.get("connections", []) if len(c) == 2}
-            or macs.get(d["id"]) == mac
+            if any(
+                v == ieee or v.endswith(f"_{ieee}")
+                for v in (str(i[1]).lower() for i in d.get("identifiers", []) if len(i) == 2)
+            )
         ]
 
     @staticmethod
@@ -1171,15 +1183,23 @@ class Conductor:
     def devices(self, ws) -> None:
         """A row's device, roomed and named by the row (a device's room):
         found by its serial (a Matter thing), by its hardware address (a
-        network thing), or as the one device under a config entry the row
-        made; the entity of the thing's own domain renamed to the house's id
-        when the row is one device with one such entity. A row whose device
-        is not there yet is skipped in silence: the entry step (or the walk)
-        says what waits."""
+        network thing), by its radio address (a Zigbee thing), or as the one
+        device under a config entry the row made; the entity of the thing's
+        own domain renamed to the house's id when the row is one device with
+        one such entity. A row whose device is not there yet is skipped in
+        silence: the entry step (or the walk) says what waits.
+
+        The rename is what makes a scene able to reach a bulb, and a Zigbee
+        thing needs it most: Home Assistant mints an entity id ONCE, when the
+        bridge first announces the device — at the interview, while its name
+        is still its radio address. `pair` renames it a moment later and the
+        DEVICE follows, but an entity id is the user's, so `light.0x8c8b…`
+        stays. (A Matter thing is commissioned already named, which is why
+        those came out right and these did not.)"""
         rows = [
             t
             for t in self.house.things
-            if t.get("serial") or t.get("mac") or self.house.integrations(t)
+            if t.get("serial") or t.get("mac") or t.get("ieee") or self.house.integrations(t)
         ]
         if not rows:
             return

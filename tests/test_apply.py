@@ -349,6 +349,48 @@ class FakeHA(HomeAssistant):
             )
         return dev
 
+    def bridge_device(self, ieee, domains=("light",), prefix="zigbee2mqtt"):
+        """A Zigbee device as the bridge announces it at the INTERVIEW: its
+        identifier carries the radio address behind the instance's prefix,
+        and everything it is called is that address — the name the walk
+        renames a moment later, and the entity id Home Assistant then keeps
+        for ever. Every device also brings a diagnostic the rename ignores."""
+        self.n += 1
+        dev = {
+            "id": f"dev{self.n}",
+            "identifiers": [["mqtt", f"{prefix}_{ieee}"]],
+            "connections": [],
+            "config_entries": [],
+            "serial_number": None,
+            "manufacturer": "IKEA",
+            "model": "TRADFRI bulb",
+            "name": ieee,
+            "name_by_user": None,
+            "area_id": None,
+            "via_device_id": None,
+        }
+        self.devices.append(dev)
+        for d in domains:
+            self.entities.append(
+                {
+                    "entity_id": f"{d}.{ieee}",
+                    "device_id": dev["id"],
+                    "platform": "mqtt",
+                    "entity_category": None,
+                    "disabled_by": None,
+                }
+            )
+        self.entities.append(
+            {
+                "entity_id": f"sensor.{ieee}_linkquality",
+                "device_id": dev["id"],
+                "platform": "mqtt",
+                "entity_category": "diagnostic",
+                "disabled_by": None,
+            }
+        )
+        return dev
+
     def discover(self, domain, unique_id, title, step="zeroconf_confirm"):
         """A discovered flow, the way zeroconf leaves one waiting for a confirm."""
         self.n += 1
@@ -1263,6 +1305,76 @@ def test_a_device_with_no_address_is_keyed_on_an_identifier(secrets, tmp_path, h
     hall = next(a for a in ha.areas if a["aliases"][0] == "hall")
     assert speaker["area_id"] == hall["area_id"] and speaker["name_by_user"] == "Enceinte"
     assert "media_player.hall_speaker" in {e["entity_id"] for e in ha.entities}
+
+
+def test_a_zigbee_thing_is_keyed_on_its_radio_address_and_its_light_renamed(
+    witness, secrets, tmp_path
+):
+    """The defect this fixes: a Zigbee row carries neither serial nor mac, so
+    it never reached this step at all — and Home Assistant had minted its
+    entity id at the interview, from the radio address. Every scene, default
+    and effect in the house aims at `light.<id>`: unless the entity wears
+    that name, a look reaches no bulb."""
+    ha = FakeHA()
+    ceiling = ha.bridge_device("0x000d6ffffe000001")
+    lamp = ha.bridge_device("0x000d6ffffe000002")
+    st = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert st["device living_ceiling"] == "changed"
+    assert st["device living_floor_lamp"] == "changed"
+    living = next(a for a in ha.areas if a["aliases"][0] == "living")
+    assert ceiling["area_id"] == living["area_id"] and ceiling["name_by_user"] == "living_ceiling"
+    assert lamp["area_id"] == living["area_id"] and lamp["name_by_user"] == "Lampadaire"
+    ids = {e["entity_id"] for e in ha.entities}
+    assert {"light.living_ceiling", "light.living_floor_lamp"} <= ids
+    assert not any(e.startswith("light.0x") for e in ids)
+    assert "sensor.0x000d6ffffe000001_linkquality" in ids  # a diagnostic is not the thing
+    again = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert again["device living_ceiling"] == "ok" and again["device living_floor_lamp"] == "ok"
+
+
+def test_a_zigbee_device_the_bridge_names_without_its_prefix_still_matches(
+    witness, secrets, tmp_path
+):
+    """The prefix is the instance's, not the protocol's — one radio per
+    instance, and a bridge may publish the address alone."""
+    ha = FakeHA()
+    ceiling = ha.bridge_device("0x000d6ffffe000001", prefix="")
+    ceiling["identifiers"] = [["mqtt", "0x000d6ffffe000001"]]
+    st = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert st["device living_ceiling"] == "changed"
+    assert "light.living_ceiling" in {e["entity_id"] for e in ha.entities}
+
+
+def test_a_zigbee_device_that_is_two_lights_is_roomed_and_renamed_never(witness, secrets, tmp_path):
+    """Two lights under one radio address: which one is the row? Neither —
+    the room and the name still land, the entity ids stay the bridge's."""
+    ha = FakeHA()
+    dev = ha.bridge_device("0x000d6ffffe000001")
+    ha.entities.append(
+        {
+            "entity_id": "light.0x000d6ffffe000001_2",
+            "device_id": dev["id"],
+            "platform": "mqtt",
+            "entity_category": None,
+            "disabled_by": None,
+        }
+    )
+    st = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert st["device living_ceiling"] == "changed"
+    living = next(a for a in ha.areas if a["aliases"][0] == "living")
+    assert dev["area_id"] == living["area_id"]
+    assert "light.living_ceiling" not in {e["entity_id"] for e in ha.entities}
+
+
+def test_check_plans_the_zigbee_rename_and_touches_nothing(witness, secrets, tmp_path):
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)  # furnished
+    ceiling = ha.bridge_device("0x000d6ffffe000001")
+    steps = apply(witness, secrets, tmp_path, ha, check=True)
+    step = next(s for s in steps if s.name == "device living_ceiling")
+    assert step.state == "would" and "light.living_ceiling" in step.detail
+    assert ceiling["area_id"] is None
+    assert "light.0x000d6ffffe000001" in {e["entity_id"] for e in ha.entities}
 
 
 def test_check_plans_the_room_and_touches_nothing(witness, secrets, tmp_path):
