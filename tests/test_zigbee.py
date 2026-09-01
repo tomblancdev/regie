@@ -31,6 +31,9 @@ class FakeZ2M:
         # configuration.yaml)"). A rendered group is therefore absent from
         # `groups` AND refused by `group/add`.
         self.declared = dict(declared or {})
+        # things that answer the bridge but not their RADIO: a bulb out of
+        # its socket, a remote asleep. Zigbee2MQTT reports a ZCL timeout.
+        self.silent: set[str] = set()
         self.script = list(events)
         self.calls: list[tuple[str, dict]] = []
         self.published: list[tuple[str, dict]] = []
@@ -89,6 +92,14 @@ class FakeZ2M:
             None,
         )
 
+    def _must_answer(self, key):
+        dev = self.by_name(key) or self.device(key)
+        if dev and dev["ieee_address"] in self.silent:
+            raise HouseError(
+                f"zigbee2mqtt: Failed (ZCL command {dev['ieee_address']}/1 genGroups.add "
+                "failed (Timeout after 10000ms))"
+            )
+
     def _materialise(self, key):
         """Resolving a declared group is what creates it on the radio."""
         number = next((n for n, room in self.declared.items() if room == key), None)
@@ -116,6 +127,7 @@ class FakeZ2M:
         elif name == "group/rename":
             self.group(payload["from"])["friendly_name"] = payload["to"]
         elif name in ("group/members/add", "group/members/remove"):
+            self._must_answer(payload["device"])
             group = self.group(payload["group"]) or self._materialise(payload["group"])
             dev = self.by_name(payload["device"]) or self.device(payload["device"])
             member = {"ieee_address": dev["ieee_address"], "endpoint": 1}
@@ -126,6 +138,7 @@ class FakeZ2M:
                     m for m in group["members"] if m["ieee_address"] != dev["ieee_address"]
                 ]
         elif name in ("device/bind", "device/unbind"):
+            self._must_answer(payload["from"])
             source = self.by_name(payload["from"])
             group = self.group(payload["to"])
             target = (
@@ -213,6 +226,29 @@ def test_the_mesh_is_made_to_match_the_rows(witness, secrets, tmp_path, furnishe
     again = apply(witness, secrets, tmp_path, FakeHA(), check=False)
     assert len(z.calls) == before
     assert {s.state for s in again if s.name.startswith("zigbee ")} == {"ok"}
+
+
+def test_a_thing_that_does_not_answer_waits_and_the_run_goes_on(
+    witness, secrets, tmp_path, furnished
+):
+    """Group membership and bindings are written into the THING's own tables
+    over the air, so a bulb out of its socket or a remote asleep answers
+    nothing and Zigbee2MQTT reports a ZCL timeout. That is the thing waiting,
+    not the house being wrong — it must not take the fleet's converge down
+    with it. Found at W1's walk, 2026-09-01: one bulb unscrewed to reset
+    another failed the whole run, and every play after it."""
+    z = furnished(mesh_of(witness))
+    silent = "0x000d6ffffe000005"
+    z.silent.add(silent)
+    steps = apply(witness, secrets, tmp_path, FakeHA(), check=False)
+    st = states(steps)
+    assert st["zigbee main group living living_ceiling_2"] == "waiting"
+    # its neighbours still landed, and the room's group exists
+    assert st["zigbee main group living living_ceiling"] == "changed"
+    living = z.group("living")
+    assert silent not in {m["ieee_address"] for m in living["members"]}
+    assert len(living["members"]) == 3, "everyone that answered is in"
+    assert "failed" not in {s.state for s in steps}
 
 
 def test_a_rendered_group_is_never_re_added(witness, secrets, tmp_path, furnished):

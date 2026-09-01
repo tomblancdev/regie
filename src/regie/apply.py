@@ -824,6 +824,17 @@ class Conductor:
                 )
             self.step(f"{name} {t['id']}", "changed", f"named (was {was})")
 
+    @staticmethod
+    def unreachable_said(exc: HouseError) -> str:
+        """What Zigbee2MQTT said, cut to the part a person acts on."""
+        text = str(exc)
+        if "Timeout" in text:
+            return (
+                "it does not answer its radio (a ZCL timeout) — unpowered, out of range "
+                "or asleep; the next apply writes it"
+            )
+        return f"{text} — tried again at the next apply"
+
     def zigbee_groups(self, name: str, z: Z2M, c: dict) -> None:
         """One group per room that has Zigbee lights, holding exactly them.
         The number is derived from the room's id (house.zigbee_group_id) and
@@ -852,19 +863,30 @@ class Conductor:
                 self.step(what, "changed", f"named {room} (was {group['friendly_name']})")
             members = {m.get("ieee_address") for m in (group or {}).get("members", [])}
             want = {t["ieee"] for t in g["things"]}
+            unreachable = set()
             for t in g["things"]:
                 if t["ieee"] in members:
                     continue
                 if not self.check:
-                    z.request("group/members/add", {"group": room, "device": t["id"]})
+                    try:
+                        z.request("group/members/add", {"group": room, "device": t["id"]})
+                    except HouseError as exc:
+                        unreachable.add(t["ieee"])
+                        self.step(f"{what} {t['id']}", "waiting", self.unreachable_said(exc))
+                        continue
                 self.step(f"{what} {t['id']}", "changed", "in the room's group")
             for ieee in sorted(members - want):
                 if not self.check:
-                    z.request("group/members/remove", {"group": room, "device": ieee})
+                    try:
+                        z.request("group/members/remove", {"group": room, "device": ieee})
+                    except HouseError as exc:
+                        unreachable.add(ieee)
+                        self.step(f"{what} {ieee}", "waiting", self.unreachable_said(exc))
+                        continue
                 self.step(
                     f"{what} {ieee}", "changed", "out of the room's group (no row puts it there)"
                 )
-            if not (want - members) and not (members - want):
+            if not (want - members - unreachable) and not (members - want - unreachable):
                 self.step(what, "ok", f"{len(want)} light(s), number {number}")
 
     def zigbee_binds(self, name: str, z: Z2M, c: dict) -> None:
@@ -905,7 +927,19 @@ class Conductor:
                     self.step(f"{name} bind {t['id']} -> {target}", "ok", "bound in the mesh")
                     continue
                 if not self.check:
-                    out = z.request("device/bind", {"from": t["id"], "to": target}, timeout=60)
+                    try:
+                        out = z.request("device/bind", {"from": t["id"], "to": target}, timeout=60)
+                    except HouseError as exc:
+                        # a binding is written into the CONTROL's own table over
+                        # the air: a remote asleep or a bulb out of its socket
+                        # answers nothing, and that waits (it does not fail the
+                        # fleet's converge — W1's walk, 2026-09-01)
+                        self.step(
+                            f"{name} bind {t['id']} -> {target}",
+                            "waiting",
+                            self.unreachable_said(exc),
+                        )
+                        continue
                     got = ", ".join(out.get("clusters") or []) or "nothing"
                     failed = ", ".join(out.get("failed") or [])
                     self.step(
@@ -933,7 +967,15 @@ class Conductor:
                     continue
                 target = ours[int(ident)] if kind == "group" else by_ieee[ident]["id"]
                 if not self.check:
-                    z.request("device/unbind", {"from": t["id"], "to": target}, timeout=60)
+                    try:
+                        z.request("device/unbind", {"from": t["id"], "to": target}, timeout=60)
+                    except HouseError as exc:
+                        self.step(
+                            f"{name} bind {t['id']} -> {target}",
+                            "waiting",
+                            self.unreachable_said(exc),
+                        )
+                        continue
                 self.step(
                     f"{name} bind {t['id']} -> {target}", "changed", "unbound (no row names it)"
                 )

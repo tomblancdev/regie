@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.3 — a thing that does not answer waits; it does not fail the fleet (2026-09-01, W1's walk)
+
+One bulb, unscrewed from its socket to reset another one in it, **failed the
+whole converge** — and every play after it:
+
+```
+group/members/add: … 0x8c8b48fffe68d128 … Timeout after 10000ms
+```
+
+Group membership and bindings are written into the **thing's own tables**,
+over the air. A bulb out of its socket, a remote whose battery died, anything
+out of range: it answers nothing and Zigbee2MQTT reports a ZCL timeout. That
+is the thing waiting, not the house being wrong.
+
+- **A per-thing radio call degrades to `waiting`** and the run carries on —
+  `it does not answer its radio (a ZCL timeout) — unpowered, out of range or
+  asleep; the next apply writes it`. Its neighbours still land, the room's
+  group is still made, and the drift is in the report rather than in a
+  stack trace.
+- **An instance-level call still fails loudly** (adding or renaming a group):
+  that is our own shape being wrong, and it must not be swallowed.
+- The room's group reads `ok` only for what actually answered; the silent
+  ones keep the step honest at `waiting`.
+
 ## 0.7.2 — the conductor waits for a door being restarted under it (2026-09-01, W1's walk)
 
 The converge renders Zigbee2MQTT's files, `up` restarts it when they
