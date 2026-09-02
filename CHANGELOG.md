@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.3 — `default()` does not catch a None (2026-09-02)
+
+0.10.2's own fix, read off the live house ten minutes later: **`La Cantine —
+None`**. A place group whose prefix the room has *not* named came back from
+`dict.get` as `None`, and Jinja's `default()` filter replaces the **undefined**,
+not a null — so the fallback never ran and the null rendered as the word.
+
+`or` instead, which is what was meant. And the reason the suite said nothing: the
+witness house names **every** prefix it groups, so the fallback branch had no
+example. It has one now — a role whose layout groups a place the room never named
+— and the test also refuses the string `None` anywhere in a friendly name.
+
+202 tests.
+
 ## 0.10.2 — a place is called one thing (2026-09-02)
 
 Read off the live house an hour after 0.10.1 landed. The dashboard called the
@@ -130,7 +144,7 @@ indentation, not design. A pack still contributes a card of its own — with no
 contribution is parsed rather than pasted, so a pack whose YAML does not load
 says so at render instead of in the family's browser.
 
-201 tests.
+202 tests.
 
 ## 0.9.3 — a hardware address is as long as the thing says (2026-09-02)
 

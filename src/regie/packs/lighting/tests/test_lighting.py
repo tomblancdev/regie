@@ -159,3 +159,38 @@ def test_a_room_shows_the_look_it_pinned_and_hides_the_rest(rendered):
     by_hand = [c["name"] for c in views["living-looks"]["sections"][-1]["cards"][1:]]
     assert by_hand == ["Jour", "Soirée", "Cinéma", "Nuit", "Éteint"], "off exists, and comes last"
     assert "Fête" not in by_hand, "a pinned look is not offered twice"
+
+
+def test_a_place_the_room_has_not_named_falls_back_to_its_prefix(house_with, secrets, tmp_path):
+    """The witness names every prefix it groups, so nothing here exercised the
+    other branch — and the real house rendered `La Cantine — None` from it.
+    Jinja's `default()` replaces the UNDEFINED; a dict's `.get` returns None."""
+
+    def unnamed(d):
+        d["things"] += [
+            {
+                "id": f"living_shelf_{side}",
+                "area": "living",
+                "kind": "light",
+                "via": "zigbee",
+                "ieee": f"0x000d6ffffe0003{i:02d}",
+                "role": "shelf",
+                "at": f"top_{side}",
+            }
+            for i, side in enumerate(("left", "right"))
+        ]
+
+    path = house_with(unnamed)
+    room = path.parent / "rooms" / "living.yml"
+    body = room.read_text(encoding="utf-8").replace(
+        "  lamp:      { label: Lampadaire }",
+        "  lamp:      { label: Lampadaire }\n"
+        "  shelf:     { label: Étagère, layout: [top_left, top_right] }",
+    )
+    room.write_text(body, encoding="utf-8")
+    render(load_house(path), tmp_path, secrets)
+    names = yaml.safe_load(
+        (tmp_path / "home-assistant/packages/lighting_living.yaml").read_text(encoding="utf-8")
+    )["homeassistant"]["customize"]
+    assert names["light.living_shelf_top"]["friendly_name"] == "Salon — Étagère top"
+    assert not any("None" in n["friendly_name"] for n in names.values())
