@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.1 — a release carries its own pin, and now something proves it (2026-09-02)
+
+0.10.0 was tagged with the `engine` role still installing **v0.9.3**. A fleet
+that pinned the new collection got the new roles and the *previous* engine, so
+the converge stopped exactly where it should have — `check` refused the house's
+new `places:` before rendering a single file — but for a reason nobody would
+guess from the message.
+
+This is 0.5.1's lesson repeating: that release bumped the same default by hand
+and wrote it down, and writing it down was not enough. **The package's version
+and the role's `regie_version` are one fact**, and a test now says so — the two
+files are read and compared, so a release that forgets its pin fails in CI
+instead of on somebody's brain.
+
 ## 0.10.0 — the descent, and a skin the house owns (2026-09-02)
 
 **The dashboard was one page.** Every room an `entities` card, every card the
@@ -101,7 +115,7 @@ indentation, not design. A pack still contributes a card of its own — with no
 contribution is parsed rather than pasted, so a pack whose YAML does not load
 says so at render instead of in the family's browser.
 
-200 tests.
+201 tests.
 
 ## 0.9.3 — a hardware address is as long as the thing says (2026-09-02)
 

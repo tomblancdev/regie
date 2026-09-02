@@ -1,4 +1,5 @@
 import stat
+from pathlib import Path
 
 import pytest
 import yaml
@@ -328,3 +329,28 @@ def test_a_base_row_with_a_when_is_filtered_like_any_other(house_with, secrets, 
 
     render(load_house(house_with(strip)), tmp_path, secrets)
     assert not (tmp_path / "home-assistant/themes").exists()
+
+
+def test_the_release_carries_its_own_pin():
+    """The collection's `engine` role installs the CLI **by tag**, and its
+    default is what a fleet gets when it pins the collection. 0.5.1 bumped that
+    default by hand and 0.10.0 forgot to — the brain converged with the previous
+    engine, whose schema then refused the house's new words. The two versions
+    are one fact; this is what makes them one."""
+    root = Path(__file__).resolve().parent.parent
+    pinned = next(
+        line.split(":", 1)[1].strip().strip('"')
+        for line in (root / "ansible/roles/engine/defaults/main.yml")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.startswith("regie_version:")
+    )
+    declared = next(
+        line.split("=", 1)[1].strip().strip('"')
+        for line in (root / "pyproject.toml").read_text(encoding="utf-8").splitlines()
+        if line.startswith("version =")
+    )
+    assert pinned == f"v{declared}", (
+        f"the engine role installs {pinned}, the package is {declared} — "
+        "a release that does not carry its own pin ships the previous engine"
+    )
