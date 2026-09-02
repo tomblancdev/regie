@@ -1,0 +1,22 @@
+// rendered by La Régie — the house's typefaces, carried by the brain itself.
+// A theme may NAME a font family but cannot load one, and the only face Home
+// Assistant ships is Roboto; `frontend.extra_module_url` loads this module on
+// every page and it declares the faces once, in the document, where the cards'
+// shadow roots can reach them. The data is inlined: nothing here is fetched at
+// runtime, so the family's phones never call a font server.
+const faces = `
+{% for f in font_faces %}
+@font-face {
+  font-family: '{{ f.family }}';
+  font-style: normal;
+  font-weight: {{ f.weight }};
+  font-display: swap;
+  src: url(data:font/woff2;base64,{{ f.data }}) format('woff2');
+}
+{% endfor %}
+`;
+
+const style = document.createElement("style");
+style.setAttribute("data-regie", "fonts");
+style.textContent = faces;
+document.head.appendChild(style);

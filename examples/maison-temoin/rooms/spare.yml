@@ -1,0 +1,10 @@
+# rooms/spare.yml — a PARKING room (0.10). Things wait here for a room and a
+# role: no scene, no default, no automation is rendered for it, and `check`
+# asks it for none. They stay visible on the dashboard — a bulb with no place
+# is still a bulb somebody wants to try — and nothing ever acts on them.
+# A room that declares roles, scenes or defaults is not a parking room, and a
+# thing that carries a `role` here is refused: having a role means having a place.
+id: spare
+label: Le carton
+icon: mdi:package-variant
+parking: true

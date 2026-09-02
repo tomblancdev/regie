@@ -1325,6 +1325,31 @@ class Conductor:
             automatic_backups_configured=True,
         )
 
+    def skin(self, ws) -> None:
+        """The house's theme as THE default, for everyone who has not chosen one
+        of their own — Home Assistant keeps a default per light mode, so both
+        are set to it. A theme the brain has not read yet WAITS (0.7.3's rule):
+        naming a theme that is not loaded is how you hand a family a blank UI."""
+        want = self.house.theme()
+        if not want:
+            return
+        name = want["name"]
+        state = ws.call("frontend/get_themes")
+        if name not in (state.get("themes") or {}):
+            self.step("theme", "waiting", f"{name} not loaded — themes/ is read at a restart")
+            return
+        if state.get("default_theme") == name and state.get("default_dark_theme") == name:
+            self.step("theme", "ok", f"{name}, light and dark")
+            return
+        self.step("theme", "changed", f"default → {name}, light and dark")
+        if self.check:
+            return
+        status, body = self.ha.post(
+            "/api/services/frontend/set_theme", {"name": name, "name_dark": name}
+        )
+        if status != 200:
+            raise HouseError(f"theme {name}: {status} {body}")
+
     # --- the run ----------------------------------------------------------------
     def run(self) -> list[Step]:
         if not self.onboarding():
@@ -1351,6 +1376,7 @@ class Conductor:
             self.entries(ws)
             self.devices(ws)
             self.plumbing(ws)
+            self.skin(ws)
         return self.steps
 
 

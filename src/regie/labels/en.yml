@@ -40,7 +40,7 @@ scenes:
   cooking: Cooking
   focus: Focus
   low: Night light
-  off: Off
+  "off": "Off"
   guest: Guests
   party: Party
   morning: Morning
@@ -76,3 +76,21 @@ ui:
   tell: tell
   story: story
   effects: effects
+  # the descent (0.10): the words the pages themselves wear
+  look_normal: Normal
+  more: More…
+  looks: Looks
+  whole_room: The whole room
+  groups: Groups
+  places: Places
+  bulbs: Bulbs
+  room_settings: Room settings
+  on_room_page: On the room's page
+  by_hand: Applied by hand
+  health: Room health
+  offline: Not answering
+  waiting: Waiting
+  no_entity: No control in Home Assistant —
+  parking_note: >-
+    Nothing here is automated. These things are waiting for a room and a role;
+    they can be switched on to try them, and that is all.

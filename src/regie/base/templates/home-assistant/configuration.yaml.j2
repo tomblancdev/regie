@@ -38,10 +38,20 @@ automation: !include automations.yaml
 scene: !include scenes.yaml
 script: !include scripts.yaml
 
+{% if data.house.theme is defined %}
+# the house's skin: every file of themes/ merged (the engine renders one), and
+# the typefaces as a module the frontend loads on every page - a theme can name
+# a family but not load one, and Home Assistant ships only Roboto
+frontend:
+  themes: !include_dir_merge_named themes
+  extra_module_url:
+    - /local/regie-skin.js
+
+{% endif %}
 lovelace:
   mode: storage
   dashboards:
-    regie-phone:
+    {{ dashboard_url }}:
       mode: yaml
       title: {{ labels.ui.home }}
       icon: mdi:home

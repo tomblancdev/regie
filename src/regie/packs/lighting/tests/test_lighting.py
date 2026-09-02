@@ -61,7 +61,12 @@ def test_a_motion_without_named_lights_drives_the_room(house_with, secrets, tmp_
     assert motion["actions"][2] == {"delay": "00:05:00"}
 
 
-def test_a_room_without_lights_gets_no_package_and_no_card(house_with, secrets, tmp_path):
+def test_a_room_without_lights_gets_no_package_and_a_way_in_that_names_nothing(
+    house_with, secrets, tmp_path
+):
+    """A room with no light has no light group — so its row on the first page
+    may not name one. It stays a room you can walk into (its settings live
+    there); it is simply not a switch."""
     path = house_with(
         lambda d: d.update(
             things=[
@@ -74,7 +79,10 @@ def test_a_room_without_lights_gets_no_package_and_no_card(house_with, secrets, 
     dash = yaml.safe_load(
         (tmp_path / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
     )
-    assert "Chambre B" not in [c.get("title") for c in dash["views"][0]["cards"]]
+    rooms = dash["views"][0]["sections"][-1]["cards"]
+    row = next(c for c in rooms if c.get("name") == "Chambre B")
+    assert row["type"] == "button" and "entity" not in row
+    assert row["tap_action"]["navigation_path"] == "/regie-phone/bedroom_b"
 
 
 def test_a_role_gets_its_group_and_a_layout_its_rows(rendered):
@@ -133,15 +141,19 @@ def test_the_room_card_leads_with_the_smart_on(rendered):
     assert "script.living_default" in text and "script.living_off" in text
 
 
-def test_the_room_card_carries_its_looks_as_buttons(rendered):
-    """The manual way into a scene: the room's own looks, in the order its file
-    writes them, each with the name and the face the vocabulary gives it."""
-    body = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
-    salon = body[body.index("title: Salon") :]
-    salon = salon[: salon.index("light.living_lights")]
-    assert "script.living_day" in salon and "name: Jour" in salon, "a standard look is translated"
-    assert "icon: mdi:white-balance-sunny" in salon, "and wears a standard face"
-    assert "script.living_party" in salon and "name: Fête" in salon
-    assert "icon: mdi:party-popper" in salon, "a look the house invented says its own"
-    assert "script.living_off" in salon, "off keeps the button it already had"
-    assert salon.count("- entity: script.living_off") == 1, "and only that one"
+def test_a_room_shows_the_look_it_pinned_and_hides_the_rest(rendered):
+    """Only what the room's file PINNED reaches its page. Everything else is one
+    tap away on the room's `looks` page, applied by hand — `off` among them, last:
+    the room's own row is what you press to turn it off."""
+    dash = yaml.safe_load(
+        (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    )
+    views = {v["path"]: v for v in dash["views"]}
+    on_page = [c["name"] for c in views["living"]["sections"][0]["cards"] if c["type"] == "button"]
+    assert on_page == ["Normal", "Fête", "Plus…"], "the ordinary one, what you pinned, the way on"
+    party = next(c for c in views["living"]["sections"][0]["cards"] if c.get("name") == "Fête")
+    assert party["entity"] == "script.living_party" and party["icon"] == "mdi:party-popper"
+
+    by_hand = [c["name"] for c in views["living-looks"]["sections"][-1]["cards"][1:]]
+    assert by_hand == ["Jour", "Soirée", "Cinéma", "Nuit", "Éteint"], "off exists, and comes last"
+    assert "Fête" not in by_hand, "a pinned look is not offered twice"

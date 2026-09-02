@@ -1,19 +1,6 @@
-# rendered by La Régie — the phone dashboard: one card per room, from the
-# packs; a second view (Réglages) when the house carries controls.panel
-title: {{ labels.ui.home }}
-views:
-  - title: {{ labels.ui.rooms }}
-    path: rooms
-    cards:
-{% for card in cards %}
-{{ card | indent(6, first=True) }}
-{% endfor %}
-{% if settings_cards %}
-  - title: {{ labels.ui.settings }}
-    path: settings
-    icon: mdi:tune
-    cards:
-{% for card in settings_cards %}
-{{ card | indent(6, first=True) }}
-{% endfor %}
-{% endif %}
+# rendered by La Régie — the family's dashboard, built as a structure (dash.py):
+# the descent, one page per rung. The house opens on one screen; a room, a group
+# of lights and a place inside it are pages of their own, each with a back arrow;
+# the last rung is Home Assistant's own light panel and we never redraw it.
+# Nothing here is written by hand — the shape follows the rooms' files.
+{{ dashboard | to_block }}

@@ -1,12 +1,15 @@
 {% set lights = kinds.get('light', []) %}
 {% set motions = kinds.get('motion', []) %}
 {% set watched = area_things | selectattr('kind', 'in', ['light', 'plug', 'switch', 'remote', 'motion']) | list %}
+{% set parking = house.parking(area) %}
 {% if lights %}
 # rendered by La Régie — {{ area.label }}: lighting (pack lighting)
 homeassistant:
   customize:
     light.{{ area.id }}_lights:
       friendly_name: {{ (area.label ~ ' — ' ~ labels.ui.lights) | to_yaml }}
+    sensor.{{ area.id }}_offline:
+      friendly_name: {{ (area.label ~ ' — ' ~ labels.ui.offline) | to_yaml }}
 
 {% set role_specs = declared_roles(area) %}
 {% for role, rthings in roles.items() %}
@@ -53,6 +56,24 @@ light:
 {% endif %}
 {% endfor %}
 
+
+# the room's health (0.10) — the number on its settings page. Every id counted
+# is one the house minted itself (`light.<thing>`): nothing is guessed, so this
+# can never count a name that never existed. A light Home Assistant does not
+# know yet reads `unknown` and counts, which is exactly the truth wanted here.
+template:
+  - sensor:
+      - name: {{ area.id }}_offline
+        unique_id: regie_{{ area.id }}_offline
+        icon: mdi:lightbulb-alert-outline
+        state: >-
+          {{ '{%' }} set ns = namespace(n=0) {{ '%}' }}
+{% for t in lights if entity(t) %}
+          {{ '{%' }} if states('{{ entity(t) }}') in ['unavailable', 'unknown'] {{ '%}' }}{{ '{%' }} set ns.n = ns.n + 1 {{ '%}' }}{{ '{%' }} endif {{ '%}' }}
+{% endfor %}
+          {{ '{{' }} ns.n {{ '}}' }}
+
+{% if not parking %}
 {% if motions or controls.silent or (controls.restore_default and lights) %}
 automation:
 {% endif %}
@@ -135,5 +156,6 @@ automation:
           notification_id: "regie_silent_{{ '{{ trigger.entity_id }}' }}"
           title: {{ area.label | to_yaml }}
           message: "{{ '{{ trigger.to_state.name }}' }} {{ labels.ui.silent }}"
+{% endif %}
 {% endif %}
 {% endif %}

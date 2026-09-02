@@ -5,7 +5,12 @@ id: living
 label: Salon
 aliases: [salon, "le salon"]
 roles:
-  main:      { label: Plafond, layout: [front_left, front_center, front_right, back_left, back_center, back_right] }
+  # `places:` names what a prefix of the layout IS: those are real light groups
+  # (light.living_main_front) and each is a page of its own on the dashboard
+  main:
+    label: Plafond
+    layout: [front_left, front_center, front_right, back_left, back_center, back_right]
+    places: { front: Devant, back: Derrière }
   lamp:      { label: Lampadaire }
   strip:     { label: Ruban }          # nothing fills it yet: what names it renders nothing
   screen:    {}
@@ -23,6 +28,7 @@ scenes:
     label: Fête
     icon: mdi:party-popper
     tags: [social, dynamic]                 # what the UI, a scenario and the AI pick a look by
+    pinned: true                            # on the room's OWN page; every other look waits behind `Plus…`
     main:
       brightness: 12                        # the base every unnamed place takes
       front: { color: "#0096ff", brightness: 6 }

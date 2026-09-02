@@ -44,7 +44,7 @@ scenes:
   cooking: Cuisine
   focus: Concentration
   low: Veilleuse
-  off: Éteint
+  "off": Éteint
   guest: Invités
   party: Fête
   morning: Matin
@@ -80,3 +80,21 @@ ui:
   tell: dire
   story: histoire
   effects: effets
+  # the descent (0.10): the words the pages themselves wear
+  look_normal: Normal
+  more: Plus…
+  looks: Ambiances
+  whole_room: Toute la pièce
+  groups: Groupes
+  places: Emplacements
+  bulbs: Ampoules
+  room_settings: Réglages de la pièce
+  on_room_page: Sur la page de la pièce
+  by_hand: À appliquer à la main
+  health: Santé de la pièce
+  offline: Ne répondent pas
+  waiting: En attente
+  no_entity: Sans commande dans Home Assistant —
+  parking_note: >-
+    Rien ici n'est automatisé. Ces choses attendent une pièce et un rôle ; on
+    peut les allumer pour les essayer, c'est tout.

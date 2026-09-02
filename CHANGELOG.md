@@ -1,5 +1,108 @@
 # Changelog
 
+## 0.10.0 — the descent, and a skin the house owns (2026-09-02)
+
+**The dashboard was one page.** Every room an `entities` card, every card the
+room's whole list — eight rooms and thirty-three lights stacked into six phone
+screens, and nothing on it said where a light *was*: `Plafond 1` … `Plafond 6`
+sat flat beside the TV spots and the couch spots. What the family needed was a
+room's lights as a group with every one of them still reachable, and Home
+Assistant 2026.8.3 ships **no collapsible row** — the row types are divider,
+section, buttons, conditional, weblink, attribute, perform-action, and the one
+everybody uses for this is a third-party card. So a "dropdown" here is a page.
+
+**The descent.** One page per rung: the house · a room · a group of lights · a
+place inside it · the bulb. **A page answers one question and offers one way on;
+it never shows what the page below it is for**, which is why a flat of
+thirty-three lights now opens on a single screen with no scrolling. The last
+rung is Home Assistant's own light panel — the wheel, the colours, the
+favourites, the history — and the engine hands over rather than redraw it.
+
+Two rules give it its shape, and both are in `dash.py` beside the code:
+
+* **One row, two gestures.** The round icon toggles what the row names; the row
+  itself walks down. `icon_tap_action: toggle` and `tap_action: navigate` on one
+  tile — native, no third-party card anywhere.
+* **A step with one way on is not a step.** A room whose single role holds every
+  light it has does not draw that role (the room group already *is* it); a group
+  of two or three bulbs is drawn where it stands, its own bulbs under it, rather
+  than earning a page nobody wants to open. Four things, or places inside it,
+  and it becomes a page (`NAV_PAGE_MIN`). A group is never a dead end either way.
+
+**Three new words, all in the room's own file — each one the house saying what
+it wants rather than the engine guessing:**
+
+* **`pinned: true`** on a scene puts that look on the room's page. Everything
+  else waits one tap away on the room's `looks` page, applied by hand — `off`
+  among them, last. Nothing is promoted because the engine found it interesting.
+* **`places:`** under a role names what a layout's prefixes ARE. Those prefix
+  groups were already real light groups, made for the scenes since 0.7.0; naming
+  them was all that was missing to put them on a card. `check` refuses a word the
+  layout does not know.
+* **`parking: true`** on a room: things wait here for a room and a role. **No
+  scene, no default, no automation** is rendered for it and `check` asks it for
+  none — while its things stay visible, because a bulb with no place is still a
+  bulb somebody wants to try. `check` refuses the two contradictions it can be
+  written into: a parking room that declares roles, scenes or defaults, and a
+  thing that carries a `role` while it is still in there.
+
+**Acting and tuning are different pages.** A room's page is what you press now;
+its cog opens the room's own settings — the looks it defaults to, its effects'
+kill-switches, and **the health of its things**, which existed nowhere before:
+`sensor.<room>_offline` counts the room's own lights that are not answering.
+Every entity it names is one the house minted itself (`light.<thing>`), so this
+can never count a name that never existed — a battery level, by contrast, is NOT
+derivable (Zigbee2MQTT mints that entity id at the interview, from the radio
+address, exactly as 0.8.1 found for the lights) and is deliberately absent.
+
+**And a skin the house owns (`house.theme`).** The palette says what a colour
+IS — the ground, a plate, its edge, the ink, what you press, what is **lit**,
+what is wrong — and the engine maps those eight words onto the forty-odd CSS
+variables the frontend reads. The house never writes
+`--state-light-active-color`. Geometry comes with it because it changes the feel
+more than any colour does: a card's radius (a floating pill, or a plate with an
+edge), a tile's icon radius (a round dot, or a square key), the height of a
+feature bar (a hint of a slider, or a fader a thumb can catch). Light and dark
+are separate palettes, and the plate's inset highlight differs by mode because
+the light does.
+
+**The typefaces are the one thing a theme cannot do alone:** it may NAME a
+family but not load one, and the only face Home Assistant ships is Roboto. The
+product carries a few (Barlow, Oswald — OFL, in `base/fonts/`) and renders the
+ones a stack names into the brain's own `www/` as one ES module of `@font-face`
+rules with the data inlined, loaded by `frontend.extra_module_url`. Nothing is
+fetched at runtime and **the family's phones never call a font server**. Which
+faces get embedded is DERIVED from the stacks, never listed twice.
+
+`apply` sets the theme as the default for both light and dark, for everyone who
+has not chosen one of their own — and a theme the brain has not read yet
+**waits** (0.7.3's rule) rather than being named: naming a theme that is not
+loaded is how you hand a family a blank interface.
+
+**YAML 1.1's booleans, twice in one afternoon.** `off` in `labels/*.yml` had
+been parsed as the boolean `false` since 0.4 — so the standard look's name was
+never found and `off` printed as its id; `Off` in the English file was a boolean
+value too. It had never shown because no card had ever printed that scene's own
+label until the `looks` page did. Both are quoted now. The palette then walked
+into the same trap from the other side, and the answer there was different: the
+colour of a lit light is `lit`, not `on`, because **a key that has to be quoted
+to mean what it says is a bad key** — a house writes this file by hand.
+
+**And one the descent's own tests found, latent since 0.1:** `when:` was
+honoured for the profile's rows and the packs', **never for the base's** — no
+base row had ever carried one. The skin gave the base its first, so a house
+declaring no theme did not quietly skip the file, it died rendering
+`{{ data.house.theme.name }}` against a house that has no theme.
+
+The dashboard is built as a structure (`dash.py`) and rendered through
+`to_block`: four levels of nested Lovelace YAML written by hand in a template is
+indentation, not design. A pack still contributes a card of its own — with no
+`each` to the house's first page, `each: areas` to that room's page — and the
+contribution is parsed rather than pasted, so a pack whose YAML does not load
+says so at render instead of in the family's browser.
+
+200 tests.
+
 ## 0.9.3 — a hardware address is as long as the thing says (2026-09-02)
 
 **`pair --matter` proposed a row `check` then refused.** The walk's Matter half

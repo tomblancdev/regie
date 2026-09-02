@@ -78,7 +78,7 @@ KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 # what a look itself says; anything else in the mapping is one of the role's PLACES
 LOOK_KEYS = ("brightness", "ct", "color", "transition")
 # a scene's own keys — never a role name (check refuses a role wearing one)
-SCENE_KEYS = ("label", "icon", "tags", "run")
+SCENE_KEYS = ("label", "icon", "tags", "run", "pinned")
 # the standard looks wear a standard face, so a row of buttons is readable at a
 # glance; a look a house invents says its own `icon:` (an icon has no language,
 # so it lives here and not beside the labels)
@@ -106,6 +106,10 @@ SCENE_ICONS = {
 # bulb and the walk reads as jitter (Le QG, IKEA LED2109G6/LED2110R3 — 0.5 s was
 # visibly dirty, 2 s was clean)
 DRIFT = {"band": [190.0, 330.0], "saturation": 100, "period": [80.0, 175.0], "step": 2.5}
+# a group of lights earns a PAGE of its own at this many things, or as soon as it
+# holds groups (its layout's places). Below it the group is drawn where it stands,
+# its members under it: a step with one way on is not a step.
+NAV_PAGE_MIN = 4
 # the vocabulary's words and the pack that renders each — a house that writes
 # one without its pack is told so (a hint)
 VOCABULARY_PACKS = {"scenes": "scenes", "modes": "modes", "fx": "fx", "scenarios": "scenarios"}
@@ -232,6 +236,8 @@ class House:
     def look_options(self, area: dict) -> list[str]:
         """The scenes a room's default may take (the settings panel's
         choices): rendered, and lighting something — H34's rule as a list."""
+        if self.parking(area):
+            return []
         out = []
         for scene_id, looks in (area.get("scenes") or {}).items():
             roles = {r: v for r, v in (looks or {}).items() if r not in SCENE_KEYS}
@@ -256,6 +262,11 @@ class House:
     def matter_only_fabric(self) -> bool:
         return bool((self.data.get("matter") or {}).get("only_fabric", False))
 
+    def theme(self) -> dict | None:
+        """The house's skin, or None — a house that names none keeps Home
+        Assistant's own, which is a choice too."""
+        return self.data["house"].get("theme")
+
     def wanted(self, row: dict) -> bool:
         """A template's or a directory's `when`: `pack:<name>` = the house
         carries that pack; absent = always."""
@@ -264,7 +275,9 @@ class House:
             return True
         if when.startswith("pack:"):
             return self.has_pack(when[5:])
-        raise HouseError(f"`when: {when}` is not one the engine knows (pack:<name>)")
+        if when == "theme":
+            return self.theme() is not None
+        raise HouseError(f"`when: {when}` is not one the engine knows (pack:<name>, theme)")
 
     @staticmethod
     def integrations(thing: dict) -> list[str]:
@@ -521,6 +534,140 @@ class House:
                 )
         return out
 
+    # --- the descent: what the dashboard walks down (0.10) ------------------------
+    def parking(self, area: dict) -> bool:
+        """A PARKING room: things wait here for a room and a role. Nothing is
+        rendered that would ACT on them — no scene, no default, no automation —
+        and `check` asks the room for none. They stay visible: a bulb with no
+        place is still a bulb somebody wants to try."""
+        return bool(area.get("parking"))
+
+    def place_labels(self, area: dict, role: str) -> dict[str, str]:
+        """What to call a place of this role — the room file's `places:`."""
+        return dict(((area.get("roles") or {}).get(role) or {}).get("places") or {})
+
+    def _leaf(self, thing: dict) -> dict:
+        """A thing, at the bottom of the descent: it has no way on."""
+        return {
+            "node": "thing",
+            "id": thing["id"],
+            "entity": self.entity(thing),
+            "label": thing.get("label") or self.labels.kind(thing["kind"]),
+            "kind": thing["kind"],
+            "count": 1,
+            "children": [],
+            "page": False,
+            "thing": thing,
+        }
+
+    def _group(self, gid: str, label: str, things: list[dict], path: str) -> dict:
+        """A light group of the house's own making (a role's, or a place's).
+        It earns a PAGE when it holds NAV_PAGE_MIN things or when what is
+        inside it is itself grouped; below that it is drawn where it stands."""
+        children = [self._leaf(t) for t in things]
+        return {
+            "node": "group",
+            "id": gid,
+            "entity": f"light.{gid}",
+            "label": label,
+            "count": len(things),
+            "children": children,
+            "page": len(things) >= NAV_PAGE_MIN,
+            "path": path,
+        }
+
+    def role_children(self, area: dict, role: str) -> list[dict]:
+        """Inside a role: its layout's place groups, then the lights no place
+        group covers. A single place group that holds the whole role is not a
+        step of its own — its lights are returned instead."""
+        lights = [t for t in self.roles_in(area["id"]).get(role, []) if t["kind"] == "light"]
+        names = self.place_labels(area, role)
+        groups = self.layout_groups(area, role)
+        covered = {t["id"] for g in groups for t in g["things"]}
+        nodes = [
+            self._group(
+                g["id"],
+                names.get(g["prefix"], g["prefix"]),
+                g["things"],
+                f"{area['id']}-{role}-{g['prefix']}",
+            )
+            for g in groups
+        ]
+        nodes += [self._leaf(t) for t in lights if t["id"] not in covered]
+        if len(nodes) == 1 and nodes[0]["node"] == "group":
+            return nodes[0]["children"]
+        return nodes
+
+    def role_node(self, area: dict, role: str) -> dict:
+        """A role, as one node of the room's page."""
+        lights = [t for t in self.roles_in(area["id"]).get(role, []) if t["kind"] == "light"]
+        node = self._group(
+            f"{area['id']}_{role}",
+            (self.declared_roles(area).get(role) or {}).get("label") or role,
+            lights,
+            f"{area['id']}-{role}",
+        )
+        node["children"] = self.role_children(area, role)
+        node["page"] = node["page"] or any(c["node"] == "group" for c in node["children"])
+        return node
+
+    def room_nodes(self, area: dict) -> list[dict]:
+        """What a room's page carries under the room's own group: one node per
+        role of lights, a role of a single light as that light, then the lights
+        no role names, then the plugs and switches. A room whose ONE role holds
+        every light it has is not drawn twice — the room group already is it."""
+        things = self.things_in(area["id"])
+        lights = [t for t in things if t["kind"] == "light"]
+        extras = [self._leaf(t) for t in things if t["kind"] in ("plug", "switch")]
+        if not lights:
+            return extras
+        filled = self.roles_in(area["id"])
+        light_roles = [
+            r
+            for r in self.declared_roles(area)
+            if (ts := filled.get(r)) and all(t["kind"] == "light" for t in ts)
+        ]
+        roled = {t["id"] for r in light_roles for t in filled[r]}
+        if len(light_roles) == 1 and len(roled) == len(lights):
+            return self.role_children(area, light_roles[0]) + extras
+        nodes: list[dict] = []
+        for role in light_roles:
+            node = self.role_node(area, role)
+            nodes.append(node["children"][0] if node["count"] == 1 else node)
+        nodes += [self._leaf(t) for t in lights if t["id"] not in roled]
+        return nodes + extras
+
+    def nav_pages(self, area: dict) -> list[dict]:
+        """Every group of this room that is a page of its own, in the order the
+        descent meets them — each carries the area it belongs to."""
+        out: list[dict] = []
+
+        def walk(nodes: list[dict]) -> None:
+            for n in nodes:
+                if n["node"] != "group":
+                    continue
+                if n["page"]:
+                    out.append({**n, "area": area})
+                walk(n["children"])
+
+        walk(self.room_nodes(area))
+        return out
+
+    def nav_pages_all(self) -> list[dict]:
+        return [page for a in self.areas for page in self.nav_pages(a)]
+
+    def pinned_scenes(self, area: dict) -> list[dict]:
+        """The looks the room's file put on its own page (`pinned: true`)."""
+        return [p for p in self.scene_plan(area) if p["renders"] and p["pinned"]]
+
+    def other_scenes(self, area: dict) -> list[dict]:
+        """Every other look the room has — one tap away, applied by hand. `off`
+        is one of them and comes last: the room's own row is what you press to
+        turn it off, and this is where the word still exists for anyone who
+        looks for it."""
+        rest = [p for p in self.scene_plan(area) if p["renders"] and not p["pinned"]]
+        return sorted(rest, key=lambda p: p["id"] == "off")
+
     def kelvin(self) -> dict:
         return {**KELVIN, **((self.data.get("fx") or {}).get("kelvin") or {})}
 
@@ -653,6 +800,7 @@ class House:
             "icon": raw.get("icon") or SCENE_ICONS.get(scene_id, "mdi:palette"),
             "tags": list(raw.get("tags") or []),
             "run": raw.get("run") or {},
+            "pinned": bool(raw.get("pinned")),
         }
 
     def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str]]:
@@ -759,7 +907,10 @@ class House:
 
     def scene_plan(self, area: dict) -> list[dict]:
         """Every scene of the room resolved by role: what renders (a filled role,
-        its target, its look) and what waits for the walk. `off` is implicit."""
+        its target, its look) and what waits for the walk. `off` is implicit.
+        A PARKING room has none: nothing there is acted upon."""
+        if self.parking(area):
+            return []
         plans = []
         scenes = dict(area.get("scenes") or {})
         filled_roles = self.roles_in(area["id"])
@@ -805,8 +956,9 @@ class House:
         are the base the sun drives, period keys override it for their
         stretch of the day (a scene for the whole period, or a partial
         daylight map); period-first — the original form, period keys only.
-        With a daylight base the table covers every period of the modes."""
-        raw = area.get("defaults") or {}
+        With a daylight base the table covers every period of the modes.
+        A PARKING room has none: nothing there is acted upon."""
+        raw = {} if self.parking(area) else (area.get("defaults") or {})
         if not raw:
             return {}
         base = {d: scene_ref(raw[d]) for d in DAYLIGHT if d in raw}
@@ -1152,9 +1304,36 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
     mode_ids = {m["id"] for m in modes["modes"]} if modes else set()
     period_ids = [p["id"] for p in modes["periods"]] if modes else []
     for a in house.areas:
+        if house.parking(a):
+            # a PARKING room is a shelf, not a room that acts. Anything that would
+            # act is a contradiction the file must resolve, not something to skip
+            # quietly: the whole point is that nothing here is automated.
+            said = [k for k in ("roles", "scenes", "defaults") if a.get(k)]
+            if said:
+                errors.append(
+                    f"{a['id']}: a parking room declares {', '.join(said)} — nothing there is "
+                    "acted upon; drop them, or drop `parking` and make it a room"
+                )
+            placed = sorted(t["id"] for t in house.things_in(a["id"]) if t.get("role"))
+            if placed:
+                errors.append(
+                    f"{a['id']}: {', '.join(placed)} carry a role in a parking room — a thing "
+                    "with a role has a place; move it to the room it lives in"
+                )
+            continue
         declared = house.declared_roles(a)
         filled = house.roles_in(a["id"])
         scenes = dict(a.get("scenes") or {})
+        for role, spec in (a.get("roles") or {}).items():
+            named = (spec or {}).get("places") or {}
+            layout = (spec or {}).get("layout") or []
+            known = set(layout) | {place.split("_")[0] for place in layout}
+            for word in named:
+                if word not in known:
+                    errors.append(
+                        f"{a['id']}: role {role} calls a place {word!r} something, and its "
+                        "layout has no such place (nor a prefix of one)"
+                    )
         for scene_id, looks in scenes.items():
             for role in looks:
                 if role in SCENE_KEYS:

@@ -15,7 +15,7 @@ def test_check_reports_and_passes(witness_path, capsys):
         "chalet (house)" in out
     )
     assert (
-        "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 18 paired, 5 room groups" in out
+        "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 20 paired, 6 room groups" in out
     )
     assert "secrets: 9 needed, all present" in out
     assert "matter: the server beside the brain (ws://localhost:5580/ws), 1 thing(s)" in out
@@ -49,7 +49,7 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "31 written, 0 unchanged, 0 kept, 0 removed" in out
+    assert "34 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 

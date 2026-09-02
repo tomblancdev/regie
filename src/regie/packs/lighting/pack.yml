@@ -2,7 +2,7 @@
 # lights, and the room cards on the phone. It brings no service (the base
 # already has Zigbee2MQTT); it instantiates from the things.
 name: lighting
-summary: room light groups (+ one per role and per layout row since 0.4), motion lights, "thing went silent", the phone's room cards
+summary: room light groups (+ one per role and per layout row since 0.4), motion lights, "thing went silent", the room's health sensor
 kinds: [light, plug, switch, remote, motion]
 services: []
 schema: schema.json
@@ -10,5 +10,7 @@ templates:
   # one package per room that has a light: the room's light group, the
   # motion lights, the silent alert
   - { src: packages/lighting.yaml.j2, dst: "home-assistant/packages/lighting_{{ area.id }}.yaml", each: areas }
-cards:
-  - { src: cards/room.yaml.j2, each: areas }
+# the room's PAGE is the dashboard's now (dash.py, 0.10) - a pack still adds
+# a card of its own to a room's page (`each: areas`) or to the house's first
+# page (no `each`); the lighting pack needs neither
+cards: []

@@ -73,6 +73,9 @@
           "type": "boolean",
           "default": true,
           "description": "My Home Assistant (my.home-assistant.io): true = Home Assistant's default, every OAuth consent redirects through the project's page; false = the brain's own door is the callback (<url>/auth/external/callback - what a vendor's app registers) and default_config is rendered explicitly without `my`"
+        },
+        "theme": {
+          "$ref": "#/$defs/theme"
         }
       }
     },
@@ -545,6 +548,10 @@
         "behaviours": {
           "type": "object",
           "description": "the packs' behaviour templates with this room's knobs — each pack documents its own keys (0.4: a seam, nothing reads it yet)"
+        },
+        "parking": {
+          "type": "boolean",
+          "description": "a PARKING room: things wait here for a room and a role. No scene, no default, no automation is rendered for it and check asks it for none - its things stay visible (a bulb can be tested) and nothing acts on them"
         }
       }
     },
@@ -824,6 +831,10 @@
         "run": {
           "$ref": "#/$defs/sustained",
           "description": "what MOVES while this look holds — a sustained effect, stopped the moment the room takes another look"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "put this look on the room's OWN page; every other look of the room waits one tap away, on its `ambiances` page. Nothing is promoted by the engine - a room shows the looks its file pinned and no others"
         }
       },
       "additionalProperties": {
@@ -849,6 +860,16 @@
           },
           "uniqueItems": true,
           "description": "the places, in order (front_left, front_center, …, row_1, …): places sharing a prefix make a group of their own (light.<room>_<role>_<prefix>); effects sweep in this order"
+        },
+        "places": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "what to CALL a place of this role - the words `layout:` already declares, and the prefixes two or more of them share (front, row, back). A prefix group is a real light group and a page of its own on the dashboard; unnamed it prints its prefix. check refuses a word the layout does not know"
         }
       }
     },
@@ -1414,6 +1435,126 @@
           "type": "number",
           "minimum": 0.5,
           "description": "seconds between colour commands per place. The backend's colour floor, MEASURED: below ~2 s a new command aborts the ramp still running in the bulb and the drift reads as jitter (default 2.5)"
+        }
+      }
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ground",
+        "panel",
+        "edge",
+        "ink",
+        "ink_soft",
+        "accent",
+        "lit",
+        "alert"
+      ],
+      "properties": {
+        "ground": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "the page behind everything"
+        },
+        "panel": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "a card — one plate at a time"
+        },
+        "edge": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "the border of a plate, and every divider"
+        },
+        "ink": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "the text"
+        },
+        "ink_soft": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "the second line, and an icon at rest"
+        },
+        "accent": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "what you press: links, the selected tab, a control"
+        },
+        "lit": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "a light that is ON - and nothing else wears it (spelled `lit`: YAML reads a bare `on:` as true)"
+        },
+        "alert": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "what is wrong"
+        },
+        "header": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "the top rail; the ground when absent"
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "description": "the house's SKIN. The palette says what a colour IS (the ground, a plate, what is on) and the engine maps those words onto the frontend's own variables; the geometry is the rest of the feel. A stack that names a typeface the product carries gets it embedded in the brain's own www/ - nothing is fetched at runtime",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id",
+          "description": "the theme's name in Home Assistant"
+        },
+        "body": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "the font stack for what is read"
+        },
+        "heading": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "the font stack for what NAMES something - titles, headings, tabs"
+        },
+        "radius": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32,
+          "description": "a card's corner: 12 is Home Assistant's pill, 4 is a plate"
+        },
+        "icon_radius": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32,
+          "description": "a tile's icon: 24 is a round dot, 4 is a square key"
+        },
+        "feature_radius": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "slider": {
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 80,
+          "description": "the height of a feature bar - a dimmer you can catch with a thumb"
+        },
+        "light": {
+          "$ref": "#/$defs/palette"
+        },
+        "dark": {
+          "$ref": "#/$defs/palette"
         }
       }
     }

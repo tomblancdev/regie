@@ -56,6 +56,11 @@ class FakeHA(HomeAssistant):
             "integration": False,
         }
         self.users: dict[str, str] = {}
+        # the frontend's themes: what the brain has READ (a restart reads themes/)
+        # and the default it hands anyone who has never chosen one
+        self.themes: dict[str, dict] = {"temoin": {}}
+        self.default_theme = "default"
+        self.default_dark_theme = None
         self.codes: dict[str, str] = {}
         self.tokens: dict[str, str] = {}  # access token -> kind
         self.llat: list[dict] = []
@@ -469,6 +474,10 @@ class FakeHA(HomeAssistant):
                 return 403, {"message": "already done"}
             self.onboarded[step] = True
             return 200, {} if step != "integration" else {"auth_code": "x"}
+        if path == "/api/services/frontend/set_theme":
+            self.default_theme = body["name"]
+            self.default_dark_theme = body.get("name_dark")
+            return 200, []
         if path.startswith("/api/services/"):
             if path.endswith("/turn_on") and body["entity_id"].startswith("input_boolean."):
                 self.states[body["entity_id"]] = "on"
@@ -669,6 +678,12 @@ class FakeHA(HomeAssistant):
             return None
         if type_ == "subscribe_events":
             return None
+        if type_ == "frontend/get_themes":
+            return {
+                "themes": self.themes,
+                "default_theme": self.default_theme,
+                "default_dark_theme": self.default_dark_theme,
+            }
         raise AssertionError(type_)
 
 
@@ -734,6 +749,7 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
         "kitchen",
         "bedroom_a",
         "bedroom_b",
+        "spare",  # a parking room is a room: its things are roomed, nothing acts on them
     }
     hall = next(a for a in ha.areas if a["aliases"] == ["hall"])
     assert hall["name"] == "Entrée" and hall["floor_id"] == ha.floors[0]["floor_id"]

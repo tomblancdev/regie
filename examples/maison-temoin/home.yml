@@ -11,6 +11,40 @@ house:
   timezone: Europe/Paris
   url: https://home.example.com
   country: FR
+  # the house's SKIN (0.10). The palette says what a colour IS - the ground, a
+  # plate, its edge, what is ON - and the engine maps those words onto the forty
+  # variables the frontend reads. The geometry matters as much as the colour: a
+  # card's radius makes it a pill or a plate, a tile's icon a dot or a key, and
+  # the feature bar a hint of a slider or a fader a thumb can catch. A stack
+  # naming a face the product carries gets it embedded in the brain's own www/.
+  theme:
+    name: temoin
+    body: [Barlow, "Helvetica Neue", sans-serif]
+    heading: [Oswald, "Arial Narrow", sans-serif]
+    radius: 4
+    icon_radius: 4
+    feature_radius: 2
+    slider: 40
+    dark:
+      ground: "#15181a"
+      header: "#0f1214"
+      panel: "#1e2226"
+      edge: "#2c3237"
+      ink: "#e9e6e0"
+      ink_soft: "#949a9e"
+      accent: "#5b93c4"
+      lit: "#f0a92a"
+      alert: "#d1522f"
+    light:
+      ground: "#d7dad9"
+      header: "#c8cdcd"
+      panel: "#e9ebea"
+      edge: "#b9bfc0"
+      ink: "#191c1e"
+      ink_soft: "#5d6467"
+      accent: "#2c5c85"
+      lit: "#b8770c"
+      alert: "#b4441f"
 profile: ct
 packs: [modes, signals, scenes, fx, notify, scenarios, lighting, matter, chalet]
 # the family's controls (W3b): the settings view, the phones driving
@@ -63,6 +97,8 @@ areas:
   - { id: kitchen, label: Cuisine, floor: ground }
   - { id: bedroom_a, label: Chambre A, floor: upstairs }
   - { id: bedroom_b, label: Chambre B, floor: upstairs }
+  # a PARKING room (0.10): what has no room yet. Its own file says so.
+  - { id: spare, label: Le carton }
 people:
   - { id: alice, label: Alice, admin: true, phone: alice_pixel }   # the companion app's slug: notify.alice, notify.household
   - { id: bob, label: Bob }
@@ -94,6 +130,10 @@ things:
   - { id: hall_camera, area: hall, kind: camera, via: wifi, integration: generic, host: 192.0.2.30 }
   # the kitchen — a Wi-Fi plug, a sensor, a valve, the printer, a thing that PUSHES over MQTT
   - { id: kitchen_ceiling, area: kitchen, kind: light, via: zigbee, ieee: "0x000d6ffffe000020" }
+  # the carton: a bulb nobody has screwed in and a remote nobody has bound.
+  # No `role` — a thing with a role has a place, and check says so.
+  - { id: spare_bulb, area: spare, kind: light, via: zigbee, vendor: IKEA, model: LED2109G6, label: "Ampoule neuve", ieee: "0x000d6ffffe0000f1" }
+  - { id: spare_remote, area: spare, kind: remote, via: zigbee, vendor: IKEA, model: E2001, label: "Télécommande neuve", ieee: "0x000d6ffffe0000f2" }
   - { id: kitchen_plug, area: kitchen, kind: plug, via: wifi, label: Cafetière, integration: tplink, host: 192.0.2.31, mac: "00:00:5e:00:53:31" }
   - { id: kitchen_temperature, area: kitchen, kind: sensor, via: zigbee, ieee: "0x000d6ffffe000021" }
   - { id: kitchen_valve, area: kitchen, kind: valve, via: zigbee, ieee: "0x000d6ffffe000022" }

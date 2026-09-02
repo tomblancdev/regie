@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "regie"
-version = "0.9.3"
+version = "0.10.0"
 description = "La Régie — a smart home as files: one engine lays a Home Assistant brain down from a schema-validated home.yml"
 readme = "README.md"
 license = "MIT"
@@ -31,7 +31,7 @@ regie = "regie.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-regie = ["schema/*.json", "base/*.yml", "base/templates/**/*", "profiles/**/*", "packs/**/*", "labels/*.yml"]
+regie = ["schema/*.json", "base/*.yml", "base/templates/**/*", "base/fonts/*", "profiles/**/*", "packs/**/*", "labels/*.yml"]
 
 [tool.ruff]
 line-length = 100

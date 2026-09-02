@@ -7,7 +7,7 @@ from regie.house import load_house, zigbee_group_id
 def test_witness_loads_with_one_of_every_kind(witness):
     kinds = set(witness.by_kind())
     assert kinds == witness.known_kinds, "the witness carries one thing of every known kind"
-    assert len(witness.areas) == 5
+    assert len(witness.areas) == 6
     assert [p.name for p in witness.packs] == [
         "modes",
         "signals",
@@ -306,3 +306,40 @@ def test_the_panel_refuses_a_partial_period_map(house_with):
         HouseError, match="hall: the settings panel cannot carry a partial period map"
     ):
         load_house(path)
+
+
+def test_a_place_may_only_be_named_if_the_layout_knows_it(house_with):
+    """`places:` names what the layout already declares — a word it does not
+    know would name a group that never exists."""
+    path = house_with(lambda d: None)
+    room = path.parent / "rooms" / "living.yml"
+    body = room.read_text(encoding="utf-8").replace(
+        "places: { front: Devant, back: Derrière }", "places: { front: Devant, cote: Côté }"
+    )
+    room.write_text(body, encoding="utf-8")
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "calls a place 'cote' something" in str(exc.value)
+
+
+def test_a_parking_room_may_not_act_and_may_not_hold_a_placed_thing(house_with):
+    """The two contradictions a parking room can be written into, both refused
+    at check rather than half-honoured at converge."""
+    path = house_with(lambda d: None)
+    carton = path.parent / "rooms" / "spare.yml"
+    carton.write_text(
+        carton.read_text(encoding="utf-8") + "roles: { main: {} }\nscenes: { day: { main: on } }\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "a parking room declares roles, scenes" in str(exc.value)
+
+    def place_it(d):
+        for t in d["things"]:
+            if t["id"] == "spare_bulb":
+                t["role"] = "main"
+
+    with pytest.raises(HouseError) as exc:
+        load_house(house_with(place_it))
+    assert "carry a role in a parking room" in str(exc.value)

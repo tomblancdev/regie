@@ -14,7 +14,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader, PrefixLoader, StrictUndefined
 
-from . import __version__
+from . import __version__, dash
+from . import theme as skin
 from .errors import HouseError
 from .fx import compile_all
 from .house import DAYLIGHT, House
@@ -102,6 +103,9 @@ def context(house: House, secrets: dict) -> dict:
         "root": house.root(),
         "secrets": secrets,
         "version": __version__,
+        "dashboard_url": dash.URL_PATH,
+        "theme_file": skin.build(house.theme()) if house.theme() else None,
+        "font_faces": skin.font_faces(house.theme()) if house.theme() else [],
         "default_config": base_default_config(),
         "entity": house.entity,
         "coordinators": house.coordinators(),
@@ -152,17 +156,35 @@ def item_context(house: House, key: str | None, item: dict | None, index: int) -
     return ctx
 
 
-def _render_cards(env: Environment, house: House, ctx: dict, kind: str = "cards") -> list[str]:
-    cards = []
+def _pack_cards(
+    env: Environment, house: House, ctx: dict, kind: str
+) -> tuple[list[dict], dict[str, list[dict]]]:
+    """What the packs put on the dashboard, PARSED — a card contributed with no
+    `each` belongs to the house (the top of the first page, or of the settings
+    page); one contributed `each: areas` belongs to that room's page. They come
+    back as structures because the dashboard is built as one (dash.py), and a
+    pack whose YAML does not load says so here rather than in the family's
+    browser."""
+    house_cards: list[dict] = []
+    room_cards: dict[str, list[dict]] = {}
     for p in house.packs:
         for c in p.cards if kind == "cards" else p.settings:
             for i, (key, item) in enumerate(each_items(house, c.get("each"))):
                 text = env.get_template(f"pack/{p.name}:{c['src']}").render(
                     ctx, **item_context(house, key, item, i)
                 )
-                if text.strip():
-                    cards.append(text.strip("\n"))
-    return cards
+                if not text.strip():
+                    continue
+                try:
+                    loaded = yaml.safe_load(text)
+                except yaml.YAMLError as exc:
+                    raise HouseError(f"pack {p.name}: {c['src']} is not YAML — {exc}") from exc
+                cards = loaded if isinstance(loaded, list) else [loaded]
+                if item is None:
+                    house_cards += cards
+                else:
+                    room_cards.setdefault(item["id"], []).extend(cards)
+    return house_cards, room_cards
 
 
 def _owner_uid(house: House, t: dict) -> int | None:
@@ -180,7 +202,10 @@ def _owner_uid(house: House, t: dict) -> int | None:
 
 
 def plan(house: House) -> list[tuple[str, dict]]:
-    items = [("base", t) for t in base_plan()]
+    # `when:` is honoured for the base's rows too — it never was until the skin
+    # gave the base its first conditional row (0.10), and an unfiltered base row
+    # renders its `dst` against a house that does not have what it names
+    items = [("base", t) for t in base_plan() if house.wanted(t)]
     items += [("profile", t) for t in house.profile.templates if house.wanted(t)]
     for p in house.packs:
         items += [(f"pack/{p.name}", t) for t in p.templates if house.wanted(t)]
@@ -197,9 +222,16 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
         )
     env = make_env(house)
     ctx = context(house, secrets)
-    ctx["cards"] = _render_cards(env, house, ctx)
-    ctx["settings_cards"] = (
-        _render_cards(env, house, ctx, kind="settings") if house.controls()["panel"] else []
+    house_cards, room_cards = _pack_cards(env, house, ctx, "cards")
+    house_settings, room_settings = (
+        _pack_cards(env, house, ctx, "settings") if house.controls()["panel"] else ([], {})
+    )
+    ctx["dashboard"] = dash.build(
+        house,
+        house_cards=house_cards,
+        room_cards=room_cards,
+        house_settings=house_settings,
+        room_settings=room_settings,
     )
 
     manifest_path = out / MANIFEST

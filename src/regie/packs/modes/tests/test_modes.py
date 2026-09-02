@@ -86,13 +86,15 @@ def test_the_house_card(rendered):
     dash = yaml.safe_load(
         (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
     )
-    card = next(c for c in dash["views"][0]["cards"] if c.get("title") == "Maison")
+    cards = dash["views"][0]["sections"][0]["cards"]
+    card = next(c for c in cards if c.get("title") == "Maison")
     ids = [e["entity"] for e in card["entities"]]
     assert ids == ["input_select.house_mode", "sensor.house_period", "sensor.daylight"], (
         "the times are settings: with the panel on they live on Réglages alone"
     )
     settings = next(v for v in dash["views"] if v["path"] == "settings")
-    house = next(c for c in settings["cards"] if c.get("title") == "Maison")
+    cards = [c for sec in settings["sections"] for c in sec["cards"]]
+    house = next(c for c in cards if c.get("title") == "Maison")
     assert "input_datetime.house_period_evening" in [e["entity"] for e in house["entities"]]
 
 

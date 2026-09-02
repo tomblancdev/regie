@@ -18,11 +18,14 @@ EXPECTED = {
     "home-assistant/scripts.yaml",
     "home-assistant/secrets.yaml",
     "home-assistant/dashboards/phone.yaml",
+    "home-assistant/themes/temoin.yaml",
+    "home-assistant/www/regie-skin.js",
     "home-assistant/packages/lighting_hall.yaml",
     "home-assistant/packages/lighting_living.yaml",
     "home-assistant/packages/lighting_kitchen.yaml",
     "home-assistant/packages/lighting_bedroom_a.yaml",
     "home-assistant/packages/lighting_bedroom_b.yaml",
+    "home-assistant/packages/lighting_spare.yaml",
     "home-assistant/packages/signals.yaml",
     "home-assistant/packages/modes.yaml",
     "home-assistant/packages/scenes_living.yaml",
@@ -116,7 +119,7 @@ def test_zigbee2mqtt_configuration(rendered):
     # friendly_name alone: `description` is not a key of the 2.x schema, and
     # would be dropped the next time Zigbee2MQTT writes the file
     assert devices["0x000d6ffffe000002"] == {"friendly_name": "living_floor_lamp"}
-    assert "0x000d6ffffe000001" in devices and len(devices) == 18
+    assert "0x000d6ffffe000001" in devices and len(devices) == 20
     groups = yaml.safe_load((rendered / "zigbee2mqtt/main/groups.yaml").read_text(encoding="utf-8"))
     number = str(zigbee_group_id("living"))
     # no `devices:` either: membership lives in the bulbs' own group tables,
@@ -152,29 +155,47 @@ def test_secret_files_are_private(rendered):
     assert stat.S_IMODE((rendered / "home-assistant/configuration.yaml").stat().st_mode) == 0o644
 
 
-def test_the_dashboard_has_a_card_per_room_and_the_house_pack_card(rendered):
+def test_the_dashboard_descends_from_the_house_to_a_place(rendered):
+    """The descent: the house opens on ONE page listing the rooms, and every
+    other page is a subview with a back arrow. A page offers one way on and
+    never shows what the page below it is for."""
     dash = yaml.safe_load(
         (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
     )
-    cards = dash["views"][0]["cards"]
-    assert [c["type"] for c in cards] == ["entities"] * 6 + ["markdown"]
-    assert cards[0]["title"] == "Maison", "the house card (pack modes) comes first: packs order"
-    living = next(c for c in cards if c["title"] == "Salon")
-    # the smart-on leads (W3b); the raw rows follow as the override path
-    assert living["entities"][0]["type"] == "buttons"
-    assert living["entities"][0]["entities"][0]["entity"] == "script.living_default"
-    # then the room's looks, the manual way into each (W1c)
-    assert living["entities"][1]["type"] == "buttons"
-    assert [b["name"] for b in living["entities"][1]["entities"]] == [
-        "Jour",
-        "Soirée",
-        "Cinéma",
-        "Nuit",
-        "Fête",
+    views = {v["path"]: v for v in dash["views"]}
+    home = dash["views"][0]
+    assert home["path"] == "rooms" and not home.get("subview"), "the house is the one way in"
+    assert all(v.get("subview") for v in dash["views"][1:-1])
+    assert dash["views"][-1]["path"] == "settings", "the house's own settings, the second tab"
+
+    # the house card (pack modes) leads, then one row per room — every room
+    first, rooms = home["sections"][0], home["sections"][1]
+    assert first["cards"][1]["title"] == "Maison", "a pack's card with no `each` is the house's"
+    named = {c.get("name") for c in rooms["cards"] if c["type"] in ("tile", "button")}
+    assert named == {"Entrée", "Salon", "Cuisine", "Chambre A", "Chambre B", "Le carton"}
+
+    # one row, two gestures: the icon toggles where you stand, the row walks down
+    salon = next(c for c in rooms["cards"] if c.get("name") == "Salon")
+    assert salon["entity"] == "light.living_lights"
+    assert salon["icon_tap_action"] == {"action": "toggle"}
+    assert salon["tap_action"]["navigation_path"] == "/regie-phone/living"
+    assert salon["features"] == [{"type": "light-brightness"}]
+
+    # the room's page: its looks, the whole room, then its GROUPS — never its bulbs
+    living = views["living"]
+    headings = [
+        c["heading"] for s in living["sections"] for c in s["cards"] if c["type"] == "heading"
     ]
-    assert living["entities"][2] == {"entity": "light.living_lights", "name": "lumières"}
-    assert {"entity": "light.living_floor_lamp", "name": "Lampadaire"} in living["entities"]
-    assert "pack `chalet`" in cards[-1]["content"]
+    assert headings == ["Ambiances", "Toute la pièce", "Groupes"]
+    groups = living["sections"][2]["cards"]
+    plafond = next(c for c in groups if c.get("name") == "Plafond")
+    assert plafond["tap_action"]["navigation_path"] == "/regie-phone/living-main"
+
+    # and the rung below it: the ceiling, then where its bulbs are
+    ceiling = views["living-main"]
+    assert ceiling["sections"][0]["cards"][0]["entity"] == "light.living_main"
+    below = [c.get("name") for c in ceiling["sections"][1]["cards"] if c["type"] == "tile"]
+    assert "Devant" in below, "a prefix of the layout, named by the room's `places:`"
 
 
 def test_render_is_idempotent(witness, secrets, tmp_path):
@@ -293,3 +314,17 @@ def test_without_the_matter_pack_no_server_unit(house_with, secrets, tmp_path):
 def test_a_when_the_engine_does_not_know_is_a_fault(witness):
     with pytest.raises(HouseError, match="when: moon"):
         witness.wanted({"when": "moon"})
+
+
+def test_a_base_row_with_a_when_is_filtered_like_any_other(house_with, secrets, tmp_path):
+    """`when:` was honoured for the profile's rows and the packs', never for the
+    base's — no base row had ever carried one until the skin. An unfiltered row
+    renders its `dst` against a house that does not have what it names, so the
+    house without a theme died on `{{ data.house.theme.name }}` rather than
+    simply not writing the file."""
+
+    def strip(d):
+        d["house"].pop("theme")
+
+    render(load_house(house_with(strip)), tmp_path, secrets)
+    assert not (tmp_path / "home-assistant/themes").exists()
