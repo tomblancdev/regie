@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.2 — the switch is the only truth about a walk (2026-09-02)
+
+Found by reading the live house after a converge: `input_boolean.<room>_<scene>_drift`
+read **on** and nothing was walking. A converge re-renders and reloads the
+scripts, which kills the loop; the helper survives, so the look sat frozen
+while claiming to move. A restart of Home Assistant did the same.
+
+The drift was started in one place only — the scene's own script. It is now
+started by **the switch**, through an automation that fires when the helper
+goes on and when Home Assistant starts, conditioned on the helper being on.
+So the helper is the whole truth: on = walking, off = still, at any moment and
+after anything. It is also what makes the switch usable *as a switch* — turning
+it back on from the settings view now does what it says.
+
 ## 0.9.1 — a look you can press (2026-09-02)
 
 A room's card had two buttons — *on* (through the room's default look) and

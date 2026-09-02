@@ -242,3 +242,17 @@ def test_a_zigbee_target_stretches_a_step_below_its_colour_floor(house_with):
         "a Zigbee bulb ramps colour itself; a command inside that ramp aborts it"
     )
     assert any("stretched" in h for h in house.hints)
+
+
+def test_the_switch_starts_the_walk_and_a_restart_resumes_it(rendered):
+    """The kill-switch is the only truth: turning it on starts the loop, and
+    Home Assistant coming back starts it again. Without this the helper reads
+    `on` after a restart (or a converge, which reloads the scripts) while
+    nothing walks — a look frozen while claiming to move."""
+    pkg = load(rendered, "living")
+    auto = next(a for a in pkg["automation"] if a["id"] == "regie_living_party_drift")
+    assert [t["trigger"] for t in auto["triggers"]] == ["homeassistant", "state"]
+    assert auto["triggers"][1]["entity_id"] == "input_boolean.living_party_drift"
+    assert auto["triggers"][1]["to"] == "on"
+    assert auto["conditions"][0]["state"] == "on"
+    assert auto["actions"][0]["target"]["entity_id"] == "script.living_party_drift"

@@ -75,6 +75,28 @@ script:
         continue_on_error: true
         target:
           entity_id: "script.{{ area.id }}_{{ '{{' }} states('sensor.{{ area.id }}_default') {{ '}}' }}"
+{% if drifting %}
+
+# the switch is the ONLY truth about a sustained walk: turning it on starts the
+# loop, and Home Assistant coming back up starts it again. Without this the
+# helper reads `on` after a restart — or after a converge, which reloads the
+# scripts — while nothing is walking: a look frozen and claiming to move.
+automation:
+{% for p in drifting %}
+{{ [{
+  'id': 'regie_' ~ area.id ~ '_' ~ p.id ~ '_drift',
+  'alias': area.label ~ ' — ' ~ p.label ~ ' ↻',
+  'description': 'starts the sustained walk of ' ~ p.label ~ ' whenever its switch is on — at a restart, and when a hand turns it back on (La Régie, pack scenes)',
+  'mode': 'single',
+  'triggers': [
+    {'trigger': 'homeassistant', 'event': 'start'},
+    {'trigger': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'to': 'on'},
+  ],
+  'conditions': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}],
+  'actions': [{'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}],
+}] | to_block(0) }}
+{% endfor %}
+{% endif %}
 {% endif %}
 {% if defaults %}
 {% set first = (area.scenes | default({}) | list | first) | default('off') %}
