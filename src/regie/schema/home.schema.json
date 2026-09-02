@@ -744,7 +744,7 @@
       "description": "a local time, HH:MM"
     },
     "look": {
-      "description": "what a role looks like in a scene: on / off, or a mapping — brightness (0-100), ct (warm | neutral | cool | kelvin), color (#rrggbb), transition (seconds)",
+      "description": "what a role looks like in a scene: on / off, or a mapping — brightness (0-100), ct (warm | neutral | cool | kelvin), color (#rrggbb), transition (seconds). The same mapping may also name the role's PLACES (its `layout:` entries, or a prefix several of them share): those keys are looks of their own and override the base for that place. Still by role — a place name is the one `layout:` declares, never an entity id.",
       "oneOf": [
         {
           "type": "boolean"
@@ -757,7 +757,9 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": {
+            "$ref": "#/$defs/place_look"
+          },
           "properties": {
             "brightness": {
               "type": "integer",
@@ -788,20 +790,45 @@
               "type": "number",
               "minimum": 0
             }
+          },
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
           }
         }
       ]
     },
     "scene": {
       "type": "object",
+      "minProperties": 1,
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9_]*$"
       },
-      "minProperties": 1,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "what the card calls this look (the id is what everything else uses)"
+        },
+        "icon": {
+          "type": "string",
+          "pattern": "^mdi:[a-z0-9-]+$"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "description": "what the UI, a scenario and later the AI pick a look by (fx shapes carry the same word)"
+        },
+        "run": {
+          "$ref": "#/$defs/sustained",
+          "description": "what MOVES while this look holds — a sustained effect, stopped the moment the room takes another look"
+        }
+      },
       "additionalProperties": {
         "$ref": "#/$defs/look"
       },
-      "description": "a persistent look for the room, BY ROLE — no entity id anywhere; a role nothing fills yet renders nothing"
+      "description": "a persistent look for the room, BY ROLE — no entity id anywhere; a role nothing fills yet renders nothing. `label`, `icon`, `tags` and `run` are the scene's own keys and can never be role names (check refuses a role wearing one)."
     },
     "role": {
       "type": "object",
@@ -1269,6 +1296,125 @@
           "const": false
         }
       ]
+    },
+    "place_look": {
+      "description": "a look for ONE place of a role (or for the places sharing a prefix): on / off, or the same mapping of brightness / ct / color / transition",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "enum": [
+            "on",
+            "off"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "brightness": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "ct": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "warm",
+                    "neutral",
+                    "cool"
+                  ]
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 10000
+                }
+              ]
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "transition": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "sustained": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "sustained effects, by shape. Unlike an fx (transient: snapshot -> run -> restore) a sustained effect runs for as long as the look holds, and its kill-switch is a visible helper.",
+      "properties": {
+        "drift": {
+          "$ref": "#/$defs/drift"
+        }
+      }
+    },
+    "drift": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "a slow colour walk: every place wanders the band on its own clock, for ever, and no two are ever in step. Brightness is NEVER touched (the scene sets it once) — a level command interrupts a colour ramp in the bulb's own firmware.",
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/id",
+          "description": "the role whose places drift"
+        },
+        "places": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          ],
+          "description": "which places: a prefix (row), a list, or absent for all of them"
+        },
+        "band": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          },
+          "description": "the hue band in degrees, walked along the colour circle so the path never washes through white (default 190-330: cyan to hot pink)"
+        },
+        "saturation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "period": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number",
+            "minimum": 10
+          },
+          "description": "seconds for one there-and-back, spread across the places: no two share a period, so the ceiling never falls into step"
+        },
+        "step": {
+          "type": "number",
+          "minimum": 0.5,
+          "description": "seconds between colour commands per place. The backend's colour floor, MEASURED: below ~2 s a new command aborts the ramp still running in the bulb and the drift reads as jitter (default 2.5)"
+        }
+      }
     }
   },
   "x-known": {

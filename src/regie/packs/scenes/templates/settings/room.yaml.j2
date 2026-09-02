@@ -1,7 +1,10 @@
-{% if modes and defaults_base(area) and look_options(area) %}
+{% set drifting = [] %}
+{% for p in scene_plan(area) if p.renders and drift_plan(area, p) %}{% set _ = drifting.append(p) %}{% endfor %}
+{% if (modes and defaults_base(area) and look_options(area)) or drifting %}
 - type: entities
   title: {{ area.label | to_yaml }}
   entities:
+{% if modes and defaults_base(area) and look_options(area) %}
 {% for d in ['dark', 'dim', 'bright'] %}
     - entity: input_select.{{ area.id }}_look_{{ d }}
       name: {{ labels.ui['look_' ~ d] | to_yaml }}
@@ -9,5 +12,12 @@
 {% for period in modes.periods %}
     - entity: input_select.{{ area.id }}_look_{{ period.id }}
       name: {{ (labels.ui.look_period ~ ' ' ~ period.label) | to_yaml }}
+{% endfor %}
+{% endif %}
+{# a look that MOVES gets a switch you can see and turn off (H36) — beside the
+   room's own settings, where every other kill-switch of the house lives #}
+{% for p in drifting %}
+    - entity: input_boolean.{{ area.id }}_{{ p.id }}_drift
+      name: {{ p.label | to_yaml }}
 {% endfor %}
 {% endif %}

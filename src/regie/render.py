@@ -120,6 +120,7 @@ def context(house: House, secrets: dict) -> dict:
         "role_target": house.role_target,
         "layout_groups": house.layout_groups,
         "scene_plan": house.scene_plan,
+        "drift_plan": house.drift_plan,
         "rendered_scenes": house.rendered_scenes,
         "defaults_of": house.defaults_of,
         "mode_scene": house.mode_scene,

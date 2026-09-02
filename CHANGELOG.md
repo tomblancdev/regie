@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.9.0 — a look reaches its places, and a look may move (2026-09-02)
+
+Three things a real ceiling asked for, in the order the room asked them.
+
+**A scene has an identity.** It was a bare mapping of roles, so every script
+came out as *"Le Salon — game"* — the raw id — with one icon for all of them
+and no way to tell a look from another except by reading it. A scene now
+carries `label`, `icon` and `tags:`, the last being what the UI, a scenario
+and later the AI pick a look by, the same word `fx` shapes already use. Those
+four keys can never be role names, and `check` says so if a room tries.
+
+**A look may name the PLACES inside a role.** Twelve ceiling lights under one
+role got one value between them, so "the spot above the couch is off" and "the
+ceiling is a gradient" were both unsayable. A look's mapping may now use the
+role's own `layout:` words — a place, or a prefix several of them share — each
+overriding the base the look sets for everything it did not name:
+
+```yaml
+party:
+  label: Fête
+  tags: [social, dynamic]
+  main:
+    brightness: 12                            # what every unnamed place takes
+    front: { color: "#0096ff", brightness: 6 }
+    back_center: off
+```
+
+Still by role, still no entity id: a prefix aims at the group its places
+already have. The places are the ones the room **declares**, not the ones the
+walk has paired — an empty place renders nothing and is a hint, like a role.
+`check` refuses a word the layout does not know (it used to be swallowed in
+silence and read as a plain `on`) and refuses a place named beside the prefix
+that already speaks for it, which would send one bulb two looks in a breath.
+
+**A look may MOVE, for as long as it holds.** `fx` is transient by design —
+snapshot, run, restore. Some looks are not: they are alive while you are in
+them. `run:` gives a scene a sustained effect, and the first shape is `drift`,
+a slow colour walk:
+
+```yaml
+  run:
+    drift: { role: main, places: row, band: [190, 330], period: [80, 175], step: 2.5 }
+```
+
+Every place walks the band on **its own period**, so no two are ever in step
+and the ceiling never falls into a pattern. It is **stateless**: a hue is a
+pure function of the clock, so nothing is stored, nothing accumulates drift,
+and a brain that restarts mid-walk resumes exactly where the time says. Any
+other look of the room stops it before setting itself — a moving ceiling
+belongs to one look — and the loop's condition **is** a helper on the settings
+view, so the kill-switch is not bolted on, it is the mechanism.
+
+**Two properties of real bulbs, measured in a room and now in the code.**
+Brightness is never sent by a drift: a level command **aborts the colour ramp
+running inside the bulb**, which is what made the first attempt look ragged.
+And a colour command needs time to *land* — below ~2 s a new one aborts the
+last, so smooth is **slow steps, not many steps** (0.5 s was visibly dirty,
+2 s clean). `check` stretches a step below its backend's colour floor and says
+so, the way an fx shape is stretched. The floor is the target's, not the
+house's: 2 s where a place is Zigbee.
+
 ## 0.8.1 — a Zigbee thing wears its name in Home Assistant too (2026-09-01)
 
 **The bug this fixes had made every scene in a real house a no-op.** A look is

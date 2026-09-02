@@ -2,7 +2,23 @@
 {% set defaults = defaults_of(area) %}
 {% if plans or defaults %}
 # rendered by La Régie — {{ area.label }}: scenes by role (pack scenes — rooms/{{ area.id }}.yml, not the UI)
+{% set drifting = [] %}
+{% set drift_switches = [] %}
+{% for p in plans if drift_plan(area, p) %}
+{% set _ = drifting.append(p) %}
+{% set _ = drift_switches.append('input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}
+{% endfor %}
 {% if plans %}
+{% if drifting %}
+# the kill-switch (H36): a look that MOVES is a look you can stop. Visible on
+# the settings view, and the loop below runs only while it is on.
+input_boolean:
+{% for p in drifting %}
+  {{ area.id }}_{{ p.id }}_drift:
+    name: {{ (area.label ~ ' — ' ~ p.label) | to_yaml }}
+    icon: {{ p.icon }}
+{% endfor %}
+{% endif %}
 script:
 {% for p in plans %}
 {% set steps = [] %}
@@ -13,12 +29,40 @@ script:
 {% if r.look.on and data and r.domain == 'light' %}{% set _ = step.update({'data': data}) %}{% endif %}
 {% set _ = steps.append(step) %}
 {% endfor %}
+{% set named = [] %}
+{% for r in p.roles %}{% set _ = named.append(r.role ~ ('.' ~ r.place if r.place is defined else '')) %}{% endfor %}
+{% set seq = [] %}
+{% if drifting %}
+{# any look the room takes stops every drift first: a moving ceiling belongs
+   to ONE look, and leaving it must leave it (the loop reads the switch) #}
+{% set _ = seq.append({'action': 'input_boolean.turn_off', 'target': {'entity_id': drift_switches}}) %}
+{% endif %}
+{% set _ = seq.append({'parallel': steps}) %}
+{% if drift_plan(area, p) %}
+{% set _ = seq.append({'action': 'input_boolean.turn_on', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}) %}
+{% set _ = seq.append({'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}) %}
+{% endif %}
 {{ {area.id ~ '_' ~ p.id: {
-  'alias': area.label ~ ' — ' ~ p.id,
-  'description': ('every filled role off' if p.implicit else 'the look by role: ' ~ (p.roles | map(attribute='role') | join(', '))) ~ (' · waiting: ' ~ (p.unfilled | join(', ')) if p.unfilled else '') ~ ' (La Régie, pack scenes)',
-  'icon': 'mdi:palette',
+  'alias': area.label ~ ' — ' ~ p.label,
+  'description': ('every filled role off' if p.implicit else 'the look by role: ' ~ (named | join(', '))) ~ (' · waiting: ' ~ (p.unfilled | join(', ')) if p.unfilled else '') ~ (' · tags: ' ~ (p.tags | join(', ')) if p.tags else '') ~ ' (La Régie, pack scenes)',
+  'icon': p.icon,
   'mode': 'restart',
-  'sequence': [{'parallel': steps}],
+  'sequence': seq,
+}} | to_block(2) }}
+{% endfor %}
+{% for p in drifting %}
+{% set d = drift_plan(area, p) %}
+{% set walk = [] %}
+{% for w in d.walkers %}
+{% set _ = walk.append({'action': 'light.turn_on', 'target': {'entity_id': w.entity}, 'data': {'hs_color': [w.hue, d.saturation], 'transition': d.step}}) %}
+{% set _ = walk.append({'delay': {'milliseconds': ((d.step * 1000) / (d.walkers | length)) | round | int}}) %}
+{% endfor %}
+{{ {area.id ~ '_' ~ p.id ~ '_drift': {
+  'alias': area.label ~ ' — ' ~ p.label ~ ' ↻',
+  'description': 'the sustained walk of ' ~ p.label ~ ' — ' ~ (d.walkers | length) ~ ' × hue ' ~ d.lo ~ '-' ~ d.hi ~ '°, a colour every ' ~ d.step ~ ' s each, every one on its own clock. Stateless: a hue is a function of the time, so a restart resumes mid-stride. Brightness is never sent — the look set it, and a level command aborts a colour ramp in the bulb (La Régie, pack scenes)',
+  'icon': p.icon,
+  'mode': 'restart',
+  'sequence': [{'repeat': {'while': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}], 'sequence': walk}}],
 }} | to_block(2) }}
 {% endfor %}
   {{ area.id }}_default:

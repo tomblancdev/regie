@@ -75,6 +75,15 @@ DAYLIGHT = ("dark", "dim", "bright")
 # dark because the clock struck night)
 OFF_DOMAINS = ("light", "switch")
 KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
+# what a look itself says; anything else in the mapping is one of the role's PLACES
+LOOK_KEYS = ("brightness", "ct", "color", "transition")
+# a scene's own keys — never a role name (check refuses a role wearing one)
+SCENE_KEYS = ("label", "icon", "tags", "run")
+# the drift's defaults, and the measured floor between two colour commands on a
+# Zigbee bulb: below this a new command aborts the ramp still running inside the
+# bulb and the walk reads as jitter (Le QG, IKEA LED2109G6/LED2110R3 — 0.5 s was
+# visibly dirty, 2 s was clean)
+DRIFT = {"band": [190.0, 330.0], "saturation": 100, "period": [80.0, 175.0], "step": 2.5}
 # the vocabulary's words and the pack that renders each — a house that writes
 # one without its pack is told so (a hint)
 VOCABULARY_PACKS = {"scenes": "scenes", "modes": "modes", "fx": "fx", "scenarios": "scenarios"}
@@ -114,6 +123,17 @@ def normalise_look(look, kelvin: dict | None = None) -> dict:
     if "transition" in look:
         out["transition"] = look["transition"]
     return out
+
+
+def hue_template(period: float, phase: float, lo: float, hi: float) -> str:
+    """One walker's hue, as a Home Assistant template: a triangle wave of the
+    CLOCK. No stored position, no accumulated drift — the brain may restart
+    mid-walk and the ceiling picks up exactly where the time says it should."""
+    return (
+        "{% set x = ((as_timestamp(now()) / " + f"{period}" + ") + " + f"{phase}" + ") % 1 %}"
+        "{% set t = 2 * x if x < 0.5 else 2 * (1 - x) %}"
+        "{{ " + f"{lo}" + " + " + f"{hi - lo}" + " * t }}"
+    )
 
 
 @dataclass
@@ -192,9 +212,10 @@ class House:
         choices): rendered, and lighting something — H34's rule as a list."""
         out = []
         for scene_id, looks in (area.get("scenes") or {}).items():
-            if scene_id == "off" or not looks:
+            roles = {r: v for r, v in (looks or {}).items() if r not in SCENE_KEYS}
+            if scene_id == "off" or not roles:
                 continue
-            if all(not normalise_look(v)["on"] for v in looks.values()):
+            if all(not normalise_look(v)["on"] for v in roles.values()):
                 continue
             out.append(scene_id)
         return out
@@ -481,6 +502,239 @@ class House:
     def kelvin(self) -> dict:
         return {**KELVIN, **((self.data.get("fx") or {}).get("kelvin") or {})}
 
+    def places_of(self, area: dict, role: str) -> dict[str, dict]:
+        """Where a role's PLACES aim, by the name a look may call them: every
+        `layout:` entry the room DECLARES, plus every prefix two or more of them
+        share. Declared, not paired — a place the walk has not reached yet is a
+        word the room already owns, and what fills nothing renders nothing (a
+        hint, never an error), exactly like a role. The keys are the room file's
+        own words; a look never names an entity."""
+        spec = (area.get("roles") or {}).get(role) or {}
+        layout = spec.get("layout") or []
+        if not layout:
+            return {}
+        at = {t["at"]: t for t in self.roles_in(area["id"]).get(role, []) if t.get("at")}
+        groups = {g["prefix"]: g for g in self.layout_groups(area, role)}
+        out: dict[str, dict] = {}
+        for place in layout:
+            thing = at.get(place)
+            entity = self.entity(thing) if thing else None
+            out[place] = {
+                "domain": entity.split(".")[0] if entity else "light",
+                "entities": [entity] if entity else [],
+                "things": [thing] if thing else [],
+            }
+        by_prefix: dict[str, list[str]] = {}
+        for place in layout:
+            by_prefix.setdefault(place.split("_")[0], []).append(place)
+        for prefix, places in by_prefix.items():
+            if len(places) < 2 or prefix in out:
+                continue
+            if prefix in groups:
+                out[prefix] = {
+                    "domain": "light",
+                    "entities": [f"light.{groups[prefix]['id']}"],
+                    "things": groups[prefix]["things"],
+                    "group": True,
+                }
+                continue
+            # fewer than two of them paired: no group of their own yet, so the
+            # prefix aims at whichever ARE there (none, and it renders nothing)
+            things = [at[p] for p in places if p in at]
+            entities = [e for e in (self.entity(x) for x in things) if e]
+            out[prefix] = {
+                "domain": entities[0].split(".")[0] if entities else "light",
+                "entities": entities,
+                "things": things,
+                "group": True,
+                "places": places,
+            }
+        return out
+
+    def look_plan(self, area: dict, role: str, look) -> tuple[list[dict], list[str]]:
+        """One role's look resolved to (target, look) pairs. A plain look aims
+        at the role as a whole; a look that names PLACES aims at each of them,
+        the look's own keys (if any) being the base every unnamed place takes.
+        Returns the pairs and the places named that this room has no word for."""
+        places = self.places_of(area, role)
+        # a word that is neither the look's own nor one of the role's places is
+        # a typo, and it must be said: `normalise_look` would ignore it in
+        # silence and the scene would read as a plain `on`
+        problems = (
+            [
+                f"{role}.{k} — no such place in that role's layout (nor a prefix two of them share)"
+                for k in look
+                if k not in places and k not in LOOK_KEYS
+            ]
+            if isinstance(look, dict)
+            else []
+        )
+        named = {k: v for k, v in look.items() if k in places} if isinstance(look, dict) else {}
+        if not named:
+            target = self.role_target(area, role)
+            if not target:
+                return [], problems
+            return [{"role": role, "look": normalise_look(look, self.kelvin()), **target}], problems
+        # a prefix speaks for all of its places: naming one of them TOO would
+        # send that light two looks in the same breath, and which wins is a race
+        for prefix in named:
+            if not places[prefix].get("group"):
+                continue
+            covered_by = places[prefix].get("places") or [
+                x.get("at") for x in places[prefix]["things"]
+            ]
+            for place in covered_by:
+                if place in named:
+                    problems.append(
+                        f"{role}.{place} is named beside {role}.{prefix}, "
+                        "the prefix that already speaks for it — one look each, or one for both"
+                    )
+        base = {k: v for k, v in look.items() if k in LOOK_KEYS}
+        pairs = [
+            {
+                "role": role,
+                "place": place,
+                "look": normalise_look(value, self.kelvin()),
+                **places[place],
+            }
+            for place, value in named.items()
+            if places[place]["entities"]
+        ]
+        if not base:
+            return pairs, problems
+        # the base is what every place the look did NOT name takes; a prefix
+        # that was named speaks for all of its own places, so they are covered
+        covered = set(named)
+        for place in named:
+            if places[place].get("group"):
+                covered |= set(
+                    places[place].get("places") or [t.get("at") for t in places[place]["things"]]
+                )
+        pairs += [
+            {
+                "role": role,
+                "place": place,
+                "look": normalise_look(base, self.kelvin()),
+                **target,
+            }
+            for place, target in places.items()
+            if not target.get("group") and place not in covered and target["entities"]
+        ]
+        return pairs, problems
+
+    def scene_meta(self, area: dict, scene_id: str) -> dict:
+        """A scene's own keys: what the card calls it, its icon, what picks it."""
+        raw = (area.get("scenes") or {}).get(scene_id) or {}
+        raw = raw if isinstance(raw, dict) else {}
+        return {
+            "label": raw.get("label") or scene_id,
+            "icon": raw.get("icon") or "mdi:palette",
+            "tags": list(raw.get("tags") or []),
+            "run": raw.get("run") or {},
+        }
+
+    def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str]]:
+        """The (place, entity) pairs a drift walks, in layout order: the places
+        a prefix covers, an explicit list, or every filled place of the role."""
+        role = spec["role"]
+        places = self.places_of(area, role)
+        layout = ((area.get("roles") or {}).get(role) or {}).get("layout") or []
+        exact = [
+            p
+            for p in layout
+            if p in places and not places[p].get("group") and places[p]["entities"]
+        ]
+        want = spec.get("places")
+        if want is None:
+            chosen = exact
+        elif isinstance(want, str):
+            chosen = [p for p in exact if p.split("_")[0] == want] or (
+                [want] if want in exact else []
+            )
+        else:
+            chosen = [p for p in exact if p in want]
+        return [(p, places[p]["entities"][0]) for p in chosen]
+
+    def drift_plan(self, area: dict, plan: dict) -> dict | None:
+        """A scene's sustained colour walk, resolved: one walker per place, each
+        with its OWN period, so no two are ever in step and the ceiling never
+        falls into a pattern. Stateless by design — a walker's hue is a pure
+        function of the clock, so a restart resumes mid-stride and nothing is
+        stored. Brightness is absent on purpose: the scene sets it once, and a
+        level command would abort the colour ramp running inside the bulb."""
+        spec = (plan.get("run") or {}).get("drift")
+        if not spec:
+            return None
+        pairs = self.drift_places(area, spec)
+        if not pairs:
+            return None
+        band = spec.get("band") or DRIFT["band"]
+        period = spec.get("period") or DRIFT["period"]
+        step = float(spec.get("step") or DRIFT["step"])
+        floor = self.colour_floor(area, spec["role"], [p for p, _ in pairs])
+        n = len(pairs)
+        walkers = []
+        for i, (place, entity) in enumerate(pairs):
+            walkers.append(
+                {
+                    "place": place,
+                    "entity": entity,
+                    # spread the periods across the band: incommensurate clocks
+                    "period": round(period[0] + (period[1] - period[0]) * (i / max(n - 1, 1)), 2),
+                    "phase": round(i / n, 4),
+                    "hue": hue_template(
+                        round(period[0] + (period[1] - period[0]) * (i / max(n - 1, 1)), 2),
+                        round(i / n, 4),
+                        float(band[0]),
+                        float(band[1]),
+                    ),
+                }
+            )
+        return {
+            "role": spec["role"],
+            "lo": float(band[0]),
+            "hi": float(band[1]),
+            "saturation": int(spec.get("saturation", DRIFT["saturation"])),
+            "step": max(step, floor),
+            "asked": step,
+            "floor": floor,
+            "walkers": walkers,
+        }
+
+    def colour_floor(self, area: dict, role: str, places: list[str]) -> float:
+        """The slowest colour clock the targets impose. A Zigbee bulb ramps
+        colour in its own firmware and a command arriving before that ramp ends
+        ABORTS it: below ~2 s the walk reads as jitter, not as movement
+        (measured in the room, not read in a datasheet). Anything else: no floor."""
+        at = {t.get("at"): t for t in self.roles_in(area["id"]).get(role, [])}
+        return 2.0 if any((at.get(p) or {}).get("via") == "zigbee" for p in places) else 0.5
+
+    def drift_errors(self, area: dict, plan: dict) -> list[str]:
+        spec = (plan.get("run") or {}).get("drift")
+        if not spec:
+            return []
+        role = spec["role"]
+        if role not in self.declared_roles(area):
+            return [
+                f"{area['id']}: scene {plan['id']} drifts role {role!r} — not a role of this room"
+            ]
+        want = spec.get("places")
+        if want is None:
+            return []
+        # checked against the LAYOUT, never against what is paired: places the
+        # walk has not reached yet make the drift WAIT (a hint), exactly like a
+        # role nothing fills. A name the layout does not know is the typo.
+        layout = ((area.get("roles") or {}).get(role) or {}).get("layout") or []
+        prefixes = {p.split("_")[0] for p in layout}
+        wanted = [want] if isinstance(want, str) else list(want)
+        missing = [w for w in wanted if w not in layout and w not in prefixes]
+        if missing:
+            return [
+                f"{area['id']}: scene {plan['id']} drifts {role}.{', '.join(missing)} — "
+                f"no such place in that role's layout (nor a prefix its places share)"
+            ]
+        return []
+
     def scene_plan(self, area: dict) -> list[dict]:
         """Every scene of the room resolved by role: what renders (a filled role,
         its target, its look) and what waits for the walk. `off` is implicit."""
@@ -494,22 +748,26 @@ class House:
                 if (t := self.role_target(area, r)) and t["domain"] in OFF_DOMAINS
             }
         for scene_id, looks in scenes.items():
-            roles, unfilled = [], []
+            roles, unfilled, unknown = [], [], []
             for role, look in looks.items():
-                target = self.role_target(area, role)
-                if target:
-                    roles.append(
-                        {"role": role, "look": normalise_look(look, self.kelvin()), **target}
-                    )
+                if role in SCENE_KEYS:
+                    continue
+                pairs, bad = self.look_plan(area, role, look)
+                unknown += bad
+                if pairs:
+                    roles += pairs
                 else:
                     unfilled.append(role)
+            meta = self.scene_meta(area, scene_id)
             plans.append(
                 {
                     "id": scene_id,
                     "roles": roles,
                     "unfilled": unfilled,
+                    "unknown": unknown,
                     "renders": bool(roles),
                     "implicit": scene_id == "off" and "off" not in (area.get("scenes") or {}),
+                    **meta,
                 }
             )
         return plans
@@ -877,11 +1135,35 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
         scenes = dict(a.get("scenes") or {})
         for scene_id, looks in scenes.items():
             for role in looks:
+                if role in SCENE_KEYS:
+                    continue
                 if role not in declared:
                     warnings.append(
                         f"{a['id']}: scene {scene_id} names role {role!r} — neither declared "
                         "under roles nor carried by a thing"
                     )
+        for role in declared:
+            if role in SCENE_KEYS:
+                errors.append(
+                    f"{a['id']}: role {role!r} wears a scene's own word — "
+                    f"{', '.join(SCENE_KEYS)} can never be role names"
+                )
+        for plan in house.scene_plan(a):
+            if plan["unknown"]:
+                errors += [f"{a['id']}: scene {plan['id']}: {u}" for u in plan["unknown"]]
+            errors += house.drift_errors(a, plan)
+            d = house.drift_plan(a, plan) if not house.drift_errors(a, plan) else None
+            if (plan.get("run") or {}).get("drift") and d is None:
+                hints.append(
+                    f"{a['id']}: scene {plan['id']} moves nothing yet — no place of "
+                    f"{plan['run']['drift']['role']} it drifts is paired (the walk fills them)"
+                )
+            if d and d["step"] > d["asked"]:
+                hints.append(
+                    f"{a['id']}: scene {plan['id']} asks {d['asked']} s between colours on "
+                    f"{d['role']} — the backend gives {d['floor']} s, stretched (a Zigbee bulb "
+                    "ramps colour itself; a command inside that ramp aborts it)"
+                )
         unfilled = sorted(r for r in declared if r not in filled)
         waiting = [p["id"] for p in house.scene_plan(a) if not p["renders"] and not p["implicit"]]
         if unfilled:
@@ -919,7 +1201,8 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
         lightless = {
             s
             for s, looks in (a.get("scenes") or {}).items()
-            if looks and all(not normalise_look(v)["on"] for v in looks.values())
+            if (roles := {r: v for r, v in (looks or {}).items() if r not in SCENE_KEYS})
+            and all(not normalise_look(v)["on"] for v in roles.values())
         }
         for period, value in house.defaults_of(a).items():
             for d, scene in value.items():

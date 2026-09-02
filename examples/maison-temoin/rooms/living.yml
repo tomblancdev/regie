@@ -16,5 +16,21 @@ scenes:
   evening: { main: { brightness: 60, ct: warm }, lamp: on }
   cinema:  { main: off, lamp: { brightness: 10, ct: warm }, strip: { color: "#200000" } }
   night:   { main: off, lamp: { brightness: 5, ct: warm } }   # a LOOK (H34): the night-light glimmer, never all-off
+  # a look that names the PLACES inside a role: the role's own `layout:` words
+  # (a place, or a prefix several of them share), each overriding the base the
+  # look sets for everything it did not name. Still by role — no entity id.
+  party:
+    label: Fête
+    icon: mdi:party-popper
+    tags: [social, dynamic]                 # what the UI, a scenario and the AI pick a look by
+    main:
+      brightness: 12                        # the base every unnamed place takes
+      front: { color: "#0096ff", brightness: 6 }
+      back_center: off                      # the one straight above the table
+    lamp: { brightness: 20, ct: warm }
+    # what MOVES while this look holds — stopped the moment the room takes
+    # another look, and its kill-switch is a helper you can see
+    run:
+      drift: { role: main, places: front, band: [190, 330], period: [80, 175], step: 2.5 }
 # daylight-first (H34): the sun drives; night forces the glimmer look
 defaults: { dark: evening, dim: day, bright: day, night: night }
