@@ -39,6 +39,12 @@ class Labels:
     def via(self, via: str) -> str:
         return self.data.get("via", {}).get(via, via)
 
+    def scene(self, scene: str) -> str:
+        """A look's own `label:` wins; failing that, the standard names are
+        translated here like the kinds. A look this house invented — the ones
+        worth naming — falls back to its id, and gets a `label:` in its room."""
+        return self.data.get("scenes", {}).get(scene, scene)
+
     @property
     def kinds(self) -> dict[str, str]:
         return dict(self.data.get("kinds", {}))

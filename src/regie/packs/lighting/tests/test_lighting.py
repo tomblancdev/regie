@@ -131,3 +131,17 @@ def test_restore_default_and_the_silent_gate(rendered, house_with, secrets, tmp_
 def test_the_room_card_leads_with_the_smart_on(rendered):
     text = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
     assert "script.living_default" in text and "script.living_off" in text
+
+
+def test_the_room_card_carries_its_looks_as_buttons(rendered):
+    """The manual way into a scene: the room's own looks, in the order its file
+    writes them, each with the name and the face the vocabulary gives it."""
+    body = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    salon = body[body.index("title: Salon") :]
+    salon = salon[: salon.index("light.living_lights")]
+    assert "script.living_day" in salon and "name: Jour" in salon, "a standard look is translated"
+    assert "icon: mdi:white-balance-sunny" in salon, "and wears a standard face"
+    assert "script.living_party" in salon and "name: Fête" in salon
+    assert "icon: mdi:party-popper" in salon, "a look the house invented says its own"
+    assert "script.living_off" in salon, "off keeps the button it already had"
+    assert salon.count("- entity: script.living_off") == 1, "and only that one"

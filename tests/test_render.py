@@ -163,7 +163,16 @@ def test_the_dashboard_has_a_card_per_room_and_the_house_pack_card(rendered):
     # the smart-on leads (W3b); the raw rows follow as the override path
     assert living["entities"][0]["type"] == "buttons"
     assert living["entities"][0]["entities"][0]["entity"] == "script.living_default"
-    assert living["entities"][1] == {"entity": "light.living_lights", "name": "lumières"}
+    # then the room's looks, the manual way into each (W1c)
+    assert living["entities"][1]["type"] == "buttons"
+    assert [b["name"] for b in living["entities"][1]["entities"]] == [
+        "Jour",
+        "Soirée",
+        "Cinéma",
+        "Nuit",
+        "Fête",
+    ]
+    assert living["entities"][2] == {"entity": "light.living_lights", "name": "lumières"}
     assert {"entity": "light.living_floor_lamp", "name": "Lampadaire"} in living["entities"]
     assert "pack `chalet`" in cards[-1]["content"]
 

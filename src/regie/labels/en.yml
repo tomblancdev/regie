@@ -27,6 +27,26 @@ via:
   matter: Matter
   thread: Thread
   esphome: ESPHome
+# a look's standard name; a look a house invents falls back to its id and
+# gets a `label:` of its own in the room's file
+scenes:
+  day: Day
+  soft: Soft
+  evening: Evening
+  night: Night
+  cinema: Cinema
+  game: Game
+  alarm: Alarm
+  cooking: Cooking
+  focus: Focus
+  low: Night light
+  off: Off
+  guest: Guests
+  party: Party
+  morning: Morning
+  reading: Reading
+  relax: Relax
+  bright: Bright
 ui:
   home: Home
   rooms: Rooms

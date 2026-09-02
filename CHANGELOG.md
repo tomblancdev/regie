@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.1 — a look you can press (2026-09-02)
+
+A room's card had two buttons — *on* (through the room's default look) and
+*off* — and no way to reach any of the looks the room actually has. Every
+scene was a script nobody could see. **The card now carries the room's looks
+as buttons**, in the order its file writes them.
+
+For that to read as anything, a look needed a name and a face:
+
+- **A standard look is translated like a kind is.** `day · soft · evening ·
+  night · cinema · game · alarm · cooking · focus · low · party · guest ·
+  morning · reading · relax · bright` have labels in `labels/<lang>.yml`, so
+  a house that writes `cinema:` gets *Cinéma* on a French card for free. A
+  look a house invents falls back to its id and says its own `label:`.
+- **And it wears a standard icon** (`SCENE_ICONS` — an icon has no language,
+  so it lives beside the code and not beside the words). A row of buttons that
+  is eight identical palettes is not a row anyone can read.
+
+Both are defaults: `label:` and `icon:` on the scene still win.
+
 ## 0.9.0 — a look reaches its places, and a look may move (2026-09-02)
 
 Three things a real ceiling asked for, in the order the room asked them.

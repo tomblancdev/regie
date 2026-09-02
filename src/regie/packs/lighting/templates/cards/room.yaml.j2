@@ -16,6 +16,19 @@
           name: {{ labels.ui.turn_off | to_yaml }}
           icon: mdi:lightbulb-off-outline
 {% endif %}
+{# the looks, as buttons — the manual way into every scene the room has, in
+   the order its file writes them; `off` already has one above (W1c) #}
+{% set looks = [] %}
+{% for p in scene_plan(area) if p.renders and p.id != 'off' %}{% set _ = looks.append(p) %}{% endfor %}
+{% if looks %}
+    - type: buttons
+      entities:
+{% for p in looks %}
+        - entity: script.{{ area.id }}_{{ p.id }}
+          name: {{ p.label | to_yaml }}
+          icon: {{ p.icon }}
+{% endfor %}
+{% endif %}
 {% if kinds.get('light', []) %}
     - entity: light.{{ area.id }}_lights
       name: {{ labels.ui.lights | to_yaml }}

@@ -79,6 +79,28 @@ KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 LOOK_KEYS = ("brightness", "ct", "color", "transition")
 # a scene's own keys — never a role name (check refuses a role wearing one)
 SCENE_KEYS = ("label", "icon", "tags", "run")
+# the standard looks wear a standard face, so a row of buttons is readable at a
+# glance; a look a house invents says its own `icon:` (an icon has no language,
+# so it lives here and not beside the labels)
+SCENE_ICONS = {
+    "day": "mdi:white-balance-sunny",
+    "soft": "mdi:weather-sunset",
+    "evening": "mdi:sofa",
+    "night": "mdi:weather-night",
+    "cinema": "mdi:movie-open",
+    "game": "mdi:gamepad-variant",
+    "alarm": "mdi:alarm-light",
+    "cooking": "mdi:chef-hat",
+    "focus": "mdi:target",
+    "low": "mdi:lightbulb-on-10",
+    "off": "mdi:lightbulb-off-outline",
+    "guest": "mdi:account-group",
+    "party": "mdi:party-popper",
+    "morning": "mdi:coffee",
+    "reading": "mdi:book-open-page-variant",
+    "relax": "mdi:spa",
+    "bright": "mdi:brightness-7",
+}
 # the drift's defaults, and the measured floor between two colour commands on a
 # Zigbee bulb: below this a new command aborts the ramp still running inside the
 # bulb and the walk reads as jitter (Le QG, IKEA LED2109G6/LED2110R3 — 0.5 s was
@@ -627,8 +649,8 @@ class House:
         raw = (area.get("scenes") or {}).get(scene_id) or {}
         raw = raw if isinstance(raw, dict) else {}
         return {
-            "label": raw.get("label") or scene_id,
-            "icon": raw.get("icon") or "mdi:palette",
+            "label": raw.get("label") or self.labels.scene(scene_id),
+            "icon": raw.get("icon") or SCENE_ICONS.get(scene_id, "mdi:palette"),
             "tags": list(raw.get("tags") or []),
             "run": raw.get("run") or {},
         }
