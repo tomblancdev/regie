@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.2 — a place is called one thing (2026-09-02)
+
+Read off the live house an hour after 0.10.1 landed. The dashboard called the
+ceiling's three groups **Spots TV · Rangée · Spots canapé** — the room's own
+`places:` — and the entities themselves were still called *Plafond front*,
+*Plafond row*, *Plafond back*. Nobody sees it on a card, which overrides the
+name; they see it the moment they tap a group that has no page of its own and
+Home Assistant's dialog opens with the machine word in its title. **One fact,
+rendered in two vocabularies** — the friendly name now comes from `places:` too,
+and falls back to the prefix only when the room has not named it.
+
+Beside it: a thing with no `label` is named by its **kind** wherever it is
+listed, never by its raw id — `Le Carton` was printing `zigbee` for the
+coordinator that has no entity of its own.
+
 ## 0.10.1 — a release carries its own pin, and now something proves it (2026-09-02)
 
 0.10.0 was tagged with the `engine` role still installing **v0.9.3**. A fleet

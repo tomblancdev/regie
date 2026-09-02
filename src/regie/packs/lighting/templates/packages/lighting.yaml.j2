@@ -19,7 +19,7 @@ homeassistant:
       friendly_name: {{ (area.label ~ ' — ' ~ (role_specs[role].label | default(role))) | to_yaml }}
 {% for g in layout_groups(area, role) %}
     light.{{ g.id }}:
-      friendly_name: {{ (area.label ~ ' — ' ~ (role_specs[role].label | default(role)) ~ ' ' ~ g.prefix) | to_yaml }}
+      friendly_name: {{ (area.label ~ ' — ' ~ (place_labels(area, role).get(g.prefix) | default(role_specs[role].label | default(role) ~ ' ' ~ g.prefix))) | to_yaml }}
 {% endfor %}
 {% endif %}
 {% endfor %}

@@ -205,7 +205,7 @@ def _parking(house: House, area: dict, extra: list[dict]) -> dict:
         ]
     quiet = [t for t in things if not house.entity(t)]
     if quiet:
-        names = ", ".join(t.get("label") or t["id"] for t in quiet)
+        names = ", ".join(t.get("label") or house.labels.kind(t["kind"]) for t in quiet)
         cards.append(_cols({"type": "markdown", "content": f"**{ui.no_entity}** {names}"}, FULL))
     sections = [_grid(cards)]
     if extra:
@@ -313,7 +313,7 @@ def health_cards(house: House, area: dict) -> list[dict]:
         cards.append({"type": "entities", "entities": rows, "state_color": True})
     quiet = [t for t in things if not house.entity(t)]
     if quiet:
-        names = ", ".join(t.get("label") or t["id"] for t in quiet)
+        names = ", ".join(t.get("label") or house.labels.kind(t["kind"]) for t in quiet)
         cards.append(_cols({"type": "markdown", "content": f"**{ui.no_entity}** {names}"}, FULL))
     return cards
 

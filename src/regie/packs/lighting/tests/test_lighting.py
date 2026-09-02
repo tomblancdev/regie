@@ -103,7 +103,9 @@ def test_a_role_gets_its_group_and_a_layout_its_rows(rendered):
     assert "living_main_back" not in groups
     names = pkg["homeassistant"]["customize"]
     assert names["light.living_main"]["friendly_name"] == "Salon — Plafond"
-    assert names["light.living_main_front"]["friendly_name"] == "Salon — Plafond front"
+    assert names["light.living_main_front"]["friendly_name"] == "Salon — Devant", (
+        "a place group wears the room's own word for it — the same one the card prints"
+    )
 
 
 def test_restore_default_and_the_silent_gate(rendered, house_with, secrets, tmp_path):
