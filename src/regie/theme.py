@@ -46,11 +46,26 @@ FACES: dict[str, list[int]] = {
 # five versions before this one found it.
 ROLES = ("ground", "panel", "edge", "ink", "ink_soft", "accent", "lit", "alert")
 
-# a plate catches light from above: a hairline highlight on its top edge and a
-# hard line under it. The values differ by mode because the light does.
-LIFT = {
-    "dark": "inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 1px 0 rgba(0, 0, 0, 0.6)",
-    "light": "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 0 rgba(0, 0, 0, 0.12)",
+# HOW A CARD LEAVES THE GROUND, and it is the whole difference between a modern
+# interface and a dated one. `plate` catches light from above — a hairline on the
+# top edge, a hard line under it — and wants a border beside it; `lift` has no
+# border at all and separates by shadow alone; `glass` is a lift with a
+# highlight, for a translucent card. The values differ by mode because the light
+# does. A theme names one with `shadow:` and its border width with `border:`.
+SHADOW = {
+    "plate": {
+        "dark": "inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 1px 0 rgba(0, 0, 0, 0.6)",
+        "light": "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 0 rgba(0, 0, 0, 0.12)",
+    },
+    "lift": {
+        "dark": "0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.3)",
+        "light": "0 1px 2px rgba(18, 20, 32, 0.06), 0 8px 24px rgba(18, 20, 32, 0.08)",
+    },
+    "glass": {
+        "dark": "inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 28px rgba(0, 0, 0, 0.35)",
+        "light": "inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 8px 28px rgba(18, 20, 32, 0.1)",
+    },
+    "none": {"dark": "none", "light": "none"},
 }
 
 
@@ -93,7 +108,7 @@ def stack(families: list[str] | str) -> str:
     return ", ".join(f"'{n}'" if " " in n else n for n in names)
 
 
-def mode_vars(palette: dict, mode: str) -> dict[str, str]:
+def mode_vars(palette: dict, mode: str, shadow: str = "plate") -> dict[str, str]:
     """One mode's colours — the house's words, in Home Assistant's names."""
     p = dict(palette)
     header = p.get("header", p["ground"])
@@ -105,7 +120,7 @@ def mode_vars(palette: dict, mode: str) -> dict[str, str]:
         "card-background-color": p["panel"],
         "ha-card-background": p["panel"],
         "ha-card-border-color": p["edge"],
-        "ha-card-box-shadow": LIFT[mode],
+        "ha-card-box-shadow": SHADOW[shadow][mode],
         "divider-color": p["edge"],
         "primary-text-color": p["ink"],
         "secondary-text-color": p["ink_soft"],
@@ -137,7 +152,7 @@ def shared_vars(theme: dict) -> dict[str, str]:
     head = stack(theme.get("heading") or theme.get("body") or ["Roboto", "sans-serif"])
     return {
         "ha-card-border-radius": f"{theme.get('radius', 12)}px",
-        "ha-card-border-width": "1px",
+        "ha-card-border-width": f"{theme.get('border', 1)}px",
         "tile-icon-border-radius": f"{theme.get('icon_radius', 24)}px",
         "feature-border-radius": f"{theme.get('feature_radius', 12)}px",
         "feature-height": f"{theme.get('slider', 40)}px",
@@ -152,10 +167,11 @@ def build(theme: dict) -> dict:
     """The whole theme file: what is shared, then one block per mode."""
     out = dict(shared_vars(theme))
     modes = {}
+    shadow = theme.get("shadow", "plate")
     for mode in ("light", "dark"):
         palette = theme.get(mode)
         if palette:
-            modes[mode] = mode_vars(palette, mode)
+            modes[mode] = mode_vars(palette, mode, shadow)
     if modes:
         out["modes"] = modes
     return {theme["name"]: out}

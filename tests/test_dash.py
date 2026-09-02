@@ -155,12 +155,17 @@ def test_a_house_picks_a_skin_off_the_shelf_and_repaints_what_it_wants(rendered)
     assert theme["tile-icon-border-radius"] == "24px", "a round key"
     assert theme["feature-height"] == "44px", "a dimmer a thumb can catch"
     assert theme["ha-font-family-heading"].startswith("Manrope")
+    # the thing that makes it modern rather than recoloured: a card leaves the
+    # ground by LIFT, not by a line — no border, and a drop shadow with no inset
+    assert theme["ha-card-border-width"] == "0px", "Nuit has no borders anywhere"
     dark, light = theme["modes"]["dark"], theme["modes"]["light"]
     assert dark["state-light-active-color"] == "#f0a92a" == dark["state-active-color"], (
         "the house repainted `lit` and the engine spread it everywhere it means"
     )
     assert dark["primary-color"] == "#7aa2ff", "and kept Nuit's accent: a merge, not a swap"
-    assert dark["ha-card-border-color"] == "#20242c"
+    assert dark["ha-card-border-color"] == "#20242c", "dividers still need a colour"
+    assert "inset" not in dark["ha-card-box-shadow"], "a lift, not a plate's highlight"
+    assert dark["ha-card-box-shadow"] != light["ha-card-box-shadow"], "the light differs by mode"
     assert light["primary-background-color"] == "#f4f5f8", "the light mode came with it"
 
 
@@ -176,6 +181,9 @@ def test_the_library_is_what_the_product_carries(witness):
     }
     glass = skin.build(skin.resolve({"use": "verre"}))["verre"]
     assert glass["ha-card-backdrop-filter"] == "blur(22px)", "the frosting is a variable HA reads"
+    plate = skin.build(skin.resolve({"use": "atelier"}))["atelier"]
+    assert plate["ha-card-border-width"] == "1px", "a plate wants its edge"
+    assert "inset" in plate["modes"]["dark"]["ha-card-box-shadow"], "and its highlight"
     assert glass["modes"]["dark"]["ha-card-background"].startswith("rgba("), "glass is translucent"
     with pytest.raises(HouseError) as exc:
         skin.resolve({"use": "chartreuse"})

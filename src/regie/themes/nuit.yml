@@ -8,6 +8,8 @@ label: Nuit
 summary: soft dark — no borders, elevation instead, Manrope, one warm light colour
 body: [Manrope, system-ui, sans-serif]
 heading: [Manrope, system-ui, sans-serif]
+border: 0
+shadow: lift
 radius: 18
 icon_radius: 24          # a round key
 feature_radius: 13

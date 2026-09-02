@@ -1554,6 +1554,21 @@
         },
         "dark": {
           "$ref": "#/$defs/palette"
+        },
+        "border": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "a card's border width in px - 0 is what makes a card separate by LIFT rather than by a line"
+        },
+        "shadow": {
+          "enum": [
+            "plate",
+            "lift",
+            "glass",
+            "none"
+          ],
+          "description": "how a card leaves the ground: `plate` (a hairline on top, a hard line under - wants a border), `lift` (shadow alone, no border), `glass` (a lift with a highlight, for a translucent card), `none`"
         }
       }
     }

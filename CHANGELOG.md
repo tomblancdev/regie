@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.11.1 — how a card leaves the ground is the theme's to say (2026-09-02)
+
+Caught by reading the rendered theme rather than trusting the library file:
+`nuit` came out with **`ha-card-border-width: 1px` and the plate's inset
+highlight**. Both were hard-coded in the engine, written when the only skin was
+the industrial one — so the theme that exists precisely because *a card should
+separate from the ground by lift and not by a line* rendered with a line.
+
+`border:` and `shadow:` are the theme's own words now. `shadow` names one of
+four: **`plate`** (a hairline on the top edge and a hard line under it — wants a
+border beside it), **`lift`** (shadow alone, no border), **`glass`** (a lift with
+a highlight, for a translucent card), `none`. Nuit is `border: 0` + `lift`,
+Verre `1` + `glass`, Atelier `1` + `plate`.
+
+The lesson is the older one: **a default written for the only case there was
+becomes a wrong answer the moment there are two**, and the file that declares a
+design cannot be trusted until the thing it renders is read back.
+
+203 tests — the new assertions ride the tests that already existed.
+
 ## 0.11.0 — a shelf of skins, and Nuit on it (2026-09-02)
 
 The skin that shipped this morning was **industrial on purpose** — painted

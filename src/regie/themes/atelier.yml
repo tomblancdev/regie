@@ -7,6 +7,8 @@ label: L'Atelier
 summary: painted steel — plates with an edge, square keys, Oswald uppercase
 body: [Barlow, "Helvetica Neue", sans-serif]
 heading: [Oswald, "Arial Narrow", sans-serif]
+border: 1
+shadow: plate
 radius: 4
 icon_radius: 4
 feature_radius: 2

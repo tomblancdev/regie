@@ -7,6 +7,8 @@ label: Verre
 summary: layered glass over a coloured glow — Nuit's geometry, translucent
 body: [Manrope, system-ui, sans-serif]
 heading: [Manrope, system-ui, sans-serif]
+border: 1
+shadow: glass
 radius: 20
 icon_radius: 24
 feature_radius: 14
