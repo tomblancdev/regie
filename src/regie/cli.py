@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from . import theme as theme_lib
 from .errors import HouseError
 from .house import House, load_house
 from .packs import product_packs
@@ -77,6 +78,17 @@ def report(house: House, secrets: dict) -> None:
         print(
             "controls: "
             + " · ".join(f"{k.replace('_', '-')} {'on' if v else 'off'}" for k, v in c.items())
+        )
+    skin = house.theme()
+    if skin:
+        raw = house.data["house"]["theme"]
+        shelf = ", ".join(sorted(theme_lib.library()))
+        origin = f"{raw['use']} from the library" if raw.get("use") else "the house's own"
+        repaint = sorted(k for k in raw if k not in ("use", "name"))
+        print(
+            f"theme: {skin['name']} — {origin}"
+            + (f", repainting {', '.join(repaint)}" if repaint else "")
+            + f" (library: {shelf})"
         )
     if house.has_pack("matter"):
         matter = [t for t in house.things if t["via"] in ("matter", "thread")]

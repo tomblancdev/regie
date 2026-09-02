@@ -6,8 +6,10 @@ role holds every light it has does not draw that role, and a group too small to
 be worth opening is drawn where it stands instead.
 """
 
+import pytest
 import yaml
 
+from regie.errors import HouseError
 from regie.house import load_house
 from regie.render import render
 
@@ -141,25 +143,43 @@ def test_a_parking_room_renders_no_script_and_no_automation(rendered):
     assert "script.spare_" not in scripts
 
 
-def test_the_skin_says_what_a_colour_IS_and_the_engine_names_it(rendered):
-    """The house writes `on` once; every variable that means "a light is on"
-    follows. It never writes `--state-light-active-color` itself."""
+def test_a_house_picks_a_skin_off_the_shelf_and_repaints_what_it_wants(rendered):
+    """`use: nuit` is the whole declaration; the house's own keys land on top and
+    the palettes merge KEY BY KEY. It never writes `--state-light-active-color`
+    itself — it says `lit`, once, and every card that means "a light is on"
+    follows."""
     theme = yaml.safe_load(
         (rendered / "home-assistant/themes/temoin.yaml").read_text(encoding="utf-8")
     )["temoin"]
-    assert theme["ha-card-border-radius"] == "4px", "a plate, not a pill"
-    assert theme["tile-icon-border-radius"] == "4px", "a square key, not a round dot"
-    assert theme["feature-height"] == "40px", "a fader a thumb can catch"
-    assert theme["ha-font-family-heading"].startswith("Oswald")
+    assert theme["ha-card-border-radius"] == "18px", "Nuit's geometry, not the default 12"
+    assert theme["tile-icon-border-radius"] == "24px", "a round key"
+    assert theme["feature-height"] == "44px", "a dimmer a thumb can catch"
+    assert theme["ha-font-family-heading"].startswith("Manrope")
     dark, light = theme["modes"]["dark"], theme["modes"]["light"]
-    assert dark["state-light-active-color"] == "#f0a92a" == dark["state-active-color"]
-    assert dark["primary-color"] == "#5b93c4", "what you press is not what is lit"
-    assert dark["app-header-background-color"] == "#0f1214", "the rail, darker than the ground"
-    assert light["primary-background-color"] == "#d7dad9"
-    assert (
-        "inset" in dark["ha-card-box-shadow"]
-        and dark["ha-card-box-shadow"] != (light["ha-card-box-shadow"])
-    ), "a plate catches light from above, and the light differs by mode"
+    assert dark["state-light-active-color"] == "#f0a92a" == dark["state-active-color"], (
+        "the house repainted `lit` and the engine spread it everywhere it means"
+    )
+    assert dark["primary-color"] == "#7aa2ff", "and kept Nuit's accent: a merge, not a swap"
+    assert dark["ha-card-border-color"] == "#20242c"
+    assert light["primary-background-color"] == "#f4f5f8", "the light mode came with it"
+
+
+def test_the_library_is_what_the_product_carries(witness):
+    """Three themes on the shelf, each a whole declaration; an unknown name is
+    refused with the list rather than rendering a house with no skin."""
+    from regie import theme as skin
+
+    assert {k: v["label"] for k, v in skin.library().items()} == {
+        "nuit": "Nuit",
+        "verre": "Verre",
+        "atelier": "L'Atelier",
+    }
+    glass = skin.build(skin.resolve({"use": "verre"}))["verre"]
+    assert glass["ha-card-backdrop-filter"] == "blur(22px)", "the frosting is a variable HA reads"
+    assert glass["modes"]["dark"]["ha-card-background"].startswith("rgba("), "glass is translucent"
+    with pytest.raises(HouseError) as exc:
+        skin.resolve({"use": "chartreuse"})
+    assert "atelier, nuit, verre" in str(exc.value)
 
 
 def test_the_typefaces_ride_with_the_brain(rendered):
@@ -167,7 +187,7 @@ def test_the_typefaces_ride_with_the_brain(rendered):
     embedded in the module the frontend loads — so a phone with no internet
     still reads the house's type, and no phone calls a font server."""
     js = (rendered / "home-assistant/www/regie-skin.js").read_text(encoding="utf-8")
-    assert js.count("@font-face") == 5, "Barlow 400/500/600 and Oswald 400/500"
+    assert js.count("@font-face") == 4, "Manrope 400/500/600/700 — only what the stacks name"
     assert "url(data:font/woff2;base64," in js
     assert "http" not in js.split("//", 1)[1].split("\n")[0], "nothing is fetched at runtime"
     conf = (rendered / "home-assistant/configuration.yaml").read_text(encoding="utf-8")

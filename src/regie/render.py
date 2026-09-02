@@ -104,6 +104,8 @@ def context(house: House, secrets: dict) -> dict:
         "secrets": secrets,
         "version": __version__,
         "dashboard_url": dash.URL_PATH,
+        "theme": house.theme(),
+        "theme_name": (house.theme() or {}).get("name"),
         "theme_file": skin.build(house.theme()) if house.theme() else None,
         "font_faces": skin.font_faces(house.theme()) if house.theme() else [],
         "default_config": base_default_config(),

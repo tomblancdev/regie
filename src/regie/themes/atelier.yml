@@ -1,0 +1,33 @@
+# « L'Atelier » — painted steel: a plate with an edge, not a floating pill. A
+# hairline border and an inset highlight so every card catches light from above,
+# a square icon key, Oswald uppercase for anything that NAMES something. It reads
+# as a breaker panel, which is the point — and the reason it is not the default:
+# a household's phone wants the modern one, and this belongs on a wall panel.
+label: L'Atelier
+summary: painted steel — plates with an edge, square keys, Oswald uppercase
+body: [Barlow, "Helvetica Neue", sans-serif]
+heading: [Oswald, "Arial Narrow", sans-serif]
+radius: 4
+icon_radius: 4
+feature_radius: 2
+slider: 40
+dark:
+  ground:   "#15181a"    # acier peint
+  header:   "#0f1214"
+  panel:    "#1e2226"    # platine
+  edge:     "#2c3237"    # arête
+  ink:      "#e9e6e0"    # émail
+  ink_soft: "#949a9e"
+  accent:   "#5b93c4"    # bleu de travail
+  lit:      "#f0a92a"    # filament
+  alert:    "#d1522f"    # minium
+light:
+  ground:   "#d7dad9"
+  header:   "#c8cdcd"
+  panel:    "#e9ebea"
+  edge:     "#b9bfc0"
+  ink:      "#191c1e"
+  ink_soft: "#5d6467"
+  accent:   "#2c5c85"
+  lit:      "#b8770c"
+  alert:    "#b4441f"

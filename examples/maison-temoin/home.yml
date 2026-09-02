@@ -11,40 +11,15 @@ house:
   timezone: Europe/Paris
   url: https://home.example.com
   country: FR
-  # the house's SKIN (0.10). The palette says what a colour IS - the ground, a
-  # plate, its edge, what is ON - and the engine maps those words onto the forty
-  # variables the frontend reads. The geometry matters as much as the colour: a
-  # card's radius makes it a pill or a plate, a tile's icon a dot or a key, and
-  # the feature bar a hint of a slider or a fader a thumb can catch. A stack
-  # naming a face the product carries gets it embedded in the brain's own www/.
+  # the house's SKIN (0.11). `use:` picks a theme the PRODUCT carries — the
+  # library holds the design, the house holds its deviations, and the palettes
+  # merge KEY BY KEY, so repainting one colour keeps every other. `regie check`
+  # prints what is on the shelf. Without `use:` a house declares the whole skin
+  # itself, which is still supported and still validated the same way.
   theme:
-    name: temoin
-    body: [Barlow, "Helvetica Neue", sans-serif]
-    heading: [Oswald, "Arial Narrow", sans-serif]
-    radius: 4
-    icon_radius: 4
-    feature_radius: 2
-    slider: 40
-    dark:
-      ground: "#15181a"
-      header: "#0f1214"
-      panel: "#1e2226"
-      edge: "#2c3237"
-      ink: "#e9e6e0"
-      ink_soft: "#949a9e"
-      accent: "#5b93c4"
-      lit: "#f0a92a"
-      alert: "#d1522f"
-    light:
-      ground: "#d7dad9"
-      header: "#c8cdcd"
-      panel: "#e9ebea"
-      edge: "#b9bfc0"
-      ink: "#191c1e"
-      ink_soft: "#5d6467"
-      accent: "#2c5c85"
-      lit: "#b8770c"
-      alert: "#b4441f"
+    use: nuit
+    name: temoin                 # what Home Assistant calls it (default: the library's name)
+    dark: { lit: "#f0a92a" }     # this house's own filament; everything else is Nuit's
 profile: ct
 packs: [modes, signals, scenes, fx, notify, scenarios, lighting, matter, chalet]
 # the family's controls (W3b): the settings view, the phones driving

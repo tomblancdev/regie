@@ -1,0 +1,34 @@
+# « Verre » — Nuit's geometry with translucent cards over a coloured glow. The
+# frosting is `--ha-card-backdrop-filter`, a variable Home Assistant reads
+# itself, so this is still config and not code. Bolder than Nuit, and the cost is
+# that text sits on a moving ground: look at it on a real screen at night before
+# a household gets it.
+label: Verre
+summary: layered glass over a coloured glow — Nuit's geometry, translucent
+body: [Manrope, system-ui, sans-serif]
+heading: [Manrope, system-ui, sans-serif]
+radius: 20
+icon_radius: 24
+feature_radius: 14
+slider: 44
+blur: 22
+dark:
+  ground:   "#0a0b12"
+  header:   "#0a0b12"
+  panel:    "rgba(255, 255, 255, 0.055)"
+  edge:     "rgba(255, 255, 255, 0.10)"
+  ink:      "#f4f5fa"
+  ink_soft: "#a2a8bb"
+  accent:   "#8f9bff"
+  lit:      "#ffc061"
+  alert:    "#ff7a7a"
+light:
+  ground:   "#eef0f7"
+  header:   "#eef0f7"
+  panel:    "rgba(255, 255, 255, 0.62)"
+  edge:     "rgba(18, 20, 32, 0.08)"
+  ink:      "#12141a"
+  ink_soft: "#5a6274"
+  accent:   "#3b4ad6"
+  lit:      "#a9700a"
+  alert:    "#c93838"

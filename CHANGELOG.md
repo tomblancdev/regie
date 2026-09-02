@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.11.0 — a shelf of skins, and Nuit on it (2026-09-02)
+
+The skin that shipped this morning was **industrial on purpose** — painted
+steel, plates with a 1 px edge, a square icon key, Oswald uppercase — and the
+first thing its house said after living with it was that it did not look modern.
+It was not meant to; a breaker panel is not a 2026 app. But a house should not
+have to write forty colours to find that out.
+
+**`house.theme` gains `use:`.** The product now carries a **library** of whole
+themes (`src/regie/themes/*.yml`) and a house picks one:
+
+```yaml
+theme:
+  use: nuit
+```
+
+Everything beside `use` overrides what that theme says, and **the palettes merge
+key by key** — repaint `lit` and every other colour stays Nuit's. Without `use`
+a house still declares the whole skin itself, validated exactly as before. The
+library holds the *design*, the house holds its *deviations*: the same split as
+the packs. `check` prints what is on the shelf, and an unknown name is refused
+with the list rather than rendering a house with no skin.
+
+**Three on the shelf:**
+
+* **`nuit`** — soft dark, and the one to reach for. **No borders anywhere**: a
+  card separates from the ground by *lift*, not by a line, which is the single
+  biggest difference between a modern interface and a dated one. 18 px corners,
+  a round icon key, a 44 px dimmer a thumb can catch, and air between things.
+  **Manrope** in sentence case with tight tracking. One warm amber means *a
+  light is on* and nothing else wears it; one calm blue means *you can press
+  this*.
+* **`verre`** — Nuit's geometry with **translucent cards over a coloured glow**.
+  `--ha-card-backdrop-filter` is a variable Home Assistant reads itself, so the
+  frosting is configuration and not code; `blur:` in a theme sets it.
+* **`atelier`** — what 0.10 shipped, kept whole. It belongs on a wall panel.
+
+Manrope 400/500/600/700 joins Barlow and Oswald in `base/fonts/` (OFL, beside
+their licences). **Which faces get embedded is still derived** from the stacks a
+theme names — a house on Nuit ships four faces and no Oswald.
+
+Two smaller things the library needed: a palette colour may now be `rgba(…)` as
+well as a hex (glass has to be translucent), and the theme file's *name* comes
+from the resolved theme rather than the raw block, so `use: nuit` with no `name:`
+renders `themes/nuit.yaml` instead of failing on a key the house never wrote.
+
+203 tests.
+
 ## 0.10.3 — `default()` does not catch a None (2026-09-02)
 
 0.10.2's own fix, read off the live house ten minutes later: **`La Cantine —

@@ -1441,60 +1441,51 @@
     "palette": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "ground",
-        "panel",
-        "edge",
-        "ink",
-        "ink_soft",
-        "accent",
-        "lit",
-        "alert"
-      ],
+      "required": [],
       "properties": {
         "ground": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "the page behind everything"
         },
         "panel": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "a card — one plate at a time"
         },
         "edge": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "the border of a plate, and every divider"
         },
         "ink": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "the text"
         },
         "ink_soft": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "the second line, and an icon at rest"
         },
         "accent": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "what you press: links, the selected tab, a control"
         },
         "lit": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "a light that is ON - and nothing else wears it (spelled `lit`: YAML reads a bare `on:` as true)"
         },
         "alert": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "what is wrong"
         },
         "header": {
           "type": "string",
-          "pattern": "^#[0-9a-fA-F]{6}$",
+          "pattern": "^(#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?|rgba?\\([0-9.,%\\s]+\\))$",
           "description": "the top rail; the ground when absent"
         }
       }
@@ -1502,11 +1493,19 @@
     "theme": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "name"
-      ],
-      "description": "the house's SKIN. The palette says what a colour IS (the ground, a plate, what is on) and the engine maps those words onto the frontend's own variables; the geometry is the rest of the feel. A stack that names a typeface the product carries gets it embedded in the brain's own www/ - nothing is fetched at runtime",
+      "required": [],
+      "description": "the house's SKIN - `use:` a theme the product carries, or declare one outright. The palette says what a colour IS (the ground, a plate, what is on) and the engine maps those words onto the frontend's own variables; the geometry is the rest of the feel. A stack that names a typeface the product carries gets it embedded in the brain's own www/ - nothing is fetched at runtime",
       "properties": {
+        "use": {
+          "$ref": "#/$defs/id",
+          "description": "a theme the PRODUCT carries (nuit | verre | atelier) - everything beside it overrides what that one says, palettes key by key. Without `use` the house declares the whole skin itself"
+        },
+        "blur": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "description": "frost the cards by this many pixels (--ha-card-backdrop-filter); glass wants a translucent `panel` under it"
+        },
         "name": {
           "$ref": "#/$defs/id",
           "description": "the theme's name in Home Assistant"

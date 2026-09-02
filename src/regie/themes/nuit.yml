@@ -1,0 +1,34 @@
+# « Nuit » — soft dark. No borders anywhere: a card separates from the ground by
+# LIFT, not by a line, which is the single biggest difference between a 2026
+# interface and a 2016 one. Round icon, a dimmer bar you can catch with a thumb,
+# and air between things. Manrope everywhere, sentence case, tight tracking.
+# One warm colour means "a light is on" and nothing else wears it; one calm blue
+# means "you can press this".
+label: Nuit
+summary: soft dark — no borders, elevation instead, Manrope, one warm light colour
+body: [Manrope, system-ui, sans-serif]
+heading: [Manrope, system-ui, sans-serif]
+radius: 18
+icon_radius: 24          # a round key
+feature_radius: 13
+slider: 44
+dark:
+  ground:   "#0b0c0f"    # presque noir, jamais noir
+  header:   "#0b0c0f"    # the rail disappears into the page
+  panel:    "#16181d"    # one step above the ground, no border
+  edge:     "#20242c"    # dividers only — no card wears it
+  ink:      "#f2f4f8"
+  ink_soft: "#98a1b0"
+  accent:   "#7aa2ff"    # what you press
+  lit:      "#ffb84d"    # a light that is on
+  alert:    "#ff6b6b"
+light:
+  ground:   "#f4f5f8"
+  header:   "#f4f5f8"
+  panel:    "#ffffff"
+  edge:     "#e4e7ee"
+  ink:      "#12141a"
+  ink_soft: "#5f6879"
+  accent:   "#2f5fd0"
+  lit:      "#b4740a"
+  alert:    "#c93838"

@@ -18,3 +18,8 @@ Both are licensed under the SIL Open Font License 1.1 — `OFL-Barlow.txt` and
 `OFL-Oswald.txt` beside them, as the licence requires. A house that wants
 another face names it in `house.theme.fonts` and installs it on its devices;
 what is embedded is what is here.
+
+**Manrope** joined at 0.11 for the `nuit` and `verre` themes — 400 · 500 · 600 ·
+700, `OFL-Manrope.txt` beside it. Which faces a brain actually carries is
+**derived** from the stacks its theme names, so a house on Nuit ships Manrope
+alone and no Oswald.

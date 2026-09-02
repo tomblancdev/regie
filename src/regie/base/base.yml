@@ -18,7 +18,7 @@ templates:
   - { src: home-assistant/dashboards/phone.yaml.j2, dst: home-assistant/dashboards/phone.yaml }
   # the skin (0.10): the theme file, and the typefaces as one ES module the
   # frontend loads on every page — both only when the house names a theme
-  - { src: home-assistant/themes/theme.yaml.j2, dst: "home-assistant/themes/{{ data.house.theme.name }}.yaml", when: theme }
+  - { src: home-assistant/themes/theme.yaml.j2, dst: "home-assistant/themes/{{ theme_name }}.yaml", when: theme }
   - { src: home-assistant/www/regie-skin.js.j2, dst: home-assistant/www/regie-skin.js, when: theme }
   - { src: mosquitto/mosquitto.conf.j2, dst: mosquitto/config/mosquitto.conf, owner: mosquitto }
   - { src: mosquitto/acl.j2, dst: mosquitto/config/acl, owner: mosquitto }

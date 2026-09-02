@@ -24,12 +24,18 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+import yaml
+
+from .errors import HouseError
+
 FONTS = Path(__file__).parent / "base" / "fonts"
+LIBRARY = Path(__file__).parent / "themes"
 
 # what the product carries, by family and weight — a stack that names one of
 # these gets it embedded; a stack that names anything else is a plain fallback
 FACES: dict[str, list[int]] = {
     "barlow": [400, 500, 600],
+    "manrope": [400, 500, 600, 700],
     "oswald": [400, 500],
 }
 
@@ -46,6 +52,39 @@ LIFT = {
     "dark": "inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 1px 0 rgba(0, 0, 0, 0.6)",
     "light": "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 0 rgba(0, 0, 0, 0.12)",
 }
+
+
+def library() -> dict[str, dict]:
+    """The themes the product carries, by name. A house picks one with `use:`
+    and overrides only what it wants: the library holds the DESIGN, the house
+    holds its deviations — the same split as the packs."""
+    return {
+        p.stem: yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        for p in sorted(LIBRARY.glob("*.yml"))
+    }
+
+
+def resolve(theme: dict) -> dict:
+    """A house's `theme:` merged onto the library entry it names. The palettes
+    merge KEY BY KEY, so a house may repaint `lit` and keep everything else."""
+    use = theme.get("use")
+    if not use:
+        return dict(theme)
+    shelf = library()
+    if use not in shelf:
+        raise HouseError(
+            f"theme: no {use!r} in the library — the product carries " + ", ".join(sorted(shelf))
+        )
+    out = {k: v for k, v in shelf[use].items() if k not in ("label", "summary")}
+    for key, value in theme.items():
+        if key == "use":
+            continue
+        if key in ("light", "dark") and isinstance(value, dict):
+            out[key] = {**(out.get(key) or {}), **value}
+        else:
+            out[key] = value
+    out.setdefault("name", use)
+    return out
 
 
 def stack(families: list[str] | str) -> str:
@@ -105,6 +144,7 @@ def shared_vars(theme: dict) -> dict[str, str]:
         "ha-font-family-body": body,
         "ha-font-family-heading": head,
         "ha-card-header-font-family": head,
+        **({"ha-card-backdrop-filter": f"blur({theme['blur']}px)"} if theme.get("blur") else {}),
     }
 
 

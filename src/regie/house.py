@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator
 
+from . import theme as theme_lib
 from .errors import HouseError
 from .fx import known_backends, load_shapes
 from .include import merge_includes
@@ -263,9 +264,11 @@ class House:
         return bool((self.data.get("matter") or {}).get("only_fabric", False))
 
     def theme(self) -> dict | None:
-        """The house's skin, or None — a house that names none keeps Home
-        Assistant's own, which is a choice too."""
-        return self.data["house"].get("theme")
+        """The house's skin, RESOLVED — a `use:` merged with what the house
+        repaints on top of it (theme.py). None when the house names no skin,
+        which is a choice too: Home Assistant's own is a real answer."""
+        raw = self.data["house"].get("theme")
+        return theme_lib.resolve(raw) if raw else None
 
     def wanted(self, row: dict) -> bool:
         """A template's or a directory's `when`: `pack:<name>` = the house
