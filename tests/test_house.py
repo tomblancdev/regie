@@ -119,6 +119,19 @@ def test_schema_errors_name_the_path(house_with):
         load_house(house_with(lambda d: d["things"][0].update(colour="blue")))
 
 
+def test_a_hardware_address_is_six_bytes_or_a_thread_eui64(house_with):
+    """A Matter node's diagnostics report the address it speaks with, and on
+    THREAD that is an eight-byte EUI-64 — `pair --matter` reads it back, and it
+    is the only key most of those things offer (five of the six IKEA things
+    walked in 2026-09 report no serial at all). Six bytes stays right for Wi-Fi
+    and Ethernet; anything else is still a fault, lowercase included."""
+    load_house(house_with(lambda d: d["things"][0].update(mac="98:17:3c:f3:ca:fe")))
+    load_house(house_with(lambda d: d["things"][0].update(mac="ca:41:2e:31:5c:3f:80:f5")))
+    for bad in ("ca:41:2e:31:5c:3f:80", "ca:41:2e:31:5c:3f:80:f5:11", "CA:41:2E:31:5C:3F:80:F5"):
+        with pytest.raises(HouseError, match=r"things/0/mac"):
+            load_house(house_with(lambda d, b=bad: d["things"][0].update(mac=b)))
+
+
 def test_unknown_pack_lists_the_known_ones(house_with):
     with pytest.raises(
         HouseError,

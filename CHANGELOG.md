@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.3 — a hardware address is as long as the thing says (2026-09-02)
+
+**`pair --matter` proposed a row `check` then refused.** The walk's Matter half
+reads a node's hardware address out of its own diagnostics and writes it into
+the row as `mac`; the schema demanded six bytes. **A thing on Thread reports an
+eight-byte EUI-64**, so every Thread thing walked came out with a row the engine
+rejected — the two halves of the same product disagreeing about what an address
+is, and only a real Thread device could say so. Every Matter thing before this
+was Wi-Fi, with a six-byte MAC, and the walk had never been run past a border
+router.
+
+`$defs/mac` now accepts six **or** eight bytes. It is referenced in exactly one
+place — a thing's `mac` — so nothing else widens. Lowercase and the two exact
+lengths stay the whole vocabulary: a seven-byte address, a nine-byte one, or an
+uppercase one is still a fault.
+
+Why the address and not the serial: `apply` keys a Matter device on its serial
+when it has one and on this address otherwise, and most Thread things have no
+serial at all (five of the six IKEA things walked on 2026-09-02 report none).
+The address is the only key they offer.
+
+189 tests.
+
 ## 0.9.2 — the switch is the only truth about a walk (2026-09-02)
 
 Found by reading the live house after a converge: `input_boolean.<room>_<scene>_drift`

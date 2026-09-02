@@ -452,7 +452,8 @@
     },
     "mac": {
       "type": "string",
-      "pattern": "^([0-9a-f]{2}:){5}[0-9a-f]{2}$"
+      "pattern": "^([0-9a-f]{2}:){5}[0-9a-f]{2}(:[0-9a-f]{2}:[0-9a-f]{2})?$",
+      "description": "a hardware address as the thing itself reports it: six bytes on Wi-Fi or Ethernet, EIGHT (an EUI-64) for a thing on Thread — what a Matter node's diagnostics hand back, and the only key most of them offer"
     },
     "floor": {
       "type": "object",
@@ -677,7 +678,7 @@
         },
         "mac": {
           "$ref": "#/$defs/mac",
-          "description": "a network thing's hardware address (a reservation, a row)"
+          "description": "a network thing's hardware address (a reservation, a row); for a Matter thing it is what its diagnostics report — six bytes on Wi-Fi, an eight-byte EUI-64 on Thread — and `apply` keys the device on it when the thing offers no serial"
         },
         "serial": {
           "type": "string",
