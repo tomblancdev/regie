@@ -1,0 +1,20 @@
+# gutter — une bougie qui lutte contre un courant d'air : la flamme plonge
+# presque à zéro, tâtonne là en bas, puis remonte. LUMINOSITÉ SEULE, et c'est la
+# conception plutôt qu'un compromis — c'est ce que les bougies E14 sans couleur
+# de La Cantine savent faire, et une forme qui ne nomme jamais de couleur tourne
+# sur chaque ampoule de l'appartement sans jamais pouvoir geler une Zigbee en
+# pleine séquence. Le plongeon est rapide et la remontée est lente : cette
+# asymétrie est tout le signal. Un courant d'air est bref ; s'en remettre, non.
+summary: a candle fighting a draught — dives almost out, gropes, climbs back
+icon: mdi:candle
+tags: { kind: light, mood: dread }
+needs: { step: 0.1 }
+fields: { level: 60, times: 3 }
+steps:
+  - { level: $level, transition: 0.3,  hold: [0.6, 2.5] }
+  - { level: [3, 9],  transition: 0.15, hold: [0.2, 0.5] }
+  - { level: [6, 18], transition: 0.1,  hold: [0.1, 0.3] }
+  - { level: [4, 12], transition: 0.1,  hold: [0.15, 0.4] }
+  - { level: [8, 20], transition: 0.15, hold: [0.2, 0.5] }
+  - { level: $level, transition: 1.2,   hold: [1.3, 2.2] }
+repeat: $times

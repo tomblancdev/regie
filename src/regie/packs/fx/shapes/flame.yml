@@ -1,0 +1,22 @@
+# flame — la moitié LUMINOSITÉ d'un feu, et AUCUNE couleur nulle part : ce qui a
+# posé une couleur la garde, aucun pas ici ne peut geler une ampoule Zigbee en
+# pleine séquence, et la forme tourne telle quelle sur les cinq bougies E14 sans
+# couleur de La Cantine — un lustre qui brûle. La strophe est la forme d'une
+# vraie flamme plutôt qu'une gigue uniforme : une errance qui vit dans la bande
+# 50-70 %, une flambée quand le combustible prend, un plongeon profond quand la
+# flamme se couche. Sept pas tirés, donc la boucle est trop longue pour se lire
+# comme une boucle.
+summary: a flame's brightness alone — wander, flare, dip
+icon: mdi:fire
+tags: { kind: light, mood: warm }
+needs: { step: 0.12 }
+fields: { cycles: 12 }
+steps:
+  - { level: [55, 68], transition: 0.25, hold: [0.25, 0.5] }
+  - { level: [48, 62], transition: 0.2,  hold: [0.2, 0.45] }
+  - { level: [58, 72], transition: 0.15, hold: [0.15, 0.35] }
+  - { level: [82, 96], transition: 0.12, hold: [0.15, 0.3] }
+  - { level: [52, 66], transition: 0.3,  hold: [0.3, 0.55] }
+  - { level: [18, 30], transition: 0.25, hold: [0.25, 0.5] }
+  - { level: [50, 64], transition: 0.35, hold: [0.35, 0.6] }
+repeat: $cycles

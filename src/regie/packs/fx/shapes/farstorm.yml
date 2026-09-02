@@ -1,0 +1,18 @@
+# farstorm — l'orage est ailleurs. Pas d'éclair et pas de craquement : le ciel
+# s'éclaircit un instant derrière le nuage, et redescend. LES DEUX bords sont en
+# rampe, et c'est ce qui le met au loin — un éclair proche n'a aucun bord — et
+# ça n'atteint jamais le haut. Noter les pauses là où la transition est une
+# plage : la pause est un NOMBRE au-dessus du plafond de cette plage, parce
+# qu'une plage est retirée à CHAQUE endroit où elle est écrite, et une pause qui
+# tirerait plus court que sa propre rampe la couperait.
+summary: a storm too far to hear — the sky pales behind the cloud
+icon: mdi:weather-lightning
+tags: { kind: light, mood: storm }
+needs: { step: 0.3 }
+fields: { colour: "#9ec8ff", level: 4 }
+steps:
+  - { level: $level,   colour: $colour, transition: 0, hold: [3, 9] }
+  - { level: [25, 55], colour: null, transition: [0.3, 0.6], hold: 0.7 }
+  - { level: [30, 62], colour: null, transition: 0.2, hold: 0.3 }
+  - { level: $level,   colour: null, transition: [0.8, 1.6], hold: 1.8 }
+repeat: [4, 8]

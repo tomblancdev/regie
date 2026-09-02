@@ -1,0 +1,17 @@
+# thump — un battement : un lub dur, un dub plus doux un dixième de seconde
+# derrière, puis le repos. UNE BRIQUE, parce que `heartbeat` doit ACCÉLÉRER et
+# qu'un `repeat:` ne le peut pas — il répète les mêmes nombres. Trois thumps
+# empilés à repos décroissant, si. `dub` est un champ à lui pour la même raison :
+# le langage n'a pas d'arithmétique, donc « le second coup, plus doux » doit
+# être un nombre qu'on passe, pas une fraction du premier.
+summary: one heartbeat — a hard lub, a softer dub, a rest
+icon: mdi:heart-pulse
+tags: { kind: light, mood: alive }
+needs: { step: 0.1 }
+fields: { lub: 70, dub: 32, colour: null, rest: 0.9, times: 1 }
+steps:
+  - { level: $lub, colour: $colour, hold: 0.12 }
+  - { level: 0, colour: null, hold: 0.1 }
+  - { level: $dub, colour: $colour, hold: 0.1 }
+  - { level: 0, colour: null, hold: $rest }
+repeat: $times

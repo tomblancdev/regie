@@ -1,0 +1,16 @@
+# possessed — la lampe n'est pas cassée, on s'en SERT. `glitch` est un mauvais
+# contact ; celle-ci a une intention. Les rafales de bégaiement ne portent
+# AUCUNE couleur (rien ne cloche dans le câblage), et entre elles l'ampoule
+# TIENT une couleur que rien dans cet appartement n'est jamais réglé pour
+# porter — un vert malade — assez longtemps pour que quelqu'un lève la tête.
+# Le regard est l'effet ; le bégaiement ne sert qu'à faire lever la tête.
+summary: stutters, then a long wrong-coloured stare, again
+icon: mdi:emoticon-devil-outline
+tags: { kind: light, mood: dread }
+needs: { step: 0.02 }
+fields: { colour: "#2fbf5a", level: 55 }
+steps:
+  - { use: flicker, times: [4, 8] }
+  - { level: $level, colour: $colour, transition: 0, hold: [1.2, 2.6] }
+  - { level: 0, colour: null, hold: [0.15, 0.5] }
+repeat: [2, 4]

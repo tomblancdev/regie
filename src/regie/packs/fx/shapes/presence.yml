@@ -1,0 +1,18 @@
+# presence — un froid qui n'est pas la température. La lumière de la pièce
+# s'enfonce jusqu'à rien, et ce qui revient est bleu, faible et parfaitement
+# immobile : aucun scintillement, aucune errance, aucune raison. L'IMMOBILITÉ
+# est l'horreur — tout le reste de ce paquet bouge et celle-ci refuse, ce qui
+# est pourquoi elle veut un `stay` long. Le bleu est du RGB et non une
+# température de couleur exprès : ces ampoules s'arrêtent à 4000 K, et 4000 K
+# n'est pas froid, c'est un bureau.
+summary: the light sinks away, and comes back cold, dim and still
+icon: mdi:snowflake-alert
+tags: { kind: light, mood: dread }
+needs: { step: 1 }
+fields: { colour: "#1438a0", level: 14, stay: 25 }
+steps:
+  - { level: 3,      colour: null,    transition: 4, hold: 4.5 }
+  - { level: 0,      colour: null,    hold: [2, 5] }
+  - { level: $level, colour: $colour, transition: 0, hold: $stay }
+  - { level: 2,      colour: null,    transition: 3, hold: 3.2 }
+  - { level: 0,      colour: null,    hold: 0.5 }

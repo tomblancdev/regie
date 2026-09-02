@@ -1,0 +1,11 @@
+# ramp — comme fade, mais L'ATTENTE n'est pas la rampe. `light.turn_on` rend la
+# main dès que le message est parti et l'ampoule rampe toute seule, donc une
+# rampe dont le `hold` est plus court que son `over` bouge encore quand la place
+# suivante démarre. C'est toute la différence entre une vague et une file
+# d'attente de fondus — et c'est la brique dont un balayage a besoin.
+summary: to a level over a time, holding for less than the ramp
+icon: mdi:ray-start-arrow
+tags: { kind: light, mood: soft }
+fields: { to: 100, over: 1.5, hold: 0.25, colour: null }
+steps:
+  - { level: $to, colour: $colour, transition: $over, hold: $hold }

@@ -1,0 +1,21 @@
+# telly — une télévision qui joue dans une pièce où personne n'est. La couleur
+# froide de l'écran est posée une fois par cycle sans transition (bon marché, et
+# ça ne peut jamais geler une ampoule), et le reste est le rythme des
+# CHANGEMENTS DE PLAN : de longues tenues et des coupes franches entre elles,
+# avec de temps en temps une lumineuse. Pas un scintillement — un scintillement
+# se lit comme une panne, et une panne n'est pas ce à quoi ressemble une
+# télévision depuis la rue. Deux usages réels, et le second est le sérieux :
+# l'ambiance du QG plafond éteint, et un appartement qui a l'air HABITÉ pendant
+# que personne n'y est (mode `away`).
+summary: a television playing in an empty room
+icon: mdi:television-classic
+tags: { kind: light, mood: alive }
+needs: { step: 0.4 }
+fields: { colour: "#8fb4ff", cycles: 30 }
+steps:
+  - { level: [22, 38], colour: $colour, transition: 0, hold: [1.2, 4.0] }
+  - { level: [12, 26], colour: null, hold: [0.8, 3.0] }
+  - { level: [30, 48], colour: null, hold: [1.0, 3.5] }
+  - { level: [55, 75], colour: null, hold: [0.4, 0.9] }
+  - { level: [18, 30], colour: null, hold: [1.5, 5.0] }
+repeat: $cycles

@@ -1,0 +1,18 @@
+# drain — la couleur se vide de la pièce. Quatre pas longs : ambre, puis sang,
+# puis presque rien, sur près d'une minute — assez lentement pour que personne
+# ne voie ça commencer et que tout le monde remarque que c'est arrivé. LA SEULE
+# RÈGLE qu'elle respecte : une transition de couleur GÈLE une ampoule IKEA
+# pendant toute sa durée, donc chaque pause ici est plus longue que la rampe
+# qu'elle porte et rien n'arrive jamais à une ampoule qui n'écoute pas.
+# `restore: false` — revenir au blanc d'un coup à la fin annulerait la minute.
+summary: the colour bleeds out — amber, blood, almost nothing
+icon: mdi:water-opacity
+tags: { kind: light, mood: dread }
+needs: { step: 2 }
+restore: false
+fields: { colour: "#3a0002", level: 10 }
+steps:
+  - { level: 70,     colour: "#ff8c2a", transition: 8,  hold: 9 }
+  - { level: 42,     colour: "#c41a12", transition: 12, hold: 13 }
+  - { level: 22,     colour: "#7a0206", transition: 12, hold: 13 }
+  - { level: $level, colour: $colour,   transition: 14, hold: 15 }

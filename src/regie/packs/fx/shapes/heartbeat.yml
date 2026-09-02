@@ -1,0 +1,16 @@
+# heartbeat — ça commence lentement et ça ne le reste pas : trois strophes de
+# `thump` à repos décroissant, la dernière presque à la course, et puis ça
+# s'arrête net. Un `repeat:` ne peut que répéter les mêmes nombres, donc
+# l'accélération est écrite en toutes lettres — ce qui est aussi la seule façon
+# de dire où ça FINIT. Garder `level` assez bas pour que le couloir reste un
+# couloir : le but est que quelqu'un qui traverse remarque son propre pouls, pas
+# qu'il soit ébloui.
+summary: a heart that speeds up — slow, faster, running, gone
+icon: mdi:heart-flash
+tags: { kind: light, mood: dread }
+needs: { step: 0.1 }
+fields: { colour: "#8c0f14", level: 70 }
+steps:
+  - { use: thump, lub: $level, dub: [24, 38], rest: [1.1, 1.5],   times: 4, colour: $colour }
+  - { use: thump, lub: $level, dub: [26, 40], rest: [0.6, 0.85],  times: 5, colour: $colour }
+  - { use: thump, lub: $level, dub: [30, 46], rest: [0.28, 0.45], times: 7, colour: $colour }

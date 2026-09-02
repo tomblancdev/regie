@@ -1,0 +1,15 @@
+# ember — un feu dans la pièce, et la raison pour laquelle il remplace `fire` :
+# la couleur est posée UNE FOIS sans transition, et après ça seule la luminosité
+# bouge. `fire` envoie une couleur ET une transition à chacun de ses pas, ce qui
+# sur une ampoule IKEA est une rampe de couleur toutes les 200 ms — un gel que
+# le pas suivant doit ensuite combattre, et exactement ce que §6.4 dit de ne
+# jamais faire dans une séquence. Même chaleur, une fraction de la bagarre, et
+# une vraie forme de flamme dessous au lieu d'une gigue uniforme.
+summary: a fire — the colour set once, then a flame's brightness
+icon: mdi:fireplace
+tags: { kind: light, mood: warm }
+needs: { step: 0.12 }
+fields: { colour: "#ff6a12", cycles: 12 }
+steps:
+  - { level: 60, colour: $colour, transition: 0, hold: 0.3 }
+  - { use: flame, cycles: $cycles }

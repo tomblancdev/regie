@@ -1,0 +1,21 @@
+# prime — un réacteur qui monte en puissance : trois strophes de `pulse`,
+# chacune plus rapide, plus lumineuse et plus serrée que la précédente,
+# finissant GRAND OUVERT et y restant (`restore: false` — un réacteur qui monte
+# puis revient comme il était n'a pas monté). L'accélération est écrite en
+# toutes lettres parce qu'un `repeat:` répète les mêmes nombres ; c'est aussi la
+# seule façon d'atterrir exactement sur le temps. La couleur est posée une fois
+# au sommet et les `pulse` n'en portent AUCUNE : `pulse` lie sa couleur à sa
+# transition, et sur une ampoule IKEA c'est une rampe de couleur à chaque
+# demi-cycle.
+summary: a reactor priming — pulses that quicken, ending wide open
+icon: mdi:atom
+tags: { kind: light, mood: machine }
+needs: { step: 0.3 }
+restore: false
+fields: { colour: "#18d0ff", level: 100 }
+steps:
+  - { level: 6, colour: $colour, transition: 0, hold: 0.3 }
+  - { use: pulse, high: 30, low: 6,  over: 1.2,  times: 3 }
+  - { use: pulse, high: 55, low: 12, over: 0.7,  times: 4 }
+  - { use: pulse, high: 80, low: 20, over: 0.35, times: 5 }
+  - { level: $level, colour: null, transition: 0.6, hold: 1.2 }

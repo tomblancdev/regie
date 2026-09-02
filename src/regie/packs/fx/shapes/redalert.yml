@@ -1,0 +1,14 @@
+# redalert — l'alarme du vaisseau. Le rouge est posé une fois au sommet sans
+# transition et les coups eux-mêmes sont de la pure luminosité : c'est le RYTHME
+# qui porte le sens, pas la couleur, et un rythme doit pouvoir tourner sur une
+# ampoule qui est déjà de la bonne couleur. Six séries par défaut font une
+# quinzaine de secondes — assez long pour être sérieux, assez court pour que la
+# famille n'apprenne pas à l'ignorer.
+summary: the ship's alarm — two hard beats, a gap, again
+icon: mdi:alert-octagon
+tags: { kind: light, mood: machine }
+needs: { step: 0.15 }
+fields: { colour: "#ff0008", level: 100, times: 6 }
+steps:
+  - { level: 15, colour: $colour, transition: 0, hold: 0.15 }
+  - { use: beats, level: $level, low: 12, times: $times }

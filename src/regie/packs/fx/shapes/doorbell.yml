@@ -1,0 +1,14 @@
+# doorbell — quelqu'un est à la porte, et vous êtes peut-être dans une autre
+# pièce avec la musique fort. Celle-ci a le droit d'être impolie : une couleur
+# que rien d'autre dans l'appartement n'emploie, deux double-bips, fini en moins
+# de trois secondes, et la pièce remise exactement comme elle était. Deux
+# double-bips et PAS un stroboscope — un stroboscope se lit comme une alarme, et
+# ceci est un visiteur.
+summary: somebody at the door — two double-blips in a colour you own
+icon: mdi:doorbell
+tags: { kind: light, mood: tell }
+needs: { step: 0.15 }
+fields: { colour: "#00b0ff", level: 90 }
+steps:
+  - { level: 15, colour: $colour, transition: 0, hold: 0.15 }
+  - { use: beats, level: $level, low: 15, times: 2 }

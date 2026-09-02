@@ -1,0 +1,23 @@
+# powerdown — une machine qui perd son courant, par paliers. Elle ne fond pas :
+# elle TOMBE, se pose, s'affaisse un peu, retombe, chaque palier plus bas et
+# plus rouge, et le dernier prend son temps jusqu'à une braise avant de
+# s'éteindre. Chaque couleur est posée littéralement sans transition — la chute
+# entre les paliers EST l'effet, et une rampe de couleur la flouterait tout en
+# gelant l'ampoule. Finit noire et le reste (`restore: false`) : tout l'intérêt
+# d'une coupure de courant est que le courant est coupé.
+summary: a machine dying in stages — drop, settle, drop, a coal, out
+icon: mdi:power-plug-off
+tags: { kind: light, mood: machine }
+needs: { step: 0.2 }
+restore: false
+fields: { level: 100 }
+steps:
+  - { level: $level, colour: "#e8f4ff", transition: 0, hold: [0.6, 1.4] }
+  - { level: 54,     colour: "#dbe9ff", transition: 0, hold: [0.5, 1.2] }
+  - { level: 50,     hold: [0.3, 0.9] }
+  - { level: 24,     colour: "#ffd0a0", transition: 0, hold: [0.4, 1.1] }
+  - { level: 27,     hold: [0.2, 0.6] }
+  - { level: 9,      colour: "#ff6a1a", transition: 0, hold: [0.5, 1.5] }
+  - { level: 5,      colour: "#8c1a00", transition: 0, hold: 2.5 }
+  - { level: 2,      transition: 3, hold: 3.2 }
+  - { level: 0,      hold: 0.4 }

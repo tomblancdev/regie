@@ -1,0 +1,25 @@
+# dawn — un lever de soleil qu'on DÉMARRE, jamais un que l'horloge démarre
+# (H32 : rien dans cette maison ne s'allume tout seul, et cela inclut un
+# réveil). Sept pas de la couleur qu'un vrai lever prend — le rouge profond sans
+# bleu dedans, puis la braise, l'ambre, le miel, le blanc — chacun rampant
+# pendant `pace` et tenu pendant `pace`. C'est pourquoi le tempo est un CHAMP et
+# non une plage : un champ se lit pareil aux deux endroits, donc la pause vaut
+# exactement la rampe et aucun pas n'est jamais coupé, là où deux plages
+# seraient tirées deux fois et se contrediraient. `pace: 100` = dix minutes.
+# RGB et non température de couleur : 4000 K est le plafond de ce matériel, et
+# un lever de soleil ne commence pas à 4000 K. `restore: false` — il finit là où
+# il est arrivé, la seule fin sensée pour un lever de soleil.
+summary: a sunrise, in your own time — red to white over seven long steps
+icon: mdi:weather-sunset-up
+tags: { kind: light, mood: warm }
+needs: { step: 2 }
+restore: false
+fields: { pace: 100, level: 90 }
+steps:
+  - { level: 1,      colour: "#2a0500", transition: 0,     hold: 2 }
+  - { level: 6,      colour: "#5e1400", transition: $pace, hold: $pace }
+  - { level: 18,     colour: "#a83c05", transition: $pace, hold: $pace }
+  - { level: 38,     colour: "#e0761a", transition: $pace, hold: $pace }
+  - { level: 62,     colour: "#f5aa55", transition: $pace, hold: $pace }
+  - { level: 80,     colour: "#ffd7a3", transition: $pace, hold: $pace }
+  - { level: $level, colour: "#fff2e0", transition: $pace, hold: $pace }

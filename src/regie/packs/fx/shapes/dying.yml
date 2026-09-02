@@ -1,0 +1,22 @@
+# dying — une ampoule en fin de vie, et elle finit MORTE : elle tient, elle
+# grésille, elle tombe à une chute de tension trop faible pour être une lumière,
+# elle remonte une fois en tâtonnant (le faux espoir est tout l'intérêt) et
+# puis elle s'éteint pour de bon. `restore: false`, donc le couloir est
+# réellement noir après et quelqu'un doit y faire quelque chose — une ampoule
+# qui meurt puis rebondit en blanc plein à la fin du script n'est pas morte,
+# elle a joué.
+summary: a bulb dying — brown-outs, false hope, then out for good
+icon: mdi:lightbulb-off
+tags: { kind: light, mood: dread }
+needs: { step: 0.02 }
+restore: false
+fields: { colour: null, level: 70 }
+steps:
+  - { level: $level, colour: $colour, hold: [1.0, 2.0] }
+  - { use: flicker, times: [2, 4], colour: $colour }
+  - { level: [12, 22], colour: null, transition: 0.4, hold: [1.5, 3.0] }
+  - { use: flicker, times: [3, 6], colour: $colour }
+  - { level: $level, colour: null, transition: 0.6, hold: [0.8, 1.6] }
+  - { use: flicker, times: [4, 9], colour: $colour }
+  - { level: [6, 14], colour: null, transition: 0.8, hold: [1.0, 2.0] }
+  - { level: 0, colour: null, hold: 0.6 }

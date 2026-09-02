@@ -1,0 +1,17 @@
+# beats — deux coups durs et un trou, répétés : le rythme que toute alarme sur
+# terre emploie, fait de rien d'autre que de la luminosité. AUCUNE RAMPE NULLE
+# PART — une lumière urgente est une lumière qui arrive d'un coup, et une rampe
+# est exactement ce qui transforme une alarme en ambiance. UNE BRIQUE : redalert
+# la peint en rouge, doorbell en bleu, et sur les bougies sans couleur de La
+# Cantine elle est déjà une alarme complète.
+summary: two hard hits and a gap, repeated
+icon: mdi:metronome
+tags: { kind: light, mood: sharp }
+needs: { step: 0.15 }
+fields: { level: 100, low: 8, times: 6 }
+steps:
+  - { level: $level, hold: 0.2 }
+  - { level: $low, hold: 0.15 }
+  - { level: $level, hold: 0.2 }
+  - { level: $low, hold: 0.75 }
+repeat: $times

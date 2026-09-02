@@ -1,0 +1,19 @@
+# timerdone — la minuterie du four, dite en lumière. LUMINOSITÉ SEULE exprès :
+# le signal doit marcher sur les cinq bougies E14 sans couleur de La Cantine,
+# qui sont exactement le luminaire sous lequel on se tient quand une minuterie
+# sonne. Trois coups MONTANTS — monter est ce qui le fait lire « FINI » plutôt
+# que « panne » — puis la pièce revient tout de suite. Six messages en une
+# seconde et demie : une seule rafale, dans le budget de groupe Zigbee de huit
+# par neuf secondes, donc visable sur tout le lustre d'un coup.
+summary: three rising hits — the timer is done
+icon: mdi:timer-check-outline
+tags: { kind: light, mood: tell }
+needs: { step: 0.15 }
+fields: { level: 100, low: 18 }
+steps:
+  - { level: 45,     hold: 0.18 }
+  - { level: $low,   hold: 0.16 }
+  - { level: 72,     hold: 0.18 }
+  - { level: $low,   hold: 0.16 }
+  - { level: $level, hold: 0.5 }
+  - { level: $low,   hold: 0.2 }

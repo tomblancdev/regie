@@ -1,7 +1,11 @@
-# fade — to a level, over a time; the bulb ramps by itself where it can.
+# fade — vers un niveau, sur un temps ; l'ampoule rampe elle-même quand elle
+# le peut. Finit LÀ : avec `restore: true` le script remettait l'instantané à
+# l'instant même où le fondu atterrissait, donc la forme se défaisait toute
+# seule — on demande à la lumière d'être à un niveau, elle y reste.
 summary: to a level over a time
 icon: mdi:transition
 tags: { kind: light, mood: soft }
+restore: false
 fields: { to: 0, over: 2, colour: null }
 steps:
   - { level: $to, colour: $colour, transition: $over, hold: $over }

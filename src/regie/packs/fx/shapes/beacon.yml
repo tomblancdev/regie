@@ -1,0 +1,18 @@
+# beacon — la lampe tournante au-dessus d'une machine : le faisceau arrive,
+# vous passe dessus, et s'en va. Rampe montante, un passage bref et lumineux,
+# rampe descendante, puis du NOIR plus long que n'a duré le passage — le noir est
+# ce qui le fait tourner au lieu de clignoter. Un vrai balayage À TRAVERS une
+# pièce demande l'adressage par place que le langage de forme n'a pas ; ceci est
+# l'honnête version à une lampe, et depuis la pièce d'à côté c'est de toute
+# façon celle qui se lit.
+summary: a rotating beacon — the beam comes round and passes
+icon: mdi:alarm-light-outline
+tags: { kind: light, mood: machine }
+needs: { step: 0.1 }
+fields: { colour: "#ff2a00", level: 100, times: 8 }
+steps:
+  - { level: 10,     colour: $colour, transition: 0, hold: 0.1 }
+  - { level: $level, colour: null, transition: 0.3, hold: 0.35 }
+  - { level: 10,     colour: null, transition: 0.3, hold: 0.35 }
+  - { level: 0,      colour: null, hold: [0.45, 0.7] }
+repeat: $times

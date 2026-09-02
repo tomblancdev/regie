@@ -6,17 +6,30 @@ import yaml
 from regie.errors import HouseError
 from regie.fx import compile_shape, load_backend, load_shapes, product_shapes
 
+# The shapes the product ships. VERBS, never nouns: a product shape says what a
+# light DOES and may never name a room, a role, a place or a French title —
+# those are the house's own, and they live in `ansible/home/fx/`.
 BRICKS = {
-    "flash",
-    "fade",
-    "pulse",
-    "blackout",
-    "strike",
-    "lightning",
-    "flicker",
-    "glitch",
-    "neon",
-    "fire",
+    # the atoms
+    "flash", "fade", "ramp", "pulse", "blackout", "flicker",
+    # the brightness-only bricks: they carry the motion, and they are already
+    # complete effects on La Cantine's colourless E14 chandelier
+    "thump", "flame", "beats",
+    # storm
+    "strike", "lightning", "farstorm",
+    # nervous
+    "glitch", "neon",
+    # warm
+    "fire", "ember", "candle", "dawn",
+    # dread
+    "gutter", "breath", "heartbeat", "passing", "dying", "possessed",
+    "drain", "presence",
+    # alive
+    "telly",
+    # machine
+    "prime", "beacon", "redalert", "powerdown",
+    # tell
+    "doorbell", "timerdone",
 }
 
 

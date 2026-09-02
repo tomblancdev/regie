@@ -1,0 +1,15 @@
+# passing — quelque chose est passé entre vous et la lampe. Ce n'est PAS un
+# scintillement : un scintillement est électrique et déchiqueté, une ombre est
+# douce, à sens unique, et finie avant qu'on en soit sûr. Ce doute EST l'effet,
+# et c'est pourquoi elle tourne une fois et n'a pas de `repeat:` — deux fois est
+# une panne, trois fois est une blague. À poser sur un capteur de mouvement dans
+# une pièce où personne n'est, ou à tirer depuis le téléphone pendant que
+# quelqu'un d'autre est dans le couloir.
+summary: a shadow crosses the light — one smooth dip, and doubt
+icon: mdi:account-arrow-right-outline
+tags: { kind: light, mood: dread }
+needs: { step: 0.25 }
+fields: { level: 60, depth: 12 }
+steps:
+  - { level: $depth, transition: 0.25, hold: [0.25, 0.45] }
+  - { level: $level, transition: 0.35, hold: 0.4 }

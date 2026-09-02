@@ -1,0 +1,19 @@
+# candle — une flamme sur une table, pas un feu dans un âtre : une errance
+# étroite autour d'un niveau bas, des rampes lentes, l'occasionnel penchement.
+# Luminosité seule, et c'est la forme pour laquelle le lustre de La Cantine a été
+# accroché — cinq bougies E14 sans couleur au-dessus de la table qui font ce
+# qu'un lustre faisait autrefois. Les pauses sont longues exprès : environ un
+# message par seconde, ce qui EST le budget de diffusion de groupe Zigbee
+# (8 par 9 s) — donc contrairement à `flame`, celle-ci peut viser tout le rôle
+# d'un coup.
+summary: one candle flame — a narrow, low, slow wander
+icon: mdi:candle
+tags: { kind: light, mood: warm }
+needs: { step: 0.5 }
+fields: { level: 32, cycles: 30 }
+steps:
+  - { level: $level,   transition: 0.5, hold: [0.6, 1.2] }
+  - { level: [22, 32], transition: 0.5, hold: [0.6, 1.4] }
+  - { level: [28, 42], transition: 0.6, hold: [0.7, 1.4] }
+  - { level: [15, 25], transition: 0.5, hold: [0.6, 1.2] }
+repeat: $cycles
