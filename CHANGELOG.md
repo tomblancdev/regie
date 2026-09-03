@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.1 — l'atelier s'ouvre, et la carte est surveillée (2026-09-03)
+
+Lu à la première convergence : `lovelace/dashboards: unknown_command`. La
+collection des tableaux de bord liste sous `/list` (la collection de stockage
+générique) ; seule celle des ressources répond sur son nom nu, et 0.14.0 avait
+généralisé l'exception. Le pas `workbench` lit `lovelace/dashboards/list`.
+
+**La carte est surveillée, comme du code** (Tom : *« we will get auto updates
+from HACS I think »* — HACS notifie, il n'installe pas seul ; ici la
+notification sans le bouton) : `tools/vendor-watch.sh` compare la dernière
+release d'easy-floorplan avec ce que VENDOR.md porte, et le workflow
+`vendor-watch` ouvre chaque lundi une pull request qui apporte le fichier, son
+sha256 et la version dans l'URL. La PR est la notification ; la fusionner est la
+lecture ; la release et l'épingle restent à une personne.
+
 ## 0.14.0 — l'atelier du plan : l'éditeur est le brouillon, les fichiers sont le dessin (2026-09-03)
 
 Tom : *« it will be better if I can edit it myself using the editor cause there

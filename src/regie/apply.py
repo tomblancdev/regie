@@ -1400,7 +1400,11 @@ class Conductor:
 
         if self.house.plan() is None:
             return
-        have = [d for d in (ws.call("lovelace/dashboards") or []) if d.get("url_path") == WORKBENCH]
+        # the dashboards collection lists under `/list` (the generic storage
+        # collection); only the resources collection answers on its bare name
+        # (read at the first converge, 2026-09-03: `unknown_command`)
+        dashboards = ws.call("lovelace/dashboards/list") or []
+        have = [d for d in dashboards if d.get("url_path") == WORKBENCH]
         if have:
             self.step(
                 "workbench",

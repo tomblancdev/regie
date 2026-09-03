@@ -687,7 +687,7 @@ class FakeHA(HomeAssistant):
                 "default_theme": self.default_theme,
                 "default_dark_theme": self.default_dark_theme,
             }
-        if type_ == "lovelace/dashboards":
+        if type_ == "lovelace/dashboards/list":
             return list(self.dashboards)
         if type_ == "lovelace/dashboards/create":
             item = {"id": payload["url_path"], "mode": "storage", **payload}
