@@ -184,11 +184,14 @@ def _item(house: House, area: dict, glow: float, placed: dict) -> dict:
 
 
 def _area(house: House, area: dict, link) -> dict:
+    # no `haArea`: the card's link to a Home Assistant area feeds its EDITOR
+    # (filter the picker, add every device of the area), and the area's id in
+    # Home Assistant is the conductor's to know (an area adopted by alias keeps
+    # the id it had - `salon`, not `living_room`); a wrong id is worse than none
     out: dict = {
         "id": area["id"],
         "name": area["label"],
         "showName": True,
-        "haArea": area["id"],
         "points": _points(area["plan"]["outline"]),
         # tap zooms the plan onto the room (the card's own gesture, the map's
         # own question: where is what); holding walks to the room's page

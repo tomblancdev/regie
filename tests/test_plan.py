@@ -60,7 +60,8 @@ def test_the_tab_carries_the_frame_the_rooms_and_the_drawing(rendered):
     assert ground["imageOpacity"] == 0.5
     assert {a["id"] for a in ground["areas"]} == {"living", "hall"}
     living = next(a for a in ground["areas"] if a["id"] == "living")
-    assert living["haArea"] == "living" and living["name"] == "Salon"
+    assert living["name"] == "Salon"
+    assert "haArea" not in living, "the area's id in Home Assistant is the conductor's, not ours"
     assert living["points"][0] == {"x": 20, "y": 20}
     assert living["hold_action"] == {"action": "navigate", "navigation_path": "/regie-phone/living"}
     assert "tap_action" not in living, "a tap zooms — the card's own gesture; holding walks down"
