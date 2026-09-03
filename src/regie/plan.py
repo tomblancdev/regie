@@ -342,3 +342,41 @@ def room_files(house: House, rooms_dir: Path | None = None) -> dict[str, Path]:
         if isinstance(data, dict) and data.get("id"):
             out[data["id"]] = p
     return out
+
+
+# --- the walls (0.15): the flat's own, as drawn -------------------------------------------
+def pull_walls(card: dict) -> list[list[int]]:
+    """Every wall a person drew, first floor first, rounded to the centimetre."""
+    out: list[list[int]] = []
+    for f in _floors(card):
+        for w in f.get("walls") or []:
+            try:
+                out.append(_pt(w["x1"], w["y1"]) + _pt(w["x2"], w["y2"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return out
+
+
+WALLS = re.compile(r"^walls:\n(?:(?:[ \t]+.*|\s*)\n?)*", re.M)
+
+
+def walls_text(walls: list[list[int]]) -> str:
+    lines = ["walls:"] + [f"  - [{w[0]}, {w[1]}, {w[2]}, {w[3]}]" for w in walls]
+    return "\n".join(lines) + "\n"
+
+
+def rewrite_walls(path: Path, walls: list[list[int]]) -> bool:
+    """Replace the plan file's top-level `walls:` block (append one if it has
+    none); every other byte of the file - the frame, the drawing - is kept."""
+    text = path.read_text(encoding="utf-8")
+    new = walls_text(walls)
+    m = WALLS.search(text)
+    out = (
+        text[: m.start()] + new + text[m.end() :]
+        if m
+        else text + ("" if text.endswith("\n") else "\n") + new
+    )
+    if out == text:
+        return False
+    path.write_text(out, encoding="utf-8")
+    return True

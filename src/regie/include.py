@@ -19,7 +19,7 @@ import yaml
 
 from .errors import HouseError
 
-KINDS = ("rooms", "modes", "fx", "scenarios")
+KINDS = ("rooms", "modes", "fx", "scenarios", "plan")
 
 
 def _patterns(value) -> list[str]:
@@ -53,7 +53,7 @@ def merge_includes(data: dict, base: Path) -> dict[str, list[Path]]:
         return {}
     if not isinstance(inc, dict):
         raise HouseError(
-            "include: a mapping of rooms / modes / fx / scenarios → files was expected"
+            "include: a mapping of rooms / modes / fx / scenarios / plan → files was expected"
         )
     unknown = sorted(set(inc) - set(KINDS))
     if unknown:

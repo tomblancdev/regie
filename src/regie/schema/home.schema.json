@@ -368,7 +368,7 @@
     "include": {
       "type": "object",
       "additionalProperties": false,
-      "description": "small files merged into this one before validation — an engine feature, the same on a Pi and on a fleet. Paths and globs are relative to home.yml. rooms: one file per room, merged into the area of the same id (created when `areas:` has no line for it); modes / fx: exactly one file each, in place of the block here; scenarios: one story per file (its id = the file's stem unless the file says `id:`)",
+      "description": "small files merged into this one before validation — an engine feature, the same on a Pi and on a fleet. Paths and globs are relative to home.yml. rooms: one file per room, merged into the area of the same id (created when `areas:` has no line for it); modes / fx: exactly one file each, in place of the block here; scenarios: one story per file (its id = the file's stem unless the file says `id:`); plan: one file, the house-level plan block (frame, drawing, walls)",
       "properties": {
         "rooms": {
           "oneOf": [
@@ -425,6 +425,10 @@
               "minItems": 1
             }
           ]
+        },
+        "plan": {
+          "type": "string",
+          "description": "the plan's own file (0.15): the frame, the drawing and the WALLS, in place of the `plan:` block here - the workbench's pull rewrites its walls"
         }
       }
     },
@@ -467,6 +471,13 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "how far a light at full brightness pools its colour on the plan, in centimetres (default 130)"
+        },
+        "walls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wall"
+          },
+          "description": "the flat's walls, as DRAWN (0.15): straight segments in the house's frame. Declared, the card draws exactly these; absent, the walls are derived from the rooms' outlines - wrong for an open plan, where a room ends without a wall. The workbench's pull writes them from what a person drew"
         }
       },
       "description": "THE PLAN (0.13): the flat drawn from declarations. The house gives the frame (and a drawing to lay under it); every room gives its outline, its doors and windows, and where its things hang (rooms/<id>.yml: plan:). The engine renders the Plan tab from it - nothing is placed that a file did not place"
@@ -1703,6 +1714,15 @@
         }
       },
       "description": "the room on the plan (0.13): its outline, its openings, and where each of its things hangs - all in centimetres, in the one frame plan.size declares"
+    },
+    "wall": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x1, y1, x2, y2] in centimetres, the house's frame: one straight wall"
     }
   },
   "x-known": {

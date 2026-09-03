@@ -1,0 +1,17 @@
+# plan.yml — THE PLAN's own file (0.15): the frame every room draws itself in
+# (the flat's outer envelope, centimetres), the drawing laid under the walls,
+# and the WALLS as drawn - straight segments in the same frame. Declared here,
+# the card draws exactly these and nothing else: where the flat is open, no
+# wall stands between two rooms. The workbench's pull (`regie plan pull`)
+# rewrites the walls from what a person drew and keeps the rest of this file.
+size: [800, 600]
+image: plan.png
+opacity: 0.5
+walls:
+  - [20, 20, 780, 20]
+  - [780, 20, 780, 200]
+  - [20, 20, 20, 320]
+  - [20, 320, 420, 320]
+  - [420, 320, 420, 200]
+  - [420, 200, 780, 200]
+  - [420, 20, 420, 150]

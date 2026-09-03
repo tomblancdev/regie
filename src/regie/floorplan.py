@@ -235,11 +235,13 @@ def card(house: House, link) -> dict:
         fid = floor_of(house, area)
         f = by_floor.setdefault(fid, {"walls": [], "openings": [], "areas": [], "items": []})
         outline = area["plan"]["outline"]
-        for i in range(len(outline)):
-            (x1, y1), (x2, y2) = outline[i], outline[(i + 1) % len(outline)]
-            f["walls"].append(
-                {"id": f"{area['id']}_w{i + 1}", "x1": x1, "y1": y1, "x2": x2, "y2": y2}
-            )
+        if not plan.get("walls"):
+            # no wall drawn: a room's edges stand in for them (a closed plan)
+            for i in range(len(outline)):
+                (x1, y1), (x2, y2) = outline[i], outline[(i + 1) % len(outline)]
+                f["walls"].append(
+                    {"id": f"{area['id']}_w{i + 1}", "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                )
         for kind in ("door", "window"):
             for i, spec in enumerate(area["plan"].get(f"{kind}s") or []):
                 f["openings"].append(_opening(house, area, kind, i, spec))
@@ -247,6 +249,16 @@ def card(house: House, link) -> dict:
         placed, _left = placements(house, area)
         f["items"] += [_item(house, area, glow, p) for p in placed]
 
+    if plan.get("walls") and by_floor:
+        # THE WALLS AS DRAWN (0.15): the flat's own, on the first floor drawn -
+        # a room's outline is its floor, and where the flat is open no wall
+        # stands between two of them (Tom's plan: Le Passage, La Cantine and Le
+        # QG share one open space)
+        first = next(iter(by_floor.values()))
+        first["walls"] = [
+            {"id": f"wall_{i + 1}", "x1": w[0], "y1": w[1], "x2": w[2], "y2": w[3]}
+            for i, w in enumerate(plan["walls"])
+        ]
     labels = {f["id"]: f for f in house.floors()}
     floors = []
     for n, (fid, f) in enumerate(by_floor.items()):

@@ -1659,7 +1659,7 @@ def test_the_plan_card_is_a_lovelace_resource_registered_once(witness, secrets, 
 def test_a_house_without_a_plan_owns_no_card_resource(house_with, secrets, tmp_path):
     import yaml
 
-    home = house_with(lambda d: d.pop("plan"))
+    home = house_with(lambda d: d["include"].pop("plan"))
     for room in ("living", "hall"):
         f = home.parent / "rooms" / f"{room}.yml"
         data = yaml.safe_load(f.read_text(encoding="utf-8"))

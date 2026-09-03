@@ -65,8 +65,9 @@ def test_the_tab_carries_the_frame_the_rooms_and_the_drawing(rendered):
     assert living["points"][0] == {"x": 20, "y": 20}
     assert living["hold_action"] == {"action": "navigate", "navigation_path": "/regie-phone/living"}
     assert "tap_action" not in living, "a tap zooms — the card's own gesture; holding walks down"
-    # four corners = four walls, per room
-    assert len([w for w in ground["walls"] if w["id"].startswith("living_")]) == 4
+    # the walls are the plan file's own, as drawn (0.15) - not the rooms' edges
+    assert [w["id"] for w in ground["walls"]] == [f"wall_{i}" for i in range(1, 8)]
+    assert ground["walls"][0] == {"id": "wall_1", "x1": 20, "y1": 20, "x2": 780, "y2": 20}
     assert (rendered / "home-assistant/www/plan.png").read_bytes()[:4] == b"\x89PNG"
     assert (rendered / "home-assistant/www/easy-floorplan-card.js").stat().st_size > 100_000
 
@@ -117,7 +118,7 @@ def _strip_room_plans(home):
 
 
 def test_no_plan_no_tab_no_module(house_with, secrets, tmp_path):
-    home = house_with(lambda d: d.pop("plan"))
+    home = house_with(lambda d: d["include"].pop("plan"))
     _strip_room_plans(home)
     house = load_house(home)
     assert house.plan() is None
@@ -577,3 +578,63 @@ def test_a_kept_point_outside_a_moved_room_is_dropped_and_named(witness):
         "a kept place too: [220, 90] is out"
     )
     assert blocks["living"]["at"]["main"]["front_left"] == [120, 90], "what is inside stays"
+
+
+# --- the walls (0.15): the flat's own, as drawn -------------------------------------------
+def test_the_plan_file_is_included_and_its_walls_are_the_walls(witness):
+    """`include.plan` merges the plan's own file: the frame, the drawing and the
+    walls a person drew. Declared, the card draws exactly these; the rooms'
+    outlines stay their floors."""
+    plan = witness.plan()
+    assert plan["size"] == [800, 600] and plan["image"] == "plan.png"
+    assert len(plan["walls"]) == 7 and plan["walls"][0] == [20, 20, 780, 20]
+    assert [p.name for p in witness.included["plan"]] == ["plan.yml"]
+
+
+def test_without_walls_drawn_the_rooms_edges_stand_in(house_with, secrets, tmp_path):
+    """Read live 2026-09-03 (Tom: "some walls don't exist between le passage,
+    la cantine and QG, keep the walls as I design them"): an open plan has rooms
+    with no wall between them, so a wall is a declaration of its own. A house
+    that drew none keeps the old behaviour: every outline edge is a wall."""
+    home = house_with(lambda d: None)
+    plan_file = home.parent / "plan.yml"
+    text = plan_file.read_text(encoding="utf-8")
+    plan_file.write_text(text[: text.index("walls:")], encoding="utf-8")
+    house = load_house(home)
+    assert "walls" not in house.plan()
+    render(house, tmp_path, secrets)
+    walls = plan_card(tmp_path)["floors"][0]["walls"]
+    assert len([w for w in walls if w["id"].startswith("living_")]) == 4
+    assert len([w for w in walls if w["id"].startswith("hall_")]) == 4
+
+
+def test_pull_walls_and_rewrite_keep_the_rest_of_the_plan_file(tmp_path):
+    from regie.plan import pull_walls, rewrite_walls
+
+    card = {
+        "floors": [
+            {
+                "walls": [
+                    {"id": "wall_x", "x1": 20.4, "y1": 20, "x2": 779.6, "y2": 20},
+                    {"id": "w2", "x1": 20, "y1": 20, "x2": 20, "y2": 320},
+                ]
+            }
+        ]
+    }
+    walls = pull_walls(card)
+    assert walls == [[20, 20, 780, 20], [20, 20, 20, 320]], "rounded to the centimetre"
+    f = tmp_path / "plan.yml"
+    f.write_text(
+        "# the frame\nsize: [800, 600]\nimage: plan.png\nwalls:\n  - [1, 1, 2, 2]\n",
+        encoding="utf-8",
+    )
+    assert rewrite_walls(f, walls) is True
+    assert (
+        f.read_text(encoding="utf-8") == "# the frame\nsize: [800, 600]\nimage: plan.png\nwalls:\n"
+        "  - [20, 20, 780, 20]\n  - [20, 20, 20, 320]\n"
+    )
+    assert rewrite_walls(f, walls) is False
+    g = tmp_path / "bare.yml"
+    g.write_text("size: [800, 600]\n", encoding="utf-8")
+    assert rewrite_walls(g, walls) is True
+    assert yaml.safe_load(g.read_text(encoding="utf-8"))["walls"] == walls

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15.0 — les murs sont ceux qu'on a dessinés (2026-09-03)
+
+Tom, devant l'onglet : *« seems that you didn't took the plan I made, notably
+some walls don't exist between le passage, la cantine and QG, keep the walls
+as I design them »*. Le moteur DÉRIVAIT les murs des contours des pièces —
+faux pour un plan ouvert, où une pièce finit sans mur. Le mur devient une
+déclaration de la maison : le bloc `plan:` a son propre fichier (`include:
+plan: plan.yml` — le cadre, le dessin, et `walls:`, des segments droits dans le
+cadre), la carte dessine exactement ceux-là ; sans `walls:`, les arêtes des
+contours les remplacent comme avant. `regie plan pull` écrit les murs du
+brouillon dans ce fichier (`--plan`, par défaut l'include) et garde le reste
+de ses octets ; `pull_walls` arrondit au centimètre. La maison témoin dessine
+sept murs. Trois tests de plus.
+
 ## 0.14.4 — l'onglet Plan est un panneau (2026-09-03)
 
 Tom : *« I prefer the display in l'atelier du Plan page than in the page you

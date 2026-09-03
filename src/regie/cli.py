@@ -278,7 +278,16 @@ def cmd_plan(args) -> int:
     from .apply import Conductor
     from .dash import link
     from .ha import HomeAssistant
-    from .plan import WORKBENCH, find_card, pull, rewrite, room_files, workbench_config
+    from .plan import (
+        WORKBENCH,
+        find_card,
+        pull,
+        pull_walls,
+        rewrite,
+        rewrite_walls,
+        room_files,
+        workbench_config,
+    )
 
     house = load_house(args.home)
     secrets = load_secrets(args.secrets)
@@ -318,9 +327,20 @@ def cmd_plan(args) -> int:
             print(f"  + {files[rid].name}: plan written")
         else:
             print(f"  = {files[rid].name}: unchanged")
-    print(
-        f"pull: {changed} file(s) written, {len(blocks) - changed} unchanged, {len(notes)} note(s)"
-    )
+    walls = pull_walls(card)
+    plan_file = args.plan or (house.included.get("plan") or [None])[0]
+    if walls and plan_file:
+        if rewrite_walls(Path(plan_file), walls):
+            changed += 1
+            print(f"  + {Path(plan_file).name}: {len(walls)} wall(s) written")
+        else:
+            print(f"  = {Path(plan_file).name}: walls unchanged")
+    elif walls:
+        print(
+            f"  ~ {len(walls)} wall(s) drawn and no plan file to hold them — "
+            "`include: plan: plan.yml` in home.yml, or --plan FILE"
+        )
+    print(f"pull: {changed} file(s) written, {len(notes)} note(s)")
     return 0
 
 
@@ -662,6 +682,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("home", type=Path)
     s.add_argument(
         "--rooms", type=Path, help="the room files to rewrite (default: the house's own include)"
+    )
+    s.add_argument(
+        "--plan", type=Path, help="the plan file whose walls to rewrite (default: include.plan)"
     )
     _secrets_arg(s)
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
