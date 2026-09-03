@@ -88,6 +88,7 @@ ui:
   on_room_page: On the room's page
   # the plan (0.13): the tab, and the one gesture the card cannot say itself
   plan: Plan
+  workbench: "The plan's workbench"
   plan_hint: Hold a room to open its page
   by_hand: Applied by hand
   health: Room health

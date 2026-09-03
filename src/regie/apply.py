@@ -1390,6 +1390,39 @@ class Conductor:
         if not self.check:
             ws.call("lovelace/resources/create", res_type="module", url=CARD_URL)
 
+    def workbench(self, ws) -> None:
+        """THE PLAN'S WORKBENCH (0.14): a storage dashboard, admins only, seeded
+        ONCE with the card as the files draw it - the editor's draft. It is never
+        re-seeded here (a draft is a person's); `regie plan push` does that on
+        purpose, `regie plan pull` writes the draft back into the room files."""
+        from .dash import link
+        from .plan import WORKBENCH, workbench_config
+
+        if self.house.plan() is None:
+            return
+        have = [d for d in (ws.call("lovelace/dashboards") or []) if d.get("url_path") == WORKBENCH]
+        if have:
+            self.step(
+                "workbench",
+                "ok",
+                f"/{WORKBENCH} (the editor's draft; `regie plan push` re-seeds it)",
+            )
+            return
+        self.step("workbench", "changed", f"/{WORKBENCH} created and seeded from the files")
+        if self.check:
+            return
+        ws.call(
+            "lovelace/dashboards/create",
+            url_path=WORKBENCH,
+            title=self.house.labels.ui.workbench,
+            icon="mdi:pencil-ruler",
+            require_admin=True,
+            show_in_sidebar=True,
+        )
+        ws.call(
+            "lovelace/config/save", url_path=WORKBENCH, config=workbench_config(self.house, link)
+        )
+
     # --- the run ----------------------------------------------------------------
     def run(self) -> list[Step]:
         if not self.onboarding():
@@ -1418,6 +1451,7 @@ class Conductor:
             self.plumbing(ws)
             self.skin(ws)
             self.resources(ws)
+            self.workbench(ws)
         return self.steps
 
 

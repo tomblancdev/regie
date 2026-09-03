@@ -350,3 +350,116 @@ def test_a_room_read_all_off_is_written_one_role_per_line():
         "    lamp: { brightness: 40, ct: warm }\n"
     )
     assert yaml.safe_load(text)["scenes"]["essai"]["main"] is False
+
+
+# --- the workbench's pull (0.14): the editor's draft back into the files -----------------------
+def _witness_card(witness):
+    from regie.dash import link
+    from regie.floorplan import card
+
+    return card(witness, link)
+
+
+def test_pull_reads_the_card_back_into_the_same_blocks(witness):
+    """What the files draw, pulled back unchanged: outlines, openings (their
+    `to:` kept from the old block), points by role and place, in the layout's
+    order. Nothing is lost on a round trip."""
+    from regie.plan import pull
+
+    blocks, notes = pull(witness, _witness_card(witness))
+    assert notes == []
+    living = witness.area("living")["plan"]
+    assert blocks["living"]["outline"] == living["outline"]
+    assert blocks["living"]["doors"] == [{"at": [420, 250], "width": 80, "to": "hall"}]
+    assert blocks["living"]["windows"] == [{"at": [20, 170], "width": 160}]
+    assert blocks["living"]["at"]["main"] == living["at"]["main"]
+    assert list(blocks["living"]["at"]["main"]) == list(living["at"]["main"])
+    assert blocks["living"]["at"]["lamp"] == [390, 290]
+    assert blocks["hall"]["doors"] == [
+        {"at": [610, 20], "width": 90, "role": "door", "to": "outside"}
+    ]
+    assert blocks["hall"]["at"] == {"main": [610, 110], "motion": [460, 180]}
+
+
+def test_pull_follows_the_editor_moves_and_names_what_it_cannot_place(witness):
+    """A bulb dragged, a door drawn by the editor (a random id, a length), an
+    item added from the picker (an entity, no id of ours), an area drawn that
+    is no room, an item that is no thing: each lands or is named."""
+    from regie.plan import pull
+
+    card = _witness_card(witness)
+    floor = card["floors"][0]
+    for it in floor["items"]:
+        if it["id"] == "living_ceiling":
+            it["x"], it["y"] = 133.4, 96.6
+    floor["openings"].append(
+        {"id": "door_k3j9x", "type": "door", "x": 300, "y": 320, "length": 75.2, "flipV": True}
+    )
+    floor["items"].append(
+        {"id": "item_z8q1", "entity": "light.living_floor_lamp", "x": 50, "y": 50}
+    )
+    floor["areas"].append(
+        {
+            "id": "area_p0o9",
+            "name": "Terrasse",
+            "points": [{"x": 0, "y": 0}, {"x": 5, "y": 0}, {"x": 5, "y": 5}],
+        }
+    )
+    floor["items"].append({"id": "item_q2w3", "entity": "light.nobody", "x": 1, "y": 1})
+    blocks, notes = pull(witness, card)
+    assert blocks["living"]["at"]["main"]["front_left"] == [133, 97], "rounded to the centimetre"
+    assert {"at": [300, 320], "width": 75, "flip_v": True} in blocks["living"]["doors"]
+    assert blocks["living"]["at"]["lamp"] == [50, 50], "the picker's item is found by its entity"
+    assert any("area 'area_p0o9' (Terrasse) is not a room" in n for n in notes)
+    assert any("item item_q2w3 (light.nobody) is no thing" in n for n in notes)
+
+
+def test_a_room_file_keeps_every_other_byte(tmp_path):
+    from regie.plan import block_text, rewrite
+
+    f = tmp_path / "hall.yml"
+    f.write_text(
+        "# the hall\nid: hall\nroles: { main: {}, door: {} }\n"
+        "# THE PLAN: traced\nplan:\n  outline: [[0, 0], [1, 0], [1, 1]]\n  at: { main: [0, 0] }\n"
+        "defaults: { dark: dim }\n",
+        encoding="utf-8",
+    )
+    plan = {
+        "outline": [[440, 20], [780, 20], [780, 200], [440, 200]],
+        "doors": [{"at": [610, 20], "width": 90, "role": "door", "to": "outside"}],
+        "at": {"main": [610, 110], "motion": [460, 180]},
+    }
+    assert rewrite(f, plan) is True
+    text = f.read_text(encoding="utf-8")
+    assert text.startswith(
+        "# the hall\nid: hall\nroles: { main: {}, door: {} }\n# THE PLAN: traced\nplan:\n"
+    )
+    assert text.endswith("defaults: { dark: dim }\n"), "what follows the block is kept"
+    assert "  doors:\n    - { at: [610, 20], width: 90, role: door, to: outside }\n" in text
+    assert "  at:\n    main: [610, 110]\n    motion: [460, 180]\n" in text
+    assert yaml.safe_load(text)["plan"] == plan, "what is written reads back as itself"
+    assert rewrite(f, plan) is False, "the same block again changes nothing"
+    g = tmp_path / "spare.yml"
+    g.write_text("id: spare\nparking: true\n", encoding="utf-8")
+    assert rewrite(g, {"outline": [[0, 0], [1, 0], [1, 1]]}) is True
+    assert (
+        g.read_text(encoding="utf-8")
+        == "id: spare\nparking: true\nplan:\n  outline: [[0, 0], [1, 0], [1, 1]]\n"
+    )
+    assert block_text(
+        {"outline": [[0, 0], [1, 0], [1, 1]], "at": {"main": {"a": [1, 2]}}}
+    ).endswith("  at:\n    main:\n      a: [1, 2]\n")
+
+
+def test_find_card_looks_into_views_and_sections():
+    from regie.plan import find_card
+
+    card = {"type": "custom:easy-floorplan-card", "floors": []}
+    assert find_card({"views": [{"type": "panel", "cards": [card]}]}) is card
+    assert (
+        find_card(
+            {"views": [{"type": "sections", "sections": [{"cards": [{"type": "markdown"}, card]}]}]}
+        )
+        is card
+    )
+    assert find_card({"views": [{"cards": [{"type": "markdown"}]}]}) is None

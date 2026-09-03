@@ -60,6 +60,8 @@ class FakeHA(HomeAssistant):
         # and the default it hands anyone who has never chosen one
         self.themes: dict[str, dict] = {"temoin": {}}
         self.resources: list[dict] = []  # the lovelace resources (storage mode)
+        self.dashboards: list[dict] = []  # the storage dashboards, and their configs
+        self.dashboard_configs: dict[str, dict] = {}
         self.default_theme = "default"
         self.default_dark_theme = None
         self.codes: dict[str, str] = {}
@@ -685,6 +687,19 @@ class FakeHA(HomeAssistant):
                 "default_theme": self.default_theme,
                 "default_dark_theme": self.default_dark_theme,
             }
+        if type_ == "lovelace/dashboards":
+            return list(self.dashboards)
+        if type_ == "lovelace/dashboards/create":
+            item = {"id": payload["url_path"], "mode": "storage", **payload}
+            self.dashboards.append(item)
+            return item
+        if type_ == "lovelace/config/save":
+            self.dashboard_configs[payload.get("url_path")] = payload["config"]
+            return None
+        if type_ == "lovelace/config":
+            if payload.get("url_path") not in self.dashboard_configs:
+                raise HouseError("config_not_found: No config found.")
+            return self.dashboard_configs[payload["url_path"]]
         if type_ == "lovelace/resources":
             return list(self.resources)
         if type_ == "lovelace/resources/create":
@@ -1660,3 +1675,34 @@ def test_a_house_without_a_plan_owns_no_card_resource(house_with, secrets, tmp_p
     assert ha.resources == [], "a resource for a plan the house does not draw is removed"
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert "resource plan" not in states(steps)
+
+
+# --- the plan's workbench (0.14) ----------------------------------------------------------
+def test_the_workbench_is_opened_and_seeded_once(witness, secrets, tmp_path):
+    """A storage dashboard for the card's own editor, admins only, seeded with
+    the card as the files draw it — once. A second run leaves the draft alone:
+    re-seeding is `regie plan push`, on purpose."""
+    from regie.plan import WORKBENCH
+
+    ha = FakeHA()
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "changed"
+    (d,) = ha.dashboards
+    # check mode on a brain that lost it: would, and nothing made
+    ha.dashboards.clear()
+    steps = apply(witness, secrets, tmp_path, ha, check=True)
+    assert states(steps)["workbench"] == "would" and ha.dashboards == []
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    (d,) = ha.dashboards
+    assert d["url_path"] == WORKBENCH and d["require_admin"] is True
+    cfg = ha.dashboard_configs[WORKBENCH]
+    assert cfg["views"][0]["type"] == "panel"
+    assert cfg["views"][0]["cards"][0]["type"] == "custom:easy-floorplan-card"
+    ha.dashboard_configs[WORKBENCH] = {
+        "views": [{"cards": [{"type": "markdown", "content": "a draft"}]}]
+    }
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "ok"
+    assert ha.dashboard_configs[WORKBENCH]["views"][0]["cards"][0]["type"] == "markdown", (
+        "the draft survives"
+    )

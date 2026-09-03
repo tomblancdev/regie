@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.14.0 — l'atelier du plan : l'éditeur est le brouillon, les fichiers sont le dessin (2026-09-03)
+
+Tom : *« it will be better if I can edit it myself using the editor cause there
+is a lot to edit and I have the real vision »*. Le tableau de bord de la famille
+est rendu depuis les fichiers et ne s'édite pas en place ; l'éditeur de la carte
+(glisser-déposer : murs, portes, ampoules) veut un tableau de bord en mode
+storage. Le chef d'orchestre en ouvre donc UN — **« L'Atelier du plan »**,
+`/regie-atelier`, administrateurs seulement — ensemencé UNE FOIS avec la carte
+telle que les fichiers la dessinent (pas `workbench`). Il n'est jamais
+ré-ensemencé par `apply` : un brouillon appartient à une personne.
+
+**`regie plan pull`** lit le brouillon (`lovelace/config`) et **réécrit le bloc
+`plan:` de chaque fichier de pièce, et rien d'autre** — chaque autre octet du
+fichier est gardé, un fichier sans bloc en reçoit un à la fin. Ce sur quoi il
+s'appuie : une aire est une pièce par son id ; une chose est retrouvée par son
+entité (le sélecteur de l'éditeur en pose une) ou par son id (le nôtre) ; une
+ouverture appartient à la pièce sur le contour de laquelle elle est posée (à
+15 cm près) ; `to:` est gardé de l'ancien bloc par position ; tout est arrondi au
+centimètre ; les places sortent dans l'ordre du layout, les rôles dans celui de
+la pièce. Ce qu'il ne peut pas placer est NOMMÉ (une aire qui n'est pas une
+pièce, une chose qui n'est pas de la maison, un rôle sans layout et sans point),
+jamais jeté en silence. **`regie plan push`** ré-ensemence l'atelier depuis les
+fichiers, et le dit : le brouillon qu'il tenait disparaît. Un contour se déplace
+par les coins de la PIÈCE (l'aire), pas par les traits de mur : les murs sont
+redessinés depuis les contours.
+
+Quatre tests de plus : l'atelier ouvert et ensemencé une fois (le brouillon
+survit au passage suivant), l'aller-retour sans perte, les gestes de l'éditeur
+(une ampoule déplacée, une porte dessinée, une chose ajoutée par l'entité, une
+aire et une chose inconnues nommées), la réécriture d'un fichier à l'octet près.
+
 ## 0.13.2 — la carte est une ressource, jamais un module de l'index (2026-09-03)
 
 Lu sur Firefox et sur le téléphone, la carte du plan répondait « Configuration

@@ -272,6 +272,58 @@ def cmd_look(args) -> int:
     return 0
 
 
+def cmd_plan(args) -> int:
+    """The plan's workbench: `push` re-seeds the editor's draft from the files;
+    `pull` writes the draft back into the room files' `plan:` blocks."""
+    from .apply import Conductor
+    from .dash import link
+    from .ha import HomeAssistant
+    from .plan import WORKBENCH, find_card, pull, rewrite, room_files, workbench_config
+
+    house = load_house(args.home)
+    secrets = load_secrets(args.secrets)
+    root = Path(args.root) if args.root else Path(house.root())
+    ha = HomeAssistant(args.url)
+    Conductor(house, secrets, root, ha).session_token()
+    if house.plan() is None:
+        print("the house draws no plan (plan: in home.yml, plan: in a room) — nothing to do")
+        return 1
+    with ha.ws() as ws:
+        if args.what == "push":
+            ws.call(
+                "lovelace/config/save", url_path=WORKBENCH, config=workbench_config(house, link)
+            )
+            print(f"/{WORKBENCH}: seeded from the files — the draft it held is gone")
+            return 0
+        try:
+            config = ws.call("lovelace/config", url_path=WORKBENCH)
+        except HouseError as exc:
+            print(f"/{WORKBENCH}: {exc} — `regie apply` opens it, `regie plan push` seeds it")
+            return 1
+    card = find_card(config or {})
+    if not card:
+        print(f"/{WORKBENCH} holds no plan card — `regie plan push` seeds it")
+        return 1
+    blocks, notes = pull(house, card)
+    files = room_files(house, args.rooms)
+    for n in notes:
+        print(f"  ~ {n}")
+    changed = 0
+    for rid, plan in blocks.items():
+        if rid not in files:
+            print(f"  ! {rid}: no room file to write (rooms/{rid}.yml)")
+            continue
+        if rewrite(files[rid], plan):
+            changed += 1
+            print(f"  + {files[rid].name}: plan written")
+        else:
+            print(f"  = {files[rid].name}: unchanged")
+    print(
+        f"pull: {changed} file(s) written, {len(blocks) - changed} unchanged, {len(notes)} note(s)"
+    )
+    return 0
+
+
 def cmd_link(args) -> int:
     """The flow walked with a person at hand: a PIN read off the screen, a
     consent given in a browser (the address printed here; the brain's own
@@ -600,6 +652,21 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
     s.set_defaults(func=cmd_look)
+
+    s = sub.add_parser(
+        "plan",
+        help="the plan's workbench (0.14): `push` seeds the editor's draft from the files, "
+        "`pull` writes the draft back into the room files' plan: blocks",
+    )
+    s.add_argument("what", choices=["push", "pull"])
+    s.add_argument("home", type=Path)
+    s.add_argument(
+        "--rooms", type=Path, help="the room files to rewrite (default: the house's own include)"
+    )
+    _secrets_arg(s)
+    s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.set_defaults(func=cmd_plan)
 
     s = sub.add_parser("mint", help="write every secret the house needs and does not have yet")
     s.add_argument("home", type=Path)
