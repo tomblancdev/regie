@@ -90,10 +90,9 @@ ui:
   bulbs: Ampoules
   room_settings: Réglages de la pièce
   on_room_page: Sur la page de la pièce
-  # the plan (0.13): the tab, and the one gesture the card cannot say itself
+  # the plan (0.13): the tab; the workbench (0.14)
   plan: Plan
   workbench: "L'Atelier du plan"
-  plan_hint: Maintenir une pièce ouvre sa page
   by_hand: À appliquer à la main
   health: Santé de la pièce
   offline: Ne répondent pas

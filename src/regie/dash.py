@@ -194,10 +194,16 @@ def _plan(house: House) -> dict:
     tapping a thing opens Home Assistant's own panel for it (the last rung).
     The card is built by floorplan.py; this page only carries it, full width."""
     ui = house.labels.ui
-    card = floorplan.card(house, link)
-    card["grid_options"] = {"columns": "full"}
-    hint = _cols({"type": "markdown", "content": ui.plan_hint}, FULL)
-    return _view(ui.plan, "plan", [_grid([card, hint])], icon="mdi:floor-plan", sub=False)
+    # a PANEL view: the card alone, filling the page - the sections grid gave
+    # it two columns and a hint card under it, and the workbench's panel read
+    # better to the person who drew the plan (Tom, 2026-09-03)
+    return {
+        "title": ui.plan,
+        "path": "plan",
+        "icon": "mdi:floor-plan",
+        "type": "panel",
+        "cards": [floorplan.card(house, link)],
+    }
 
 
 def _parking(house: House, area: dict, extra: list[dict]) -> dict:

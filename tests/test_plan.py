@@ -25,7 +25,8 @@ def plan_card(root):
     assert "plan" in views, "the witness declares a plan: the tab exists"
     view = views["plan"]
     assert "subview" not in view, "a tab, beside the rooms — not a page behind one"
-    card = view["sections"][0]["cards"][0]
+    assert view["type"] == "panel" and len(view["cards"]) == 1, "the card alone, filling the page"
+    card = view["cards"][0]
     assert card["type"] == "custom:easy-floorplan-card"
     return card
 
@@ -51,7 +52,6 @@ def test_inside_counts_the_edge_and_nothing_beyond():
 def test_the_tab_carries_the_frame_the_rooms_and_the_drawing(rendered):
     card = plan_card(rendered)
     assert (card["width"], card["height"]) == (800, 600), "1 cm = 1 unit, the house's frame"
-    assert card["grid_options"] == {"columns": "full"}
     assert card["overlayScale"] == "fixed", "a badge stays a thumb's target while the plan scales"
     floors = {f["id"]: f for f in card["floors"]}
     assert list(floors) == ["ground"], "both drawn rooms are on the ground floor"

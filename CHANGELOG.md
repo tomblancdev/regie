@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.4 — l'onglet Plan est un panneau (2026-09-03)
+
+Tom : *« I prefer the display in l'atelier du Plan page than in the page you
+provided »*. L'onglet de la famille était une vue en sections — la carte sur
+deux colonnes, une carte d'indication dessous ; l'atelier est un panneau, la
+carte seule qui remplit la page. L'onglet est un panneau lui aussi ; le mot
+d'indication (« maintenir une pièce ouvre sa page ») quitte la page pour la
+documentation.
+
 ## 0.14.3 — un point gardé suit la pièce, ou s'en va (2026-09-03)
 
 Lu au premier vrai `plan pull` : les deux cellules échangées dans l'éditeur, et
