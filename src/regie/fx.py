@@ -285,7 +285,9 @@ def _expand(
                 if k not in inner_bind:
                     raise HouseError(f"fx: {where}: {inner_id} has no field {k!r}")
                 inner_bind[k] = _value(v, bindings)
-            actions += _expand(inner_id, shapes, inner_bind, backend, notes, depth + 1, name, kelvin)
+            actions += _expand(
+                inner_id, shapes, inner_bind, backend, notes, depth + 1, name, kelvin
+            )
             continue
         if step.get("ambient"):
             for k in ("level", "colour"):
@@ -407,9 +409,7 @@ def script(c: Compiled, house_label: str) -> dict:
         *c.actions,
         {
             "if": [{"condition": "template", "value_template": "{{ restore }}"}],
-            "then": [
-                {"action": "scene.turn_on", "target": {"entity_id": "scene.{{ snapshot }}"}}
-            ],
+            "then": [{"action": "scene.turn_on", "target": {"entity_id": "scene.{{ snapshot }}"}}],
         },
         # la scène part QUOI QUE DISE `restore` : elle était détruite dans la
         # branche restore seule, donc une forme `restore: false` laissait une

@@ -108,6 +108,19 @@ def report(house: House, secrets: dict) -> None:
             )
 
     pins = house.pins()
+    plan = house.plan()
+    if plan:
+        from .floorplan import placements, rooms_drawn
+
+        drawn = rooms_drawn(house)
+        placed = sum(len(placements(house, a)[0]) for a in drawn)
+        left = sum(len(placements(house, a)[1]) for a in drawn)
+        print(
+            f"plan: {plan['size'][0]} × {plan['size'][1]} cm, {len(drawn)} room(s) drawn, "
+            f"{placed} thing(s) placed"
+            + (f", {left} with a role and no point" if left else "")
+            + (f", the drawing {plan['image']}" if plan.get("image") else "")
+        )
     print("pins: " + ", ".join(f"{k} {v}" for k, v in pins.items()))
     names = house.secret_names()
     missing = [n for n in names if n not in secrets]
@@ -227,6 +240,35 @@ def cmd_apply(args) -> int:
     for st in steps:
         print(st.line())
     print(summary(steps, args.check))
+    return 0
+
+
+def cmd_look(args) -> int:
+    """A look tried on the real ceiling, written down: the room's lights as
+    they are right now, in the house's grammar, to paste under `scenes:`."""
+    from .apply import Conductor
+    from .ha import HomeAssistant
+    from .look import room_look, snippet
+
+    house = load_house(args.home)
+    secrets = load_secrets(args.secrets)
+    root = Path(args.root) if args.root else Path(house.root())
+    area = house.area(args.room)
+    ha = HomeAssistant(args.url)
+    Conductor(house, secrets, root, ha).session_token()
+
+    def read(entity: str) -> dict | None:
+        status, data = ha.get(f"/api/states/{entity}")
+        return data if status == 200 and isinstance(data, dict) else None
+
+    look, notes = room_look(house, area, read)
+    for n in notes:
+        print(f"# {n}")
+    if not look:
+        print(f"# {area['id']}: no light of a role answered — nothing to write")
+        return 1
+    print(f"# {area['label']} — as the lights are now; paste under rooms/{area['id']}.yml")
+    print(snippet(args.name, look, args.label), end="")
     return 0
 
 
@@ -544,6 +586,20 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
     s.set_defaults(func=cmd_pair)
+
+    s = sub.add_parser(
+        "look",
+        help="a look tried on the real ceiling, written down: the room's lights as they are "
+        "now, by role and by place, in the house's grammar — to paste under scenes: (0.13)",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("--room", required=True, help="the room (an area id)")
+    s.add_argument("--name", default="essai", help="the look's id under scenes: (default essai)")
+    s.add_argument("--label", help="the look's label, if it should carry one")
+    _secrets_arg(s)
+    s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.set_defaults(func=cmd_look)
 
     s = sub.add_parser("mint", help="write every secret the house needs and does not have yet")
     s.add_argument("home", type=Path)

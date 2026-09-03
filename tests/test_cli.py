@@ -49,7 +49,7 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "34 written, 0 unchanged, 0 kept, 0 removed" in out
+    assert "36 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 

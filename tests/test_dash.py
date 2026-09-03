@@ -212,6 +212,8 @@ def test_a_house_with_no_theme_renders_none_of_it(house_with, secrets, tmp_path)
 
     render(load_house(house_with(strip)), tmp_path, secrets)
     assert not (tmp_path / "home-assistant/themes").exists()
-    assert not (tmp_path / "home-assistant/www").exists()
+    assert not (tmp_path / "home-assistant/www/regie-skin.js").exists()
     conf = (tmp_path / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
-    assert "frontend:" not in conf
+    assert "themes:" not in conf and "regie-skin" not in conf
+    # the witness still draws a plan: its card rides the frontend seam alone
+    assert "extra_module_url:\n    - /local/easy-floorplan-card.js" in conf

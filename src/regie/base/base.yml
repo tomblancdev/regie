@@ -20,6 +20,11 @@ templates:
   # frontend loads on every page — both only when the house names a theme
   - { src: home-assistant/themes/theme.yaml.j2, dst: "home-assistant/themes/{{ theme_name }}.yaml", when: theme }
   - { src: home-assistant/www/regie-skin.js.j2, dst: home-assistant/www/regie-skin.js, when: theme }
+  # the plan (0.13): the card the tab is drawn with, carried by the product
+  # (base/www/VENDOR.md), and the house's own drawing under the walls - both
+  # copied as they are, only when the house declares a plan
+  - { copy: www/easy-floorplan-card.js, dst: home-assistant/www/easy-floorplan-card.js, when: plan }
+  - { house_file: plan.image, dst: "home-assistant/www/{{ plan_image }}", when: plan_image }
   - { src: mosquitto/mosquitto.conf.j2, dst: mosquitto/config/mosquitto.conf, owner: mosquitto }
   - { src: mosquitto/acl.j2, dst: mosquitto/config/acl, owner: mosquitto }
   - { src: mosquitto/passwd.j2, dst: mosquitto/config/passwd, mode: "0600", owner: mosquitto }

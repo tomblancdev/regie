@@ -108,6 +108,9 @@ def context(house: House, secrets: dict) -> dict:
         "theme_name": (house.theme() or {}).get("name"),
         "theme_file": skin.build(house.theme()) if house.theme() else None,
         "font_faces": skin.font_faces(house.theme()) if house.theme() else [],
+        # the plan (0.13): the frame, and the drawing's own file name under www/
+        "plan": house.plan(),
+        "plan_image": ((house.plan() or {}).get("image") or "").rsplit("/", 1)[-1],
         "default_config": base_default_config(),
         "entity": house.entity,
         "coordinators": house.coordinators(),
@@ -245,6 +248,31 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
     result = Rendered()
     current: set[str] = set()
     for prefix, t in plan(house):
+        if t.get("copy") or t.get("house_file"):
+            # a file carried as it is: the product's (base/<copy>) or the
+            # house's (a path the house file names, beside home.yml) - bytes,
+            # never rendered, marked in the manifest like everything else
+            if t.get("copy"):
+                src = BASE / t["copy"]
+            else:
+                named = house.data
+                for key in t["house_file"].split("."):
+                    named = (named or {}).get(key)
+                src = house.path.parent / str(named)
+            if not src.is_file():
+                raise HouseError(f"{t['dst']}: nothing to copy at {src}")
+            rel = env.from_string(t["dst"]).render(ctx)
+            target = out / rel
+            current.add(rel)
+            data = src.read_bytes()
+            if target.exists() and target.read_bytes() == data:
+                result.unchanged.append(target)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            target.chmod(0o644)
+            result.written.append(target)
+            continue
         for i, (key, item) in enumerate(each_items(house, t.get("each"))):
             ictx = item_context(house, key, item, i)
             rel = env.from_string(t["dst"]).render(ctx, **ictx)

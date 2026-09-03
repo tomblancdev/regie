@@ -441,6 +441,35 @@
         "$ref": "#/$defs/scenario"
       },
       "description": "the stories — steps, waits, effects, scenes, words; one file each under include.scenarios"
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size"
+      ],
+      "properties": {
+        "size": {
+          "$ref": "#/$defs/point",
+          "description": "[width, height] of the flat's outer envelope, in centimetres - the frame every room's outline is drawn in (1 cm = 1 unit on the card)"
+        },
+        "image": {
+          "type": "string",
+          "description": "a drawing to lay under the walls (a file beside home.yml, copied into the brain's www/): the same envelope, edge to edge - it is stretched onto plan.size"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "how strongly the drawing shows (default 0.5)"
+        },
+        "glow": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "how far a light at full brightness pools its colour on the plan, in centimetres (default 130)"
+        }
+      },
+      "description": "THE PLAN (0.13): the flat drawn from declarations. The house gives the frame (and a drawing to lay under it); every room gives its outline, its doors and windows, and where its things hang (rooms/<id>.yml: plan:). The engine renders the Plan tab from it - nothing is placed that a file did not place"
     }
   },
   "$defs": {
@@ -552,6 +581,9 @@
         "parking": {
           "type": "boolean",
           "description": "a PARKING room: things wait here for a room and a role. No scene, no default, no automation is rendered for it and check asks it for none - its things stay visible (a bulb can be tested) and nothing acts on them"
+        },
+        "plan": {
+          "$ref": "#/$defs/room_plan"
         }
       }
     },
@@ -1571,6 +1603,106 @@
           "description": "how a card leaves the ground: `plate` (a hairline on top, a hard line under - wants a border), `lift` (shadow alone, no border), `glass` (a lift with a highlight, for a translucent card), `none`"
         }
       }
+    },
+    "point": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] in centimetres, in the house's frame (plan.size): x to the right, y downwards, from the flat's outer top-left corner"
+    },
+    "opening": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "at",
+        "width"
+      ],
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/point",
+          "description": "a point ON the room's outline - the wall it pierces is the edge nearest to it"
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "the opening's width, in centimetres"
+        },
+        "role": {
+          "$ref": "#/$defs/id",
+          "description": "the room's role the contact sensor on this door carries (kind door): the leaf on the plan follows it"
+        },
+        "to": {
+          "type": "string",
+          "description": "what is behind it - a room id, or a word (outside, balcony); drawn nowhere, read by a person"
+        },
+        "flip_h": {
+          "type": "boolean",
+          "description": "mirror the leaf left-right (the hinge on the other jamb)"
+        },
+        "flip_v": {
+          "type": "boolean",
+          "description": "mirror the leaf across the wall (it swings into the other room)"
+        }
+      },
+      "description": "a door or a window in a wall: where, how wide, and which sensor (if any) says whether it is open"
+    },
+    "room_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outline"
+      ],
+      "properties": {
+        "outline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/point"
+          },
+          "minItems": 3,
+          "description": "the room's inside corners in order, in the house's frame - the walls are its edges"
+        },
+        "doors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/opening"
+          },
+          "default": []
+        },
+        "windows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/opening"
+          },
+          "default": []
+        },
+        "at": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/point"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/point"
+                }
+              }
+            ]
+          },
+          "description": "where the things hang, BY ROLE: one point for a role without a layout, one point per place (the layout's own words) for a role with one. A thing whose role has no point is not on the plan, and check says so"
+        }
+      },
+      "description": "the room on the plan (0.13): its outline, its openings, and where each of its things hangs - all in centimetres, in the one frame plan.size declares"
     }
   },
   "x-known": {

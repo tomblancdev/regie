@@ -21,6 +21,8 @@ EXPECTED = {
     "home-assistant/dashboards/phone.yaml",
     "home-assistant/themes/temoin.yaml",
     "home-assistant/www/regie-skin.js",
+    "home-assistant/www/easy-floorplan-card.js",
+    "home-assistant/www/plan.png",
     "home-assistant/packages/lighting_hall.yaml",
     "home-assistant/packages/lighting_living.yaml",
     "home-assistant/packages/lighting_kitchen.yaml",
@@ -166,8 +168,10 @@ def test_the_dashboard_descends_from_the_house_to_a_place(rendered):
     views = {v["path"]: v for v in dash["views"]}
     home = dash["views"][0]
     assert home["path"] == "rooms" and not home.get("subview"), "the house is the one way in"
-    assert all(v.get("subview") for v in dash["views"][1:-1])
-    assert dash["views"][-1]["path"] == "settings", "the house's own settings, the second tab"
+    assert dash["views"][1]["path"] == "plan", "the plan (0.13), a tab beside the rooms"
+    tabs = ("rooms", "plan", "settings")
+    assert all(v.get("subview") for v in dash["views"] if v["path"] not in tabs)
+    assert dash["views"][-1]["path"] == "settings", "the house's own settings, the last tab"
 
     # the house card (pack modes) leads, then one row per room — every room
     first, rooms = home["sections"][0], home["sections"][1]

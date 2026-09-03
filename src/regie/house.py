@@ -262,6 +262,17 @@ class House:
     def matter_only_fabric(self) -> bool:
         return bool((self.data.get("matter") or {}).get("only_fabric", False))
 
+    def plan(self) -> dict | None:
+        """THE PLAN (0.13): the frame the rooms are drawn in, and the drawing
+        under the walls — None when the house declares none. A house that
+        declares the frame but draws no room renders no Plan tab (a hint)."""
+        plan = self.data.get("plan")
+        if not plan:
+            return None
+        if not any((a.get("plan") or {}).get("outline") for a in self.areas):
+            return None
+        return plan
+
     def theme(self) -> dict | None:
         """The house's skin, RESOLVED — a `use:` merged with what the house
         repaints on top of it (theme.py). None when the house names no skin,
@@ -279,7 +290,13 @@ class House:
             return self.has_pack(when[5:])
         if when == "theme":
             return self.theme() is not None
-        raise HouseError(f"`when: {when}` is not one the engine knows (pack:<name>, theme)")
+        if when == "plan":
+            return self.plan() is not None
+        if when == "plan_image":
+            return bool((self.plan() or {}).get("image"))
+        raise HouseError(
+            f"`when: {when}` is not one the engine knows (pack:<name>, theme, plan, plan_image)"
+        )
 
     @staticmethod
     def integrations(thing: dict) -> list[str]:
@@ -1299,6 +1316,91 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                 f"thread: channel {thread_channel} is the Zigbee channel, and "
                 f"{', '.join(sorted(shared))} carries both radios — two 802.15.4 meshes on one "
                 "box on one channel drown each other, and nothing logs a cause; move one"
+            )
+
+    # --- the plan (0.13) ---------------------------------------------------------
+    # every point a room writes is checked against the words the room already
+    # owns: a role it has, a place its layout knows, one point per place when
+    # the role has places. What the plan does not name is a hint, like a role
+    # nothing fills: a thing with no point is simply not on the plan.
+    from .floorplan import inside, placements  # noqa: PLC0415 - a leaf, imported here to stay one
+
+    frame = data.get("plan")
+    drawn = [a for a in house.areas if (a.get("plan") or {}).get("outline")]
+    if frame and not drawn:
+        hints.append("plan: the house gives a frame and no room draws an outline — no Plan tab")
+    for a in house.areas:
+        rp = a.get("plan")
+        if not rp:
+            continue
+        if not frame:
+            errors.append(
+                f"{a['id']}: plan: the room draws itself and the house gives no frame — "
+                "add `plan: {size: [width, height]}` (centimetres) beside areas:"
+            )
+        if house.parking(a):
+            errors.append(f"{a['id']}: a parking room is nowhere — drop its `plan:`")
+            continue
+        declared = house.declared_roles(a)
+        outline = rp["outline"]
+        if frame:
+            w, h = frame["size"]
+            off = [p for p in outline if not (0 <= p[0] <= w and 0 <= p[1] <= h)]
+            if off:
+                warnings.append(
+                    f"{a['id']}: plan: {len(off)} corner(s) outside the house's frame "
+                    f"({w} × {h} cm) — {off[0]}"
+                )
+        for role, pos in (rp.get("at") or {}).items():
+            if role not in declared:
+                errors.append(
+                    f"{a['id']}: plan places role {role!r}, and the room has no such role"
+                )
+                continue
+            layout = list((declared.get(role) or {}).get("layout") or [])
+            if isinstance(pos, dict):
+                if not layout:
+                    errors.append(
+                        f"{a['id']}: plan gives role {role} a point per place, and the role "
+                        "has no layout — one point, or a layout under roles:"
+                    )
+                    continue
+                unknown = sorted(p for p in pos if p not in layout)
+                if unknown:
+                    errors.append(
+                        f"{a['id']}: plan places {', '.join(unknown)} in {role}, and its layout "
+                        "has no such place"
+                    )
+                points = list(pos.values())
+            else:
+                if layout:
+                    errors.append(
+                        f"{a['id']}: plan gives role {role} one point, and the role has places "
+                        f"({', '.join(layout)}) — one point per place"
+                    )
+                points = [pos]
+            for pt in points:
+                if len(outline) >= 3 and not inside(outline, pt):
+                    warnings.append(
+                        f"{a['id']}: plan puts {role} at {pt}, outside the room's own outline"
+                    )
+        for kind in ("doors", "windows"):
+            for i, o in enumerate(rp.get(kind) or []):
+                if o.get("role") and o["role"] not in declared:
+                    errors.append(
+                        f"{a['id']}: plan {kind[:-1]} {i + 1} names role {o['role']!r}, and the "
+                        "room has no such role"
+                    )
+                if len(outline) >= 3 and not inside(outline, o["at"]):
+                    warnings.append(
+                        f"{a['id']}: plan {kind[:-1]} {i + 1} at {o['at']} is not on the "
+                        "room's outline"
+                    )
+        _placed, left = placements(house, a)
+        if left:
+            hints.append(
+                f"{a['id']}: plan: {len(left)} thing(s) with a role and no point — not drawn: "
+                + ", ".join(t["id"] for t in left)
             )
 
     # --- the vocabulary ----------------------------------------------------------

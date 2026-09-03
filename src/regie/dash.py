@@ -23,6 +23,7 @@ Lovelace YAML written by hand in a template is indentation, not design.
 
 from __future__ import annotations
 
+from . import floorplan
 from .house import House
 
 # the dashboard's url path — `lovelace.dashboards` in configuration.yaml and
@@ -184,6 +185,19 @@ def _home(house: House, house_cards: list[dict]) -> dict:
             )
     sections.append(_grid([heading(ui.rooms)] + rows))
     return _view(ui.rooms, "rooms", sections, icon="mdi:home", sub=False)
+
+
+def _plan(house: House) -> dict:
+    """THE PLAN (0.13): the flat drawn from the rooms' own declarations, one
+    tab beside the rooms. It answers one question — where is what, and what is
+    it doing — and offers one way on: holding a room opens the room's page;
+    tapping a thing opens Home Assistant's own panel for it (the last rung).
+    The card is built by floorplan.py; this page only carries it, full width."""
+    ui = house.labels.ui
+    card = floorplan.card(house, link)
+    card["grid_options"] = {"columns": "full"}
+    hint = _cols({"type": "markdown", "content": ui.plan_hint}, FULL)
+    return _view(ui.plan, "plan", [_grid([card, hint])], icon="mdi:floor-plan", sub=False)
 
 
 def _parking(house: House, area: dict, extra: list[dict]) -> dict:
@@ -378,6 +392,8 @@ def build(
     its own pages beneath it, and the house's settings last (a tab, like the
     house itself — every other page is a subview and wears a back arrow)."""
     views = [_home(house, house_cards)]
+    if house.plan():
+        views.append(_plan(house))
     settled = []
     for area in house.areas:
         views.append(_room(house, area, room_cards.get(area["id"], [])))

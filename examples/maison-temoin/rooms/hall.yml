@@ -3,3 +3,8 @@ roles: { main: {}, motion: {}, door: {} }
 scenes:
   dim: { main: { brightness: 20, ct: warm } }
 defaults: { dark: dim, dim: dim, bright: dim }   # daylight-first (H34): always its one look
+plan:
+  outline: [[440, 20], [780, 20], [780, 200], [440, 200]]
+  doors:
+    - { at: [610, 20], width: 90, role: door, to: outside }   # the front door: its leaf follows the sensor
+  at: { main: [610, 110], motion: [460, 180] }

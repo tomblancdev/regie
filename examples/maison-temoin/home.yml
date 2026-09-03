@@ -63,6 +63,15 @@ thread:
     - { id: main, thing: coordinator_main, port: 8080 }
 mqtt:
   host: 192.0.2.5
+# THE PLAN (0.13): the frame every room draws itself in - the flat's outer
+# envelope in centimetres - and a drawing to lay under the walls (a file
+# beside this one, copied into the brain's www/). The rooms say the rest
+# (rooms/<id>.yml: plan:). Nothing appears on the Plan tab that a file did not
+# place: a thing whose role has no point is not drawn, and check says so.
+plan:
+  size: [800, 600]
+  image: plan.png
+  opacity: 0.5
 floors:
   - { id: ground, label: Rez-de-chaussée, level: 0 }
   - { id: upstairs, label: Étage, level: 1 }

@@ -40,3 +40,25 @@ scenes:
       drift: { role: main, places: front, band: [190, 330], period: [80, 175], step: 2.5 }
 # daylight-first (H34): the sun drives; night forces the glimmer look
 defaults: { dark: evening, dim: day, bright: day, night: night }
+# THE PLAN (0.13): the room's inside corners in the house's frame (home.yml
+# plan.size, centimetres), its doors and windows ON that outline, and where each
+# role hangs - one point per PLACE for a role with a layout (the layout's own
+# words), one point otherwise. A role with no point is not drawn (a hint).
+plan:
+  outline: [[20, 20], [420, 20], [420, 320], [20, 320]]
+  doors:
+    - { at: [420, 250], width: 80, to: hall }
+  windows:
+    - { at: [20, 170], width: 160 }
+  at:
+    main:
+      front_left: [120, 90]
+      front_center: [220, 90]
+      front_right: [320, 90]
+      back_left: [120, 240]
+      back_center: [220, 240]
+      back_right: [320, 240]
+    lamp: [390, 290]
+    screen: [220, 30]
+    speaker: [300, 30]
+    satellite: [40, 300]

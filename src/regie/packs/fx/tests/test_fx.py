@@ -13,25 +13,48 @@ from regie.fx import compile_shape, load_backend, load_shapes, product_shapes
 # those are the house's own, and they live in `ansible/home/fx/`.
 BRICKS = {
     # the atoms
-    "flash", "fade", "ramp", "pulse", "blackout", "flicker",
+    "flash",
+    "fade",
+    "ramp",
+    "pulse",
+    "blackout",
+    "flicker",
     # the brightness-only bricks: they carry the motion, and they are already
     # complete effects on La Cantine's colourless E14 chandelier
-    "thump", "flame", "beats",
+    "thump",
+    "flame",
+    "beats",
     # storm
-    "strike", "lightning", "farstorm",
+    "strike",
+    "lightning",
+    "farstorm",
     # nervous
-    "glitch", "neon",
+    "glitch",
+    "neon",
     # warm
-    "fire", "ember", "candle", "dawn",
+    "fire",
+    "ember",
+    "candle",
+    "dawn",
     # dread
-    "gutter", "breath", "heartbeat", "passing", "dying", "possessed",
-    "drain", "presence",
+    "gutter",
+    "breath",
+    "heartbeat",
+    "passing",
+    "dying",
+    "possessed",
+    "drain",
+    "presence",
     # alive
     "telly",
     # machine
-    "prime", "beacon", "redalert", "powerdown",
+    "prime",
+    "beacon",
+    "redalert",
+    "powerdown",
     # tell
-    "doorbell", "timerdone",
+    "doorbell",
+    "timerdone",
 }
 
 
@@ -153,9 +176,9 @@ def test_lightning_keeps_the_room_alive_between_the_strikes():
             assert hi <= 1000, f"un noir de {hi} ms suit un pas à 0 %"
     # une ATTENTE existe : un delay que ne précède aucun light.turn_on
     kinds = [a.get("action") or ("delay" if "delay" in a else "repeat") for a in seq]
-    assert any(
-        kinds[i] == "delay" and kinds[i - 1] == "delay" for i in range(1, len(kinds))
-    ), "un pas qui ne dit qu'un hold est une attente, pas un allumage à 100 %"
+    assert any(kinds[i] == "delay" and kinds[i - 1] == "delay" for i in range(1, len(kinds))), (
+        "un pas qui ne dit qu'un hold est une attente, pas un allumage à 100 %"
+    )
 
 
 def test_a_step_may_say_a_colour_temperature_and_a_clamp_is_spoken():
@@ -174,9 +197,12 @@ def test_a_step_may_say_a_colour_temperature_and_a_clamp_is_spoken():
     z = compile_shape("neon", sh, load_backend("zigbee"))
     assert any("5500 K demandés" in n and "2200-4000 K" in n for n in z.notes)
     # la carte de la maison l'emporte sur celle du produit
-    warm = compile_shape("neon", {**sh, "neon": {**sh["neon"],
-        "steps": [{"level": 100, "ct": "cool", "hold": 1}]}},
-        load_backend("ha"), {"cool": 3000})
+    warm = compile_shape(
+        "neon",
+        {**sh, "neon": {**sh["neon"], "steps": [{"level": 100, "ct": "cool", "hold": 1}]}},
+        load_backend("ha"),
+        {"cool": 3000},
+    )
     assert "color_temp_kelvin=3000" in str(warm.actions[0]["data"])
 
 

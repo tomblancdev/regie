@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.13.0 — le plan : la maison dessinée depuis ses déclarations (2026-09-03)
+
+**Un onglet `Plan` à côté des pièces**, et rien n'y figure qu'un fichier n'ait
+placé (guidelines 1.12). La maison donne le CADRE — `plan: { size: [979, 826] }`,
+l'enveloppe extérieure en centimètres, et un dessin à poser sous les murs
+(`image:`, un fichier à côté de home.yml, copié dans le `www/` du cerveau) ;
+chaque pièce donne son contour (`plan.outline`, ses angles intérieurs dans ce
+cadre), ses portes et fenêtres SUR ce contour (`doors:` / `windows:` — la
+paroi percée est l'arête la plus proche du point ; `role:` y attache le
+capteur d'ouverture, et le battant le suit), et où pendent ses choses (`at:`,
+PAR RÔLE : un point pour un rôle sans layout, un point par place — les mots du
+layout — pour un plafond de plusieurs lumières). Une chose dont le rôle n'a pas
+de point n'est pas dessinée, et `check` le dit ; un rôle inconnu, une place que
+le layout ignore, un point unique pour un rôle à places, une pièce de parking
+qui se dessine : refusés ; un point hors du contour : un avertissement.
+
+**Le rendu est easy-floorplan** (nicosandller, MIT, v1.6.1), EMBARQUÉ dans le
+produit (`base/www/`, la provenance et le sha256 dans VENDOR.md) et chargé par
+la même couture que la peau (`frontend.extra_module_url`) — jamais un store,
+rien de téléchargé à l'exécution. Une aire par pièce liée à l'aire de Home
+Assistant (un capteur de mouvement la teinte), un badge par chose placée, la
+couleur et la luminosité de chaque ampoule ÉTALÉES sur le plan. Un tap sur
+une pièce zoome (le geste de la carte) ; MAINTENIR ouvre la page de la pièce
+(la descente) ; un tap sur une chose ouvre le panneau de Home Assistant (le
+dernier barreau, 1.12). La grammaire est celle de la maison : changer de
+carte un jour est le problème du moteur, pas d'un fichier de pièce.
+
+**Le mode essai est la pièce elle-même, et `regie look` l'écrit.** On règle
+les ampoules depuis le plan, on regarde le plafond, et `regie look --room
+<id>` lit ce que font les lumières et l'imprime dans la grammaire de la maison
+— par rôle et par place, `brightness:` en pour cent, `ct:` un mot de la
+maison quand l'ampoule est à moins de 150 K de l'un d'eux (sinon le nombre),
+`color:` en hexa — prêt à coller sous `scenes:`. Le pli : toutes les places
+d'un rôle qui disent la même chose, dit une fois au rôle ; un préfixe dont
+les places s'accordent, dit une fois au préfixe ; le reste par place, dans
+l'ordre du layout. Une ampoule illisible est nommée en commentaire et laissée
+de côté. Un aperçu SIMULÉ (peindre une ambiance sans toucher aux lumières)
+n'est pas fait, et par choix : ces ampoules plafonnent à 4000 K et posent une
+rampe en deux secondes ; un rectangle peint mentirait deux fois.
+
+Le fichier de la maison témoin dessine deux pièces, la porte d'entrée suit son
+capteur, un dessin minuscule passe sous les murs. `render` copie deux fichiers
+de plus (36). 25 tests de plus.
+
+**Reste en écart, pas de cette session :** `packs/fx/tests/test_fx.py::
+test_lightning_glitch_neon_fire` échoue sur main depuis 0.12.2 (le compte de
+passes est devenu `{{ passes }}`), et `tools/no-environment.sh` sort en 1 sur
+main (les licences OFL des polices nomment scripts.sil.org).
+
 ## 0.11.1 — how a card leaves the ground is the theme's to say (2026-09-02)
 
 Caught by reading the rendered theme rather than trusting the library file:
