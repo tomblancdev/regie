@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.1 — une ambiance lue s'écrit comme une pièce l'écrit (2026-09-03)
+
+Lu sur le cerveau, La Cantine toute éteinte : `regie look` sortait
+`essai: {label: Essai, main: false, table: false}` — une seule ligne en style
+flux, et `off` épelé `false`. Le dumper YAML replie une scène de scalaires
+sur une ligne et n'a pas de mot pour `off` ; ni l'un ni l'autre n'est la
+forme d'un fichier de pièce. Le bloc est écrit À LA MAIN : un rôle par ligne,
+une ambiance-feuille en flux avec de l'air (`{ brightness: 30, ct: warm }`),
+les places d'un rôle l'une sous l'autre, `on` / `off` nus, une couleur entre
+guillemets doubles (un `#` nu ouvre un commentaire). Un test de plus, sur le
+cas lu.
+
 ## 0.13.0 — le plan : la maison dessinée depuis ses déclarations (2026-09-03)
 
 **Un onglet `Plan` à côté des pièces**, et rien n'y figure qu'un fichier n'ait
@@ -42,7 +54,7 @@ rampe en deux secondes ; un rectangle peint mentirait deux fois.
 
 Le fichier de la maison témoin dessine deux pièces, la porte d'entrée suit son
 capteur, un dessin minuscule passe sous les murs. `render` copie deux fichiers
-de plus (36). 25 tests de plus.
+de plus (36). 19 tests de plus.
 
 **Reste en écart, pas de cette session :** `packs/fx/tests/test_fx.py::
 test_lightning_glitch_neon_fire` échoue sur main depuis 0.12.2 (le compte de

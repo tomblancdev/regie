@@ -326,6 +326,22 @@ def test_room_look_reads_the_room_by_role_and_names_what_it_left_out(witness):
     assert notes == ["lamp/living_floor_lamp: unavailable — left out"]
     text = snippet("essai", look, "Essai")
     assert text.startswith("scenes:\n  essai:\n    label: Essai\n    main:\n")
-    assert "back_center: off" in text and "{brightness: 10, color: '#00a0ff'}" in text
+    assert "      back_center: off\n" in text
+    assert '      front_left: { brightness: 10, color: "#00a0ff" }\n' in text
     # a bare `off` reads as YAML 1.1's False - the room files' own form (guidelines 1.11)
     assert yaml.safe_load(text)["scenes"]["essai"]["main"]["back_center"] is False
+    assert yaml.safe_load(text)["scenes"]["essai"]["main"]["front_left"]["color"] == "#00a0ff"
+
+
+def test_a_room_read_all_off_is_written_one_role_per_line():
+    """Read live on 2026-09-03: La Cantine with every light off came out as
+    `essai: {label: Essai, main: false, table: false}` — one flow line, and
+    `off` spelt `false`. A scene of scalars is still one role per line."""
+    text = snippet(
+        "essai", {"main": "off", "table": "off", "lamp": {"brightness": 40, "ct": "warm"}}, "Essai"
+    )
+    assert text == (
+        "scenes:\n  essai:\n    label: Essai\n    main: off\n    table: off\n"
+        "    lamp: { brightness: 40, ct: warm }\n"
+    )
+    assert yaml.safe_load(text)["scenes"]["essai"]["main"] is False

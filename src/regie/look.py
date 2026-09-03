@@ -14,10 +14,6 @@ look may already use); anything else is said per place, in the layout's order.
 
 from __future__ import annotations
 
-import re
-
-import yaml
-
 from .fx import KELVIN
 from .house import House
 
@@ -114,34 +110,43 @@ def room_look(house: House, area: dict, read) -> tuple[dict, list[str]]:
     return look, notes
 
 
-def snippet(name: str, look: dict, label: str | None = None) -> str:
-    """The block to paste under the room's `scenes:` — leaf mappings in flow
-    style, the way the room files are written."""
-    body: dict = {}
-    if label:
-        body["label"] = label
-    body.update(look)
-    text = yaml.safe_dump(
-        {"scenes": {name: _states(body)}},
-        default_flow_style=None,
-        sort_keys=False,
-        allow_unicode=True,
-        width=10**6,
-    )
-    # the room files spell a state `on` / `off`, bare - YAML 1.1's booleans,
-    # which is what the loader reads them as; the dumper would write true/false
-    return re.sub(
-        r": (true|false)$", lambda m: ": on" if m.group(1) == "true" else ": off", text, flags=re.M
-    )
+def _scalar(v) -> str:
+    """One value the way the room files spell it: `on` / `off` bare, a colour
+    in double quotes (a bare `#` opens a comment), a word or a number as is."""
+    if v is True or v == "on":
+        return "on"
+    if v is False or v == "off":
+        return "off"
+    if isinstance(v, str):
+        return f'"{v}"' if v.startswith("#") else v
+    return str(v)
 
 
-def _states(value):
-    """`on` / `off` as the booleans YAML 1.1 reads them as (the schema's own
-    form), leaving every mapping and colour as it is."""
-    if value == "on":
-        return True
-    if value == "off":
-        return False
+def _leaf(value) -> str:
+    """A look for one target: a state word, or a flow mapping with air in it —
+    `{ brightness: 30, ct: warm }`, the room files' own shape."""
     if isinstance(value, dict):
-        return {k: _states(v) for k, v in value.items()}
-    return value
+        return "{ " + ", ".join(f"{k}: {_scalar(v)}" for k, v in value.items()) + " }"
+    return _scalar(value)
+
+
+def snippet(name: str, look: dict, label: str | None = None) -> str:
+    """The block to paste under the room's `scenes:` — every role on its own
+    line, a leaf look in flow style, a role's places one under the other.
+    Written by hand rather than dumped: a dumper spells `off` as `false` and
+    folds a scene of scalars onto one line, and neither is how a room file
+    reads."""
+    lines = ["scenes:", f"  {name}:"]
+    if label:
+        lines.append(f"    label: {_scalar(label)}")
+    for role, value in look.items():
+        places = isinstance(value, dict) and any(isinstance(v, dict) for v in value.values())
+        places = places or (
+            isinstance(value, dict) and any(v in ("on", "off", True, False) for v in value.values())
+        )
+        if places:
+            lines.append(f"    {role}:")
+            lines += [f"      {place}: {_leaf(v)}" for place, v in value.items()]
+        else:
+            lines.append(f"    {role}: {_leaf(value)}")
+    return "\n".join(lines) + "\n"
