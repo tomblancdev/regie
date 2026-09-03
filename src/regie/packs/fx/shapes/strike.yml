@@ -1,16 +1,27 @@
-# strike — one lightning strike, the way it looks: a leader flash, a dark gap,
-# one to three weaker after-flickers, the return stroke, a tail fading out.
-# Every number inside [lo, hi] is drawn at run time — the shape is the stroke
-# logic, the ranges are the leash. Whole strike ≈ 0.5–1.5 s, most of it the
-# tail; two runs never look the same.
-summary: a lightning strike — a leader, flickers, the return stroke, a fading tail
+# strike — un éclair tel que l'œil le lit dans une pièce DÉJÀ ALLUMÉE : un canal
+# bleu-blanc froid qui pointe AU-DESSUS de la pièce, avec la pièce elle-même
+# dessous. La couleur est celle de LA FORME et non celle de la cible — un éclair
+# dans une pièce rouge était un éclair rouge. Un vrai canal d'éclair se lit
+# bleu-blanc à travers l'air, et sur des ampoules dont la température de couleur
+# s'arrête à 4000 K (H42-r) un blanc froid ne peut se dire qu'en RGB : il se dit
+# donc ici.
+# LA TRAÎNE ATTERRIT SUR L'AMBIANCE, jamais sur le noir : ce qui suit un éclair
+# est la pièce, pas une panne de courant. L'ancienne traîne était un `fade` vers
+# 0 posé APRÈS un `flash`, qui finit lui-même éteint — donc elle fondait une
+# ampoule déjà noire, et ces 0,3 à 0,8 s étaient du noir en plus, le plus gros
+# contributeur à l'obscurité de tout l'effet.
+# Les arcs ne sont plus des `flash` pour la même raison : `flash` finit toujours
+# dans le noir, ce qui doublait aussi l'intervalle sombre (0,10-0,22 s là où le
+# commentaire annonçait 0,04-0,10). Les scintillements gardent `flash`, où un
+# top on/off est exactement juste.
+summary: a lightning strike — a leader, flickers, the return stroke, then the room
 icon: mdi:weather-lightning
 tags: { kind: light, mood: storm }
 needs: { step: 0.04 }
-fields: { colour: null, intensity: 100 }
+fields: { colour: "#cfe0ff", intensity: 100, back: 0.4 }
 steps:
-  - { use: flash, level: $intensity, hold: [0.06, 0.12], colour: $colour }     # the leader
-  - { level: 0, hold: [0.04, 0.10] }                                            # dark
-  - { use: flash, level: [20, 50], hold: [0.04, 0.09], times: [1, 3], colour: $colour }   # the flickers
-  - { use: flash, level: [70, 100], hold: [0.08, 0.14], colour: $colour }      # the return stroke
-  - { use: fade, to: 0, over: [0.3, 0.8] }                                      # the tail
+  - { level: $intensity, colour: $colour, hold: [0.05, 0.09] }                            # le traceur
+  - { level: 0, hold: [0.04, 0.09] }                                                      # l'intervalle sombre
+  - { use: flash, level: [20, 50], hold: [0.04, 0.08], times: [1, 3], colour: $colour }   # les scintillements
+  - { level: [70, 100], colour: $colour, hold: [0.08, 0.14] }                             # l'arc de retour
+  - { ambient: true, transition: $back, hold: $back }                                     # la pièce, de retour

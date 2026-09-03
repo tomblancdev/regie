@@ -163,6 +163,21 @@ def _hold_action(hold, envelope_step: float, notes: list[str], where: str) -> di
     return {"delay": hold}
 
 
+def _ambient_action(transition) -> dict:
+    """`ambient:` — la pièce TELLE QUE L'EXÉCUTION L'A TROUVÉE, au milieu de la
+    séquence : l'instantané remis. La scène est créée une fois en haut du script
+    et détruite tout en bas, donc une forme peut l'appeler autant qu'elle veut —
+    `scene.turn_on` ne la consomme pas et accepte une transition. C'est ce qui
+    permet à un orage d'éclairer une pièce DÉJÀ ALLUMÉE : entre deux éclairs la
+    pièce est elle-même, pas du noir."""
+    a: dict = {"action": "scene.turn_on", "target": {"entity_id": "scene.{{ snapshot }}"}}
+    if _is_expr(transition):
+        a["data"] = {"transition": "{{ " + _expr(transition, "time") + " }}"}
+    elif transition:
+        a["data"] = {"transition": float(transition)}
+    return a
+
+
 def _set_action(level, colour, transition) -> dict:
     """One light.turn_on: the level and the transition as an expression each
     (a constant, a field, a draw); the colour a constant list, the script's
@@ -217,6 +232,27 @@ def _expand(
                     raise HouseError(f"fx: {where}: {inner_id} has no field {k!r}")
                 inner_bind[k] = _value(v, bindings)
             actions += _expand(inner_id, shapes, inner_bind, backend, notes, depth + 1, name)
+            continue
+        if step.get("ambient"):
+            for k in ("level", "colour"):
+                if k in step:
+                    raise HouseError(
+                        f"fx: {where}: `ambient` est la pièce telle qu'elle a été trouvée, "
+                        f"elle ne prend pas de {k!r}"
+                    )
+            actions.append(_ambient_action(_value(step.get("transition", 0), bindings)))
+            delay = _hold_action(_value(step.get("hold"), bindings), step_floor, notes, where)
+            if delay:
+                actions.append(delay)
+            continue
+        if set(step) == {"hold"}:
+            # un pas qui ne dit QU'UN `hold:` est une ATTENTE. Sans cette
+            # branche il prenait `level: 100` par défaut : une attente était
+            # inexprimable, et « attendre » est la chose la plus naturelle à
+            # écrire au milieu d'une séquence.
+            delay = _hold_action(_value(step["hold"], bindings), step_floor, notes, where)
+            if delay:
+                actions.append(delay)
             continue
         level = _value(step.get("level", "$level" if "level" in bindings else 100), bindings)
         colour = _value(step.get("colour", "$colour" if "colour" in bindings else None), bindings)
@@ -309,10 +345,15 @@ def script(c: Compiled, house_label: str) -> dict:
         {
             "if": [{"condition": "template", "value_template": "{{ restore }}"}],
             "then": [
-                {"action": "scene.turn_on", "target": {"entity_id": "scene.{{ snapshot }}"}},
-                {"action": "scene.delete", "target": {"entity_id": "scene.{{ snapshot }}"}},
+                {"action": "scene.turn_on", "target": {"entity_id": "scene.{{ snapshot }}"}}
             ],
         },
+        # la scène part QUOI QUE DISE `restore` : elle était détruite dans la
+        # branche restore seule, donc une forme `restore: false` laissait une
+        # entité scene.fx_* derrière elle À CHAQUE exécution, pour toute la vie
+        # du cerveau. Six formes finissent ainsi maintenant (fade, neon, dying,
+        # drain, dawn, prime, powerdown).
+        {"action": "scene.delete", "target": {"entity_id": "scene.{{ snapshot }}"}},
     ]
     return {
         "alias": f"fx — {c.id}",

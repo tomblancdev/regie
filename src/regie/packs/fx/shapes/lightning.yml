@@ -1,12 +1,26 @@
-# lightning — a storm: several strikes with dark between them, the wait drawn
-# each time. The offsets between rooms (the strike reaching the hall 250 ms
-# later) come with the stories (W8).
-summary: a storm — strikes with random dark between them
+# lightning — un orage dans une pièce qui reste ALLUMÉE. L'ancienne forme tenait
+# `level: 0` pendant 2 à 9 secondes entre les éclairs, trois à six fois : une
+# exécution durait 6 à 54 s dont 2 à 9 étaient éclairées. L'effet était une
+# pièce noire avec deux flashs dedans.
+# Écrit comme un ARC et non comme une répétition — un lavis à l'horizon sans
+# craquement, un éclair plus près, un autre lavis, celui d'aplomb, un long
+# apaisement — parce que le `repeat:` d'une forme enveloppe TOUS ses pas et ne
+# peut donc lui donner ni ouverture ni fin. `passes` rejoue l'arc.
+# Une remarque que seule la pièce donne : dans une pièce éclairée chaud,
+# au-dessus d'environ 60 % d'ambiance, c'est la COULEUR qui se lit comme un
+# éclair autant que le niveau.
+summary: a storm — far flashes, two strikes, the room between them
 icon: mdi:weather-lightning-rainy
 tags: { kind: light, mood: storm }
 needs: { step: 0.04 }
-fields: { colour: null }
+fields: { colour: "#cfe0ff", passes: 1 }
 steps:
-  - { use: strike, colour: $colour }
-  - { level: 0, hold: [2, 9] }
-repeat: [3, 6]
+  - { level: [45, 70], colour: $colour, transition: 0.08, hold: [0.15, 0.3] }   # loin : un lavis, pas de craquement
+  - { ambient: true, transition: 0.3, hold: [1.2, 2.8] }
+  - { use: strike, colour: $colour, intensity: [55, 80], back: 0.5 }            # plus près
+  - { hold: [0.8, 2.2] }                                                        # une ATTENTE
+  - { level: [50, 75], colour: $colour, transition: 0.08, hold: [0.15, 0.3] }   # loin, encore
+  - { ambient: true, transition: 0.25, hold: [0.6, 1.6] }
+  - { use: strike, colour: $colour, intensity: 100, back: 0.8 }                 # d'aplomb
+  - { hold: [1.5, 3] }
+repeat: $passes
