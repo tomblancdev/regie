@@ -410,7 +410,7 @@ def test_pull_follows_the_editor_moves_and_names_what_it_cannot_place(witness):
     assert blocks["living"]["at"]["main"]["front_left"] == [133, 97], "rounded to the centimetre"
     assert {"at": [300, 320], "width": 75, "flip_v": True} in blocks["living"]["doors"]
     assert blocks["living"]["at"]["lamp"] == [50, 50], "the picker's item is found by its entity"
-    assert any("area 'area_p0o9' (Terrasse) is not a room" in n for n in notes)
+    assert any("area 'area_p0o9' (Terrasse, HA area -) is no room of the house" in n for n in notes)
     assert any("item item_q2w3 (light.nobody) is no thing" in n for n in notes)
 
 
@@ -463,3 +463,92 @@ def test_find_card_looks_into_views_and_sections():
         is card
     )
     assert find_card({"views": [{"cards": [{"type": "markdown"}]}]}) is None
+
+
+def test_pull_reads_what_the_editor_saves(witness):
+    """Read live 2026-09-03: on Save the editor re-mints every id (`area_…`,
+    `item_…`, `door_…`) and keeps the link to the Home Assistant area in
+    `haArea` and the room's name — the HA area ids are what the conductor
+    adopted by alias or made from the label (salon, la_reserve). A room is found
+    by any of those; a thing by the entity a row names; a Zigbee address inside
+    an entity id names the thing it belongs to without placing it."""
+    from regie.plan import pull, room_keys, slug
+
+    assert slug("La Réserve") == "la_reserve" and slug("L'Atelier") == "l_atelier"
+    keys = room_keys(witness)
+    assert keys["salon"] == "living" and keys["le_salon"] == "living" and keys["living"] == "living"
+    assert keys["entree"] == "hall", "a label, slugged the way HA makes an area id"
+    card = {
+        "type": "custom:easy-floorplan-card",
+        "width": 800,
+        "height": 600,
+        "floors": [
+            {
+                "id": "ground",
+                "areas": [
+                    {
+                        "id": "area_5m1by2h",
+                        "name": "Salon",
+                        "haArea": "salon",
+                        "points": [
+                            {"x": 20, "y": 20},
+                            {"x": 420, "y": 20},
+                            {"x": 420, "y": 320},
+                            {"x": 20, "y": 320},
+                        ],
+                    },
+                    {
+                        "id": "area_x",
+                        "name": "Entrée",
+                        "haArea": "hall",
+                        "points": [
+                            {"x": 440, "y": 20},
+                            {"x": 780, "y": 20},
+                            {"x": 780, "y": 200},
+                            {"x": 440, "y": 200},
+                        ],
+                    },
+                    {
+                        "id": "area_y",
+                        "name": "Terrasse",
+                        "haArea": "terrasse",
+                        "points": [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 1, "y": 1}],
+                    },
+                ],
+                "openings": [
+                    {
+                        "id": "door_kmmv3y8",
+                        "type": "door",
+                        "x": 610,
+                        "y": 20,
+                        "length": 90,
+                        "entity": "binary_sensor.hall_door",
+                    }
+                ],
+                "items": [
+                    {"id": "item_hfo6gfa", "entity": "light.living_ceiling", "x": 100, "y": 90},
+                    {
+                        "id": "item_snw29um",
+                        "entity": "sensor.0x000d6ffffe000004_temperature",
+                        "x": 300,
+                        "y": 300,
+                    },
+                    {"id": "item_q", "entity": "media_player.nobody", "x": 1, "y": 1},
+                ],
+                "walls": [],
+            }
+        ],
+    }
+    blocks, notes = pull(witness, card)
+    assert set(blocks) == {"living", "hall"}
+    assert blocks["living"]["at"]["main"]["front_left"] == [100, 90]
+    assert blocks["living"]["at"]["lamp"] == [390, 290], "an unfilled place keeps its old point"
+    assert blocks["hall"]["doors"] == [
+        {"at": [610, 20], "width": 90, "role": "door", "to": "outside"}
+    ]
+    assert any("Terrasse" in n and "no room of the house" in n for n in notes)
+    assert any(
+        "living_thermostat" in n and "entity: sensor.0x000d6ffffe000004_temperature" in n
+        for n in notes
+    ), "a Zigbee address names the thing without placing it"
+    assert any("media_player.nobody" in n and "`entity:`" in n for n in notes)

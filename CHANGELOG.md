@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.2 — le brouillon lu comme l'éditeur l'écrit (2026-09-03)
+
+Lu au premier `plan pull` réel : l'éditeur, à Save, refrappe chaque id
+(`area_…`, `item_…`, `door_…`) et garde le lien vers l'aire de Home Assistant
+(`haArea` : `salon`, `cuisine`, `les_douches`… — l'id adopté par alias, ou fait
+depuis le label) et le nom. Le pull ne trouvait aucune pièce et n'écrivait
+rien : 63 notes, zéro fichier. Une pièce est trouvée par n'importe lequel de
+ses mots — son id, son label, ses alias — slugués comme Home Assistant fait un
+id (`slug`, NFKD → ascii → minuscules → `_`). Une chose est trouvée par
+l'entité que le moteur dérive OU par celle que sa ligne nomme (`entity:` — le
+Denon, la hotte : un `kind` inconnu du produit ne dérive rien). Une adresse
+Zigbee dans un id d'entité nomme la chose sans la placer (une note qui dit
+quoi écrire). Une pièce dessinée deux fois garde le premier contour. Un test de
+plus, sur la forme exacte lue.
+
 ## 0.14.1 — l'atelier s'ouvre, et la carte est surveillée (2026-09-03)
 
 Lu à la première convergence : `lovelace/dashboards: unknown_command`. La

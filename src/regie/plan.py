@@ -19,6 +19,7 @@ centimetre. What the pull cannot place is named, never dropped in silence.
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 
 import yaml
@@ -92,20 +93,74 @@ def _edge_distance(outline: list, point: list) -> float:
     return best if best is not None else float("inf")
 
 
+def slug(text: str) -> str:
+    """What Home Assistant makes of a label as an id: ascii, lower, one
+    underscore between words (« La Réserve » → la_reserve, « L'Atelier » → l_atelier)."""
+    ascii_ = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "_", ascii_.lower()).strip("_")
+
+
+def room_keys(house: House) -> dict[str, str]:
+    """Every name a room answers to → its id: the id itself, its label, its
+    aliases (what people say — and what the conductor adopted an area by), all
+    as Home Assistant would slug them. The editor rewrites an area's id and
+    keeps the link to the HA area (`haArea`) and the name; either finds the room."""
+    out: dict[str, str] = {}
+    for a in house.areas:
+        for word in [a["id"], a.get("label") or ""] + list(a.get("aliases") or []):
+            if word:
+                out.setdefault(slug(word), a["id"])
+    return out
+
+
+def _room_of_area(house: House, keys: dict[str, str], area: dict) -> str | None:
+    for word in (area.get("id"), area.get("haArea"), area.get("name")):
+        if word and slug(str(word)) in keys:
+            return keys[slug(str(word))]
+    return None
+
+
+_IEEE = re.compile(r"0x[0-9a-f]{16}")
+
+
+def _thing_of_entity(house: House, by_entity: dict, entity: str) -> tuple[dict | None, str | None]:
+    """The thing behind an entity the editor's picker chose: the entity the
+    engine derives, or the one a row names (`entity:`); failing both, a Zigbee
+    address inside the id names the thing without placing it (a hint)."""
+    if entity in by_entity:
+        return by_entity[entity], None
+    m = _IEEE.search(entity)
+    if m:
+        for t in house.things:
+            if (t.get("ieee") or "").lower() == m.group(0):
+                return None, (
+                    f"{entity} is {t['id']}'s ({t.get('label') or t['kind']}) — "
+                    f"name it on the row (`entity: {entity}`) and give it a room and a role"
+                )
+    return None, None
+
+
 def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
     """The card as a person left it → one `plan:` block per room, and the notes."""
     notes: list[str] = []
     by_entity = {house.entity(t): t for t in house.things if house.entity(t)}
+    by_entity.update({t["entity"]: t for t in house.things if t.get("entity")})
     by_id = {t["id"]: t for t in house.things}
-    area_ids = {a["id"] for a in house.areas}
+    keys = room_keys(house)
     blocks: dict[str, dict] = {}
     outlines: dict[str, list] = {}
 
     for f in _floors(card):
         for a in f.get("areas") or []:
-            rid = a.get("id")
-            if rid not in area_ids:
-                notes.append(f"area {rid!r} ({a.get('name') or '?'}) is not a room — skipped")
+            rid = _room_of_area(house, keys, a)
+            if rid is None:
+                notes.append(
+                    f"area {a.get('id')!r} ({a.get('name') or '?'}, HA area "
+                    f"{a.get('haArea') or '-'}) is no room of the house — skipped"
+                )
+                continue
+            if rid in blocks:
+                notes.append(f"{rid}: drawn twice ({a.get('id')}) — the first outline is kept")
                 continue
             pts = [_pt(p["x"], p["y"]) for p in a.get("points") or []]
             if len(pts) < 3:
@@ -135,7 +190,7 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
                 continue
             kind = "windows" if o.get("type") == "window" else "doors"
             entry: dict = {"at": point, "width": int(round(float(o.get("length") or 80)))}
-            thing = by_entity.get(o.get("entity") or "")
+            thing, _hint = _thing_of_entity(house, by_entity, o.get("entity") or "")
             if thing and thing.get("role") and thing["area"] == rid:
                 entry["role"] = thing["role"]
             if o.get("flipH"):
@@ -150,11 +205,13 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
             blocks[rid].setdefault(kind, []).append(entry)
 
         for it in f.get("items") or []:
-            thing = by_entity.get(it.get("entity") or "") or by_id.get(it.get("id") or "")
+            thing, hint = _thing_of_entity(house, by_entity, it.get("entity") or "")
+            thing = thing or by_id.get(it.get("id") or "")
             if not thing:
                 notes.append(
-                    f"item {it.get('id')} ({it.get('entity') or it.get('name') or '?'}) is no "
-                    "thing of the house — skipped"
+                    hint
+                    or f"item {it.get('id')} ({it.get('entity') or it.get('name') or '?'}) is no "
+                    "thing of the house — a row naming it (`entity:`) would place it; skipped"
                 )
                 continue
             rid, role = thing["area"], thing.get("role")
