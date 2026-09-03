@@ -638,3 +638,20 @@ def test_pull_walls_and_rewrite_keep_the_rest_of_the_plan_file(tmp_path):
     g.write_text("size: [800, 600]\n", encoding="utf-8")
     assert rewrite_walls(g, walls) is True
     assert yaml.safe_load(g.read_text(encoding="utf-8"))["walls"] == walls
+
+
+def test_a_point_the_card_placed_stays_even_outside_its_room(witness):
+    """Read live 2026-09-03: Le Passage's air sensor sits on La Cantine's side
+    of the line by Tom's word, and the pull dropped it as if it were a stale
+    memory. Only a KEPT point is dropped when outside; a badge a person placed
+    is written where it is, and `check` is what says it is outside."""
+    from regie.plan import pull
+
+    card = _witness_card(witness)
+    floor = card["floors"][0]
+    for it in floor["items"]:
+        if it["id"] == "living_floor_lamp":
+            it["x"], it["y"] = 600, 100  # inside the hall's outline, not the living's
+    blocks, notes = pull(witness, card)
+    assert blocks["living"]["at"]["lamp"] == [600, 100], "placed by a person: kept as is"
+    assert not any("lamp" in n and "fell outside" in n for n in notes)

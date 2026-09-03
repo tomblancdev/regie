@@ -170,6 +170,7 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
             blocks[rid] = {"outline": pts}
 
     old_plans = {a["id"]: (a.get("plan") or {}) for a in house.areas}
+    placed: set[tuple] = set()  # (room, role, place) the CARD placed - a person's gesture
     # a point is where a PLACE is, whether or not a thing hangs there yet: the
     # card draws no badge for an unfilled place, so the old block's points stay
     # the base and the card's badges override them
@@ -232,17 +233,24 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
                     )
                     continue
                 at.setdefault(role, {})[place] = point
+                placed.add((rid, role, place))
             else:
                 at[role] = point
-    # a kept point (a place nothing fills yet) that fell outside the room's NEW
+                placed.add((rid, role, None))
+    # a KEPT point (a place nothing fills yet) that fell outside the room's NEW
     # outline is dropped and named: a room that moved in the editor left it
-    # behind, and a point outside its room is a wrong answer, not a memory
+    # behind, and a point outside its room is a wrong answer, not a memory. A
+    # point the card PLACED stays wherever it is - a person put it there (the
+    # air sensor of Le Passage sits on La Cantine's side; check says so) - read
+    # live 2026-09-03, when the first cut dropped it
     for rid, block in blocks.items():
         at = block.get("at") or {}
         for role in list(at):
             v = at[role]
             if isinstance(v, dict):
                 for place in list(v):
+                    if (rid, role, place) in placed:
+                        continue
                     if not floorplan.inside(block["outline"], v[place]):
                         notes.append(
                             f"{rid}: {role}/{place} at {v[place]} fell outside the room's new "
@@ -251,7 +259,7 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
                         del v[place]
                 if not v:
                     del at[role]
-            elif not floorplan.inside(block["outline"], v):
+            elif (rid, role, None) not in placed and not floorplan.inside(block["outline"], v):
                 notes.append(
                     f"{rid}: {role} at {v} fell outside the room's new outline — dropped "
                     "(place it again once a thing hangs there)"

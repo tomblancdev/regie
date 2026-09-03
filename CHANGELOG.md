@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.1 — un point posé reste où on l'a posé (2026-09-03)
+
+Lu au premier aller-retour complet : le capteur d'air du Passage, posé côté
+Cantine par le mot de Tom, a été RETIRÉ par le pull comme un souvenir périmé —
+la règle de 0.14.3 (un point gardé hors du nouveau contour est retiré)
+s'appliquait à tous les points. Elle ne s'applique qu'aux points GARDÉS (une
+place que rien ne remplit) ; un badge qu'une personne a posé est écrit là où
+il est, hors contour ou non, et c'est `check` qui le dit. Un test de plus.
+
 ## 0.15.0 — les murs sont ceux qu'on a dessinés (2026-09-03)
 
 Tom, devant l'onglet : *« seems that you didn't took the plan I made, notably
