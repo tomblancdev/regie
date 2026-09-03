@@ -38,22 +38,17 @@ automation: !include automations.yaml
 scene: !include scenes.yaml
 script: !include scripts.yaml
 
-{% if data.house.theme is defined or plan %}
+{% if data.house.theme is defined %}
 # the house's skin: every file of themes/ merged (the engine renders one), and
 # the typefaces as a module the frontend loads on every page - a theme can name
-# a family but not load one, and Home Assistant ships only Roboto. The plan's
-# card rides the same seam (0.13): one module, loaded once, no store involved
+# a family but not load one, and Home Assistant ships only Roboto. NOT the
+# plan's card: a module that DEFINES an element must load after the app (a
+# Lovelace resource, registered by apply) - imported here it races the app's
+# scoped-registry polyfill and loses its element (floorplan.py, 0.13.2)
 frontend:
-{% if data.house.theme is defined %}
   themes: !include_dir_merge_named themes
-{% endif %}
   extra_module_url:
-{% if data.house.theme is defined %}
     - /local/regie-skin.js
-{% endif %}
-{% if plan %}
-    - /local/easy-floorplan-card.js
-{% endif %}
 
 {% endif %}
 lovelace:

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.13.2 — la carte est une ressource, jamais un module de l'index (2026-09-03)
+
+Lu sur Firefox et sur le téléphone, la carte du plan répondait « Configuration
+error » sans un mot : le module s'importait, s'exécutait jusqu'à sa dernière
+ligne (`customCards` la nomme, son Lit est compté), et
+`customElements.get('easy-floorplan-card')` restait vide. La raison est dans
+le frontend de Home Assistant : sa première ligne installe le polyfill
+`scoped-custom-element-registry`, dont `get` et `whenDefined` ne lisent que
+LEUR table. Un module importé par l'index (`extra_module_url`) court contre
+l'application ; quand il gagne — le service worker le sert depuis son cache —
+il définit son élément dans le registre NATIF, que le polyfill ne consulte
+jamais : l'élément existe et le frontend jure qu'il n'existe pas. Le harnais
+de la veille passait dans trois moteurs parce qu'il n'avait pas de polyfill.
+
+La carte est donc une RESSOURCE Lovelace, que le frontend charge après son
+propre démarrage, donc après le polyfill, à chaque fois : `apply` gagne un pas
+`resource plan` (`lovelace/resources` sur le websocket — un seul enregistrement,
+clé sur le chemin du fichier ; la version dans l'URL, `?v=1.6.1`, fait d'un bump
+un fichier neuf pour tous les caches ; une ancienne URL est réécrite ; une
+maison sans plan n'en possède pas). Le bloc `frontend:` ne porte plus que la
+peau. Un `haArea` faux (l'id d'une aire chez Home Assistant est celui du chef
+d'orchestre, `salon` et non `living_room`) est retiré des aires. Deux tests de
+plus sur le pas, un harnais headless dans les notes.
+
 ## 0.13.1 — une ambiance lue s'écrit comme une pièce l'écrit (2026-09-03)
 
 Lu sur le cerveau, La Cantine toute éteinte : `regie look` sortait

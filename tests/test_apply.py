@@ -59,6 +59,7 @@ class FakeHA(HomeAssistant):
         # the frontend's themes: what the brain has READ (a restart reads themes/)
         # and the default it hands anyone who has never chosen one
         self.themes: dict[str, dict] = {"temoin": {}}
+        self.resources: list[dict] = []  # the lovelace resources (storage mode)
         self.default_theme = "default"
         self.default_dark_theme = None
         self.codes: dict[str, str] = {}
@@ -684,6 +685,27 @@ class FakeHA(HomeAssistant):
                 "default_theme": self.default_theme,
                 "default_dark_theme": self.default_dark_theme,
             }
+        if type_ == "lovelace/resources":
+            return list(self.resources)
+        if type_ == "lovelace/resources/create":
+            item = {
+                "id": f"r{len(self.resources) + 1}",
+                "type": payload["res_type"],
+                "url": payload["url"],
+            }
+            self.resources.append(item)
+            return item
+        if type_ == "lovelace/resources/update":
+            for r in self.resources:
+                if r["id"] == payload["resource_id"]:
+                    r.update({k: v for k, v in payload.items() if k == "url"})
+                    if "res_type" in payload:
+                        r["type"] = payload["res_type"]
+                    return r
+            raise AssertionError(payload)
+        if type_ == "lovelace/resources/delete":
+            self.resources = [r for r in self.resources if r["id"] != payload["resource_id"]]
+            return None
         raise AssertionError(type_)
 
 
@@ -1591,3 +1613,50 @@ def test_pair_ends_a_light_in_a_known_state(witness, secrets, tmp_path):
     on = [x for x in ha.log if x == "POST /api/services/light/turn_on"]
     off = [x for x in ha.log if x == "POST /api/services/light/turn_off"]
     assert on and off, "the adoption blink: on bright, a breath, off - the state agrees after"
+
+
+# --- the plan's card as a lovelace resource (0.13.2) --------------------------------
+def test_the_plan_card_is_a_lovelace_resource_registered_once(witness, secrets, tmp_path):
+    """Read live on 2026-09-03: imported through extra_module_url the card raced
+    Home Assistant's app and lost its element to the scoped-registry polyfill.
+    A resource loads after the app. The conductor registers exactly one, keyed
+    on the file, rewrites it when the version in the URL moves, and never
+    registers it twice."""
+    from regie.floorplan import CARD_URL
+
+    ha = FakeHA()
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["resource plan"] == "changed"
+    assert [r["url"] for r in ha.resources] == [CARD_URL]
+    assert ha.resources[0]["type"] == "module"
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["resource plan"] == "ok"
+    assert len(ha.resources) == 1, "a second run adds nothing"
+    # an older version of the card on the brain: the one resource is rewritten
+    ha.resources[0]["url"] = "/local/easy-floorplan-card.js?v=0.0.1"
+    steps = apply(witness, secrets, tmp_path, ha, check=True)
+    assert states(steps)["resource plan"] == "would"
+    assert ha.resources[0]["url"].endswith("v=0.0.1"), "check changes nothing"
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["resource plan"] == "changed" and ha.resources[0]["url"] == CARD_URL
+
+
+def test_a_house_without_a_plan_owns_no_card_resource(house_with, secrets, tmp_path):
+    import yaml
+
+    home = house_with(lambda d: d.pop("plan"))
+    for room in ("living", "hall"):
+        f = home.parent / "rooms" / f"{room}.yml"
+        data = yaml.safe_load(f.read_text(encoding="utf-8"))
+        data.pop("plan")
+        f.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    house = load_house(home)
+    ha = FakeHA()
+    ha.resources.append(
+        {"id": "r1", "type": "module", "url": "/local/easy-floorplan-card.js?v=1.0.0"}
+    )
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert states(steps)["resource plan"] == "changed"
+    assert ha.resources == [], "a resource for a plan the house does not draw is removed"
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert "resource plan" not in states(steps)

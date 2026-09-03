@@ -22,6 +22,19 @@ import math
 
 from .house import House
 
+# the card as the frontend loads it: a LOVELACE RESOURCE, registered by the
+# conductor (apply.py), never `extra_module_url`. The index imports an extra
+# module while the app itself is still loading, and Home Assistant's app
+# installs the scoped-custom-element-registry polyfill as its first line: a
+# module that wins that race defines its element in the NATIVE registry, which
+# the polyfill's `get` and `whenDefined` never consult - the card exists and the
+# frontend says it does not (read live on Firefox and the phone, 2026-09-03).
+# A resource is loaded by the frontend after its bootstrap, so after the
+# polyfill, every time. The version in the URL turns a bump into a new file
+# for every cache between the brain and a phone.
+CARD_VERSION = "1.6.1"  # VENDOR.md
+CARD_URL = f"/local/easy-floorplan-card.js?v={CARD_VERSION}"
+
 GLOW = 130  # how far a light at full brightness pools its colour, in centimetres
 OPACITY = 0.5  # how strongly the house's own drawing shows under the walls
 

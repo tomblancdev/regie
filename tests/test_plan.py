@@ -102,9 +102,13 @@ def test_a_door_bound_to_its_sensor_follows_it_and_the_sensor_is_not_drawn_twice
     assert hall["entity"] == "binary_sensor.hall_motion" and hall["highlight"] == "fill"
 
 
-def test_the_module_rides_the_skin_seam(rendered):
+def test_the_card_is_never_an_extra_module(rendered):
+    """An extra module is imported by the index while the app loads; the card
+    defines an element and must load AFTER the app's registry polyfill — so it
+    is a lovelace resource (apply), and the frontend block carries the skin alone."""
     cfg = (rendered / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
-    assert "    - /local/regie-skin.js\n    - /local/easy-floorplan-card.js\n" in cfg
+    assert "    - /local/regie-skin.js\n" in cfg
+    assert "easy-floorplan" not in cfg
 
 
 def _strip_room_plans(home):
@@ -121,7 +125,7 @@ def test_no_plan_no_tab_no_module(house_with, secrets, tmp_path):
     assert "plan" not in {v["path"] for v in dashboard(tmp_path)["views"]}
     assert not (tmp_path / "home-assistant/www/easy-floorplan-card.js").exists()
     cfg = (tmp_path / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
-    assert "easy-floorplan" not in cfg and "/local/regie-skin.js" in cfg
+    assert "/local/regie-skin.js" in cfg
 
 
 def test_a_frame_with_no_room_drawn_is_a_hint_not_a_tab(house_with):
