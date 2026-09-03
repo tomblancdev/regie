@@ -234,6 +234,31 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
                 at.setdefault(role, {})[place] = point
             else:
                 at[role] = point
+    # a kept point (a place nothing fills yet) that fell outside the room's NEW
+    # outline is dropped and named: a room that moved in the editor left it
+    # behind, and a point outside its room is a wrong answer, not a memory
+    for rid, block in blocks.items():
+        at = block.get("at") or {}
+        for role in list(at):
+            v = at[role]
+            if isinstance(v, dict):
+                for place in list(v):
+                    if not floorplan.inside(block["outline"], v[place]):
+                        notes.append(
+                            f"{rid}: {role}/{place} at {v[place]} fell outside the room's new "
+                            "outline — dropped (place it again once a thing hangs there)"
+                        )
+                        del v[place]
+                if not v:
+                    del at[role]
+            elif not floorplan.inside(block["outline"], v):
+                notes.append(
+                    f"{rid}: {role} at {v} fell outside the room's new outline — dropped "
+                    "(place it again once a thing hangs there)"
+                )
+                del at[role]
+        if "at" in block and not block["at"]:
+            del block["at"]
     for rid in blocks:
         if "at" in blocks[rid]:
             # the layout's own order, then the roles as the room declares them

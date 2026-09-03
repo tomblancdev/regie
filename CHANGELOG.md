@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.3 — un point gardé suit la pièce, ou s'en va (2026-09-03)
+
+Lu au premier vrai `plan pull` : les deux cellules échangées dans l'éditeur, et
+le point du plafonnier d'une pièce dont le rôle n'est pas encore rempli resté
+là où était l'ANCIENNE cellule — hors du nouveau contour. Un point gardé (une
+place que rien ne remplit) qui tombe hors du nouveau contour de sa pièce est
+retiré et nommé : un point hors de sa pièce est une mauvaise réponse, pas un
+souvenir. Un test de plus.
+
 ## 0.14.2 — le brouillon lu comme l'éditeur l'écrit (2026-09-03)
 
 Lu au premier `plan pull` réel : l'éditeur, à Save, refrappe chaque id

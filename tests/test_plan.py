@@ -552,3 +552,28 @@ def test_pull_reads_what_the_editor_saves(witness):
         for n in notes
     ), "a Zigbee address names the thing without placing it"
     assert any("media_player.nobody" in n and "`entity:`" in n for n in notes)
+
+
+def test_a_kept_point_outside_a_moved_room_is_dropped_and_named(witness):
+    """Read on the first real pull: the two cells were swapped in the editor,
+    and the ceiling point of the role nothing fills yet stayed where the OLD
+    cell was — outside the new outline. Kept points follow the room or go."""
+    from regie.plan import pull
+
+    card = _witness_card(witness)
+    floor = card["floors"][0]
+    living = next(a for a in floor["areas"] if a["id"] == "living")
+    living["points"] = [
+        {"x": 20, "y": 20},
+        {"x": 200, "y": 20},
+        {"x": 200, "y": 200},
+        {"x": 20, "y": 200},
+    ]
+    floor["items"] = [i for i in floor["items"] if i["id"] != "living_floor_lamp"]
+    blocks, notes = pull(witness, card)
+    assert "lamp" not in blocks["living"]["at"], "the lamp's kept point [390, 290] is outside now"
+    assert any("living: lamp at [390, 290] fell outside" in n for n in notes)
+    assert "front_center" not in blocks["living"]["at"]["main"], (
+        "a kept place too: [220, 90] is out"
+    )
+    assert blocks["living"]["at"]["main"]["front_left"] == [120, 90], "what is inside stays"
