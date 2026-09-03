@@ -158,6 +158,37 @@ def test_lightning_keeps_the_room_alive_between_the_strikes():
     ), "un pas qui ne dit qu'un hold est une attente, pas un allumage à 100 %"
 
 
+def test_a_step_may_say_a_colour_temperature_and_a_clamp_is_spoken():
+    """`ct:` — la température de couleur, résolue à la compilation depuis les
+    mots de la maison. Et le mensonge silencieux devient une phrase : `cool` =
+    5500 K est demandé depuis W3a sur des ampoules qui s'arrêtent à 4000."""
+    sh = load_shapes()
+    c = compile_shape("neon", sh, load_backend("ha"))
+    kelvins = [a for a in c.actions if "color_temp_kelvin=5500" in str(a.get("data", ""))]
+    assert len(kelvins) == 4, "le tube bégaie FROID, pas dans la couleur de la pièce"
+    assert all("rgb_color" not in str(a.get("data", "")) for a in kelvins), (
+        "une couleur OU une température, jamais les deux — le schéma de HA les "
+        "met dans un même vol.Exclusive"
+    )
+    # sur une radio qui déclare son plafond, l'écrêtage est DIT
+    z = compile_shape("neon", sh, load_backend("zigbee"))
+    assert any("5500 K demandés" in n and "2200-4000 K" in n for n in z.notes)
+    # la carte de la maison l'emporte sur celle du produit
+    warm = compile_shape("neon", {**sh, "neon": {**sh["neon"],
+        "steps": [{"level": 100, "ct": "cool", "hold": 1}]}},
+        load_backend("ha"), {"cool": 3000})
+    assert "color_temp_kelvin=3000" in str(warm.actions[0]["data"])
+
+
+def test_a_step_refuses_a_colour_and_a_temperature_together():
+    sh = {"both": {"fields": {}, "steps": [{"level": 50, "colour": "#ff0000", "ct": "cool"}]}}
+    with pytest.raises(HouseError, match="une couleur OU une température"):
+        compile_shape("both", sh, load_backend("ha"))
+    bad = {"bad": {"fields": {}, "steps": [{"level": 50, "ct": "tiède"}]}}
+    with pytest.raises(HouseError, match="n'est pas une température"):
+        compile_shape("bad", sh | bad, load_backend("ha"))
+
+
 def test_the_scripts_render_with_snapshot_and_restore(rendered):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/fx.yaml").read_text(encoding="utf-8"))
     scripts = pkg["script"]

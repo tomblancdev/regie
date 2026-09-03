@@ -13,6 +13,8 @@ envelope:
   step: 0.1
   group_budget: { messages: 8, window: 9 }
   colour_in_motion: false
+  ct_range: [2200, 4000]         # TRÅDFRI CWS — MESURÉ dans la pièce : un `cool` de 5500 K
+                                 # est demandé depuis W3a et écrêté sans un mot
   program: [blink, breathe, brightness_move, brightness_step, identify, scene_recall]
 measured: false
 compiler: none         # lands with the walk's bench (0.5)

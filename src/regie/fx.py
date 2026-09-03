@@ -32,6 +32,50 @@ SHAPES = HERE / "shapes"
 BACKENDS = HERE / "backends"
 
 
+# ce que warm / neutral / cool veulent dire. La carte VIT ICI parce que c'est le
+# vocabulaire des effets ; `house.py` l'importe, et une maison la surcharge par
+# `fx.kelvin:`. Une seule vérité, un seul endroit.
+KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
+
+
+def _ct(raw, kelvin: dict, where: str):
+    """`ct:` — une TEMPÉRATURE de couleur : un mot de la maison (fx.yml
+    `kelvin:`), un nombre en kelvins, ou une plage tirée à l'exécution. Résolu
+    ICI, à la compilation : un `$champ` devrait porter un MOT jusque dans le
+    script, et aucune forme n'en a besoin — c'est refusé plutôt qu'à moitié
+    supporté."""
+    if isinstance(raw, str) and raw.startswith("$"):
+        raise HouseError(f"fx: {where}: `ct:` prend un mot ou un nombre, pas {raw}")
+    v = _value(raw, {})
+    if isinstance(v, Range):
+        return v
+    if isinstance(v, str):
+        if v not in kelvin:
+            raise HouseError(
+                f"fx: {where}: {v!r} n'est pas une température — "
+                f"{', '.join(sorted(kelvin))}, ou un nombre en kelvins"
+            )
+        return int(kelvin[v])
+    if isinstance(v, bool) or not isinstance(v, int | float):
+        raise HouseError(f"fx: {where}: `ct:` prend un mot ou un nombre, pas {raw!r}")
+    return int(v)
+
+
+def _ct_note(value, backend: dict, notes: list[str], where: str) -> None:
+    """Une température que le matériel n'atteint pas est DITE, pas laissée à
+    l'ampoule à écrêter en silence : ces globes s'arrêtent à 4000 K, et
+    `cool: 5500` a été demandé — et écrêté sans un mot — depuis W3a."""
+    rng = (backend.get("envelope") or {}).get("ct_range")
+    if not rng or isinstance(value, Range):
+        return
+    lo, hi = float(rng[0]), float(rng[1])
+    if not lo <= value <= hi:
+        notes.append(
+            f"{where.rsplit(' step', 1)[0]}: {value:g} K demandés, "
+            f"{backend['name']} atteint {lo:g}-{hi:g} K → l'ampoule écrête"
+        )
+
+
 def product_shapes() -> dict[str, dict]:
     out = {}
     for p in sorted(SHAPES.glob("*.yml")):
@@ -178,10 +222,12 @@ def _ambient_action(transition) -> dict:
     return a
 
 
-def _set_action(level, colour, transition) -> dict:
-    """One light.turn_on: the level and the transition as an expression each
-    (a constant, a field, a draw); the colour a constant list, the script's
-    colour_rgb, or nothing."""
+def _set_action(level, colour, transition, kelvin=None) -> dict:
+    """Un seul light.turn_on : le niveau et la transition en expression, puis UN
+    descripteur de couleur — une liste rgb constante, le colour_rgb du script,
+    une TEMPÉRATURE, ou rien. Un seul : le schéma de Home Assistant les met dans
+    un même groupe `vol.Exclusive`, donc un pas qui en porte deux est refusé à
+    la compilation plutôt qu'au moment où la lumière ne s'allume pas."""
     base = (
         "{'brightness_pct': "
         + _expr(level, "int")
@@ -189,6 +235,12 @@ def _set_action(level, colour, transition) -> dict:
         + _expr(transition, "time")
         + "}"
     )
+    if kelvin is not None:
+        return {
+            "action": "light.turn_on",
+            "target": {"entity_id": "{{ target }}"},
+            "data": "{{ dict(" + base + ", color_temp_kelvin=" + _expr(kelvin, "int") + ") }}",
+        }
     if isinstance(colour, Ref):
         data_t = (
             "{% set d = " + base + " %}"
@@ -210,10 +262,12 @@ def _expand(
     notes: list[str],
     depth: int = 0,
     trail: str = "",
+    kelvin: dict | None = None,
 ) -> list[dict]:
     if depth > 8:
         raise HouseError(f"fx: {shape_id} composes itself (a loop of `use:`)")
     shape = shapes[shape_id]
+    kelvin = kelvin or KELVIN
     step_floor = float(backend.get("envelope", {}).get("step", 0))
     actions: list[dict] = []
     name = f"{trail}/{shape_id}" if trail else shape_id
@@ -231,7 +285,7 @@ def _expand(
                 if k not in inner_bind:
                     raise HouseError(f"fx: {where}: {inner_id} has no field {k!r}")
                 inner_bind[k] = _value(v, bindings)
-            actions += _expand(inner_id, shapes, inner_bind, backend, notes, depth + 1, name)
+            actions += _expand(inner_id, shapes, inner_bind, backend, notes, depth + 1, name, kelvin)
             continue
         if step.get("ambient"):
             for k in ("level", "colour"):
@@ -258,7 +312,14 @@ def _expand(
         colour = _value(step.get("colour", "$colour" if "colour" in bindings else None), bindings)
         transition = _value(step.get("transition", 0), bindings)
         hold = _value(step.get("hold"), bindings)
-        actions.append(_set_action(level, colour, transition))
+        ct = _ct(step["ct"], kelvin, where) if "ct" in step else None
+        if ct is not None:
+            if colour:
+                raise HouseError(
+                    f"fx: {where}: un pas dit une couleur OU une température, jamais les deux"
+                )
+            _ct_note(ct, backend, notes, where)
+        actions.append(_set_action(level, colour, transition, ct))
         delay = _hold_action(hold, step_floor, notes, where)
         if delay:
             actions.append(delay)
@@ -269,7 +330,9 @@ def _expand(
     return actions
 
 
-def compile_shape(shape_id: str, shapes: dict, backend: dict) -> Compiled:
+def compile_shape(
+    shape_id: str, shapes: dict, backend: dict, kelvin: dict | None = None
+) -> Compiled:
     if shape_id not in shapes:
         raise HouseError(f"fx: unknown shape {shape_id!r} — known: {', '.join(sorted(shapes))}")
     shape = shapes[shape_id]
@@ -280,7 +343,7 @@ def compile_shape(shape_id: str, shapes: dict, backend: dict) -> Compiled:
     step_floor = float(backend.get("envelope", {}).get("step", 0))
     if needs and needs < step_floor:
         notes.append(f"{shape_id}: asks {needs:g} s steps, {backend['name']} gives {step_floor:g}")
-    actions = _expand(shape_id, shapes, bindings, backend, notes)
+    actions = _expand(shape_id, shapes, bindings, backend, notes, kelvin=kelvin)
     notes = list(dict.fromkeys(notes))  # a stretched brick is said once per place, not per step
     return Compiled(shape_id, shape, fields, actions, notes, bool(shape.get("restore", True)))
 
@@ -373,10 +436,11 @@ def compile_all(fx: dict | None, house_label: str) -> tuple[dict[str, dict], lis
     fx = fx or {}
     shapes = load_shapes(fx.get("shapes"))
     backend = load_backend(fx.get("backend", "ha"))
+    kelvin = {**KELVIN, **(fx.get("kelvin") or {})}
     enabled = fx.get("enable") or sorted(shapes)
     scripts, notes = {}, []
     for shape_id in enabled:
-        c = compile_shape(shape_id, shapes, backend)
+        c = compile_shape(shape_id, shapes, backend, kelvin)
         scripts[f"fx_{shape_id}"] = script(c, house_label)
         notes += c.notes
     return scripts, notes, backend

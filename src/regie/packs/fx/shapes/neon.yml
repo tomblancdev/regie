@@ -1,11 +1,23 @@
-# neon — a neon starting up: it stutters a few times, then holds. Ends ON:
-# the snapshot is not put back (restore: false by default).
-summary: a neon starting up — stutters, then on
+# neon — un tube qui s'amorce : il bégaie FROID, il accroche, il tient. Finit
+# allumé (un néon qui a démarré reste allumé), donc `restore: false`.
+# Le bégaiement est écrit ICI plutôt qu'emprunté à `flicker`, et c'est tout
+# l'enjeu : un tube est FROID et `flicker` est aveugle à la couleur par
+# conception — sur une pièce éclairée chaud, un tube qui bégaie dans la couleur
+# de la pièce n'est pas un néon, c'est une ampoule qui déconne.
+# `ct: cool` est le blanc que les ampoules font elles-mêmes. Là où elles
+# s'arrêtent avant, `check` le DIT au lieu de laisser l'ampoule écrêter en
+# silence — ce qui est arrivé à chaque `cool` de cette maison depuis W3a.
+summary: a neon starting up — stutters cold, then on
 icon: mdi:led-strip-variant
 tags: { kind: light, mood: nervous }
 needs: { step: 0.02 }
-fields: { colour: null, level: 100 }
 restore: false
+fields: { level: 100 }
 steps:
-  - { use: flicker, times: [3, 6], colour: $colour }
-  - { level: $level, colour: $colour, hold: 0.1 }
+  - { level: [30, 100], ct: cool, hold: [0.02, 0.08] }
+  - { level: [0, 20], hold: [0.02, 0.15] }
+  - { level: [40, 100], ct: cool, hold: [0.02, 0.08] }
+  - { level: [0, 20], hold: [0.02, 0.15] }
+  - { level: [30, 90], ct: cool, hold: [0.02, 0.08] }
+  - { level: [0, 20], hold: [0.02, 0.12] }
+  - { level: $level, ct: cool, hold: 0.1 }

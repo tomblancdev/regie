@@ -20,7 +20,7 @@ from jsonschema import Draft202012Validator
 
 from . import theme as theme_lib
 from .errors import HouseError
-from .fx import known_backends, load_shapes
+from .fx import KELVIN, known_backends, load_shapes
 from .include import merge_includes
 from .labels import Labels
 from .packs import Pack, load_packs
@@ -75,7 +75,6 @@ DAYLIGHT = ("dark", "dim", "bright")
 # screen or a speaker goes off only when a scene names it (a TV must not go
 # dark because the clock struck night)
 OFF_DOMAINS = ("light", "switch")
-KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 # what a look itself says; anything else in the mapping is one of the role's PLACES
 LOOK_KEYS = ("brightness", "ct", "color", "transition")
 # a scene's own keys — never a role name (check refuses a role wearing one)
