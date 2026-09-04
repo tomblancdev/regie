@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16.2 — la porte de l'intégration continue rouvre (2026-09-04)
+
+Tom : « can we fix the CI for the fonts ? ». Le garde `no-environment` sortait
+en 1 sur main depuis 0.15.1 et chaque emploi derrière lui était sauté — lint,
+tests, la maison témoin, la collection, l'image : cinq releases sans un test
+lancé par la CI (0.16.1 y aurait laissé une ligne trop longue). Quatre causes,
+aucune n'était un environnement : les trois licences OFL des polices nomment
+`scripts.sil.org` — un texte de licence se garde tel quel, donc `sil.org`
+rejoint les dépendances déclarées du garde, une fois ; une ligne du CHANGELOG
+qui le citait ; et le test des adresses matérielles de 0.9.3 employait une
+vraie MAC et un vrai EUI-64 — remplacés par les réserves de documentation de la
+RFC 7042 (`00:00:5E:00:53:xx`, et pour l'EUI-64 `00:00:5E:EF:10:00:00:xx`, que le
+garde apprend sous les deux formes où huit octets se lisent : six groupes et
+huit). `sh tools/no-environment.sh` répond `clean` ; ruff et les tests passent
+localement ; la CI dit le reste.
+
 ## 0.16.1 — une porte sur un mur partagé reste à la pièce qui l'a déclarée (2026-09-04)
 
 Lu au premier `plan pull` après le ré-ensemencement de 0.16 : Tom avait

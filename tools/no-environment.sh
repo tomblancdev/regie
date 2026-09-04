@@ -10,6 +10,7 @@
 #   IPv4   192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24   RFC 5737
 #   IPv6   2001:db8::/32                                   RFC 3849
 #   MAC    00:00:5E:00:53:00-FF                            RFC 7042
+#   EUI-64 00:00:5E:EF:10:00:00:00-FF                      RFC 7042 (a Thread thing)
 #   names  example.com / .net / .org                       RFC 2606
 #
 # Note what this does NOT do: it carries no list of forbidden names. A
@@ -66,19 +67,23 @@ scan "$files" "an IPv4 address that is not documentation (RFC 5737: 192.0.2/24, 
 # Only the two shapes a MAC cannot wear: eight groups, or a `::` run. Both
 # must stand alone, or CSS's `::after` reads as the address `::af`.
 edge='[^0-9a-zA-Z:]'
+# An eight-byte EUI-64 wears the eight-group shape too: the documentation
+# reserve (RFC 7042) is allowed here as it is under hardware.
 scan "$files" "an IPv6 address that is not documentation (RFC 3849: 2001:db8::/32)" \
 	"(^|$edge)(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4})?::([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4})($edge|\$)" \
-	"$edge?(2001:[dD][bB]8:[0-9a-fA-F:]*|::1)$edge?"
+	"$edge?(2001:[dD][bB]8:[0-9a-fA-F:]*|::1|00:00:5[eE]:[eE][fF]:10:00:00:[0-9a-fA-F]{2})$edge?"
 
 # ---- hardware ------------------------------------------------------------
-scan "$files" "a MAC address that is not documentation (RFC 7042: 00:00:5E:00:53:xx)" \
+# Six bytes, or the first six of a documentation EUI-64 (00:00:5E:EF:10:00:00:xx).
+scan "$files" "a MAC address that is not documentation (RFC 7042: 00:00:5E:00:53:xx, EUI-64 00:00:5E:EF:10:00:00:xx)" \
 	'([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' \
-	'00:00:5[eE]:00:53:[0-9a-fA-F]{2}|00:00:00:00:00:00|[fF]{2}(:[fF]{2}){5}'
+	'00:00:5[eE]:00:53:[0-9a-fA-F]{2}|00:00:5[eE]:[eE][fF]:10:00|00:00:00:00:00:00|[fF]{2}(:[fF]{2}){5}'
 
 # ---- names ---------------------------------------------------------------
-# Dependencies a build or a reader genuinely reaches for are named here, once.
+# Dependencies a build or a reader genuinely reaches for are named here, once
+# (sil.org: the Open Font License text every OFL font ships verbatim names it).
 # Anything else is somebody's domain.
-dep='(([a-z0-9-]+\.)*(my\.home(-assistant\.io)?|example\.(com|net|org)|github\.com|githubusercontent\.com|google\.com|ghcr\.io|docker\.io|golang\.org|go\.dev|gopkg\.in|w3\.org|opensource\.org|flathub\.org|freedesktop\.org|kernel\.org|ietf\.org|rfc-editor\.org|schema\.org|json-schema\.org|openapis\.org|htmx\.org|alpinelinux\.org)|[a-z0-9-]+\.example|localhost)'
+dep='(([a-z0-9-]+\.)*(my\.home(-assistant\.io)?|example\.(com|net|org)|github\.com|githubusercontent\.com|google\.com|ghcr\.io|docker\.io|golang\.org|go\.dev|gopkg\.in|w3\.org|opensource\.org|sil\.org|flathub\.org|freedesktop\.org|kernel\.org|ietf\.org|rfc-editor\.org|schema\.org|json-schema\.org|openapis\.org|htmx\.org|alpinelinux\.org)|[a-z0-9-]+\.example|localhost)'
 scan "$files" "a URL to somewhere real (documentation uses example.com — RFC 2606)" \
 	'https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}' \
 	"https?://$dep"

@@ -757,7 +757,7 @@ def test_a_door_on_a_shared_wall_stays_with_the_room_that_declared_it(house_with
     assert house.area("living")["plan"]["doors"] == [{"at": [420, 100], "width": 80, "to": "hall"}]
     card = _witness_card(house)
     floor = card["floors"][0]
-    assert [a["name"] for a in floor["areas"]][:2] == ["Entrée", "Salon"], "the hall is listed first"
+    assert [a["name"] for a in floor["areas"]][:2] == ["Entrée", "Salon"], "the hall first"
     # the editor re-orders on Save, and a new door is drawn before the old one
     floor["openings"].reverse()
     floor["openings"].insert(0, {"id": "door_n3w", "type": "door", "x": 200, "y": 20, "length": 70})

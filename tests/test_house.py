@@ -124,10 +124,11 @@ def test_a_hardware_address_is_six_bytes_or_a_thread_eui64(house_with):
     THREAD that is an eight-byte EUI-64 — `pair --matter` reads it back, and it
     is the only key most of those things offer (five of the six IKEA things
     walked in 2026-09 report no serial at all). Six bytes stays right for Wi-Fi
-    and Ethernet; anything else is still a fault, lowercase included."""
-    load_house(house_with(lambda d: d["things"][0].update(mac="98:17:3c:f3:ca:fe")))
-    load_house(house_with(lambda d: d["things"][0].update(mac="ca:41:2e:31:5c:3f:80:f5")))
-    for bad in ("ca:41:2e:31:5c:3f:80", "ca:41:2e:31:5c:3f:80:f5:11", "CA:41:2E:31:5C:3F:80:F5"):
+    and Ethernet; anything else is still a fault, uppercase included. (The
+    addresses are RFC 7042's documentation reserves - nobody's radio.)"""
+    load_house(house_with(lambda d: d["things"][0].update(mac="00:00:5e:00:53:01")))
+    load_house(house_with(lambda d: d["things"][0].update(mac="00:00:5e:ef:10:00:00:01")))
+    for bad in ("00:00:5e:ef:10:00:00", "00:00:5e:ef:10:00:00:01:11", "00:00:5E:EF:10:00:00:01"):
         with pytest.raises(HouseError, match=r"things/0/mac"):
             load_house(house_with(lambda d, b=bad: d["things"][0].update(mac=b)))
 
