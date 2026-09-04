@@ -33,32 +33,67 @@ def test_a_room_with_lights_gets_its_group_and_its_silent_alert(rendered):
     assert "{{ trigger.to_state.name }} ne répond plus" == silent["actions"][0]["data"]["message"]
 
 
-def test_a_motion_light_at_night_targets_the_named_lights(rendered):
+def test_a_room_that_senses_gets_one_automation_on_its_occupancy(rendered):
+    """0.17, behaviour motion_light: one automation per ROOM on its occupancy
+    signal, the look of the hour when the room is dark and unlit, off only
+    what the sensors lit — and the hold belongs to the signal."""
     pkg = yaml.safe_load(
         (rendered / "home-assistant/packages/lighting_hall.yaml").read_text(encoding="utf-8")
     )
-    motion = next(a for a in pkg["automation"] if a["id"] == "regie_hall_hall_motion_motion_light")
-    assert motion["triggers"] == [
-        {"trigger": "state", "entity_id": "binary_sensor.hall_motion", "to": "on"}
+    helpers = pkg["input_boolean"]
+    assert list(helpers) == ["hall_motion", "hall_pinned", "hall_lit_by_motion"]
+    assert helpers["hall_motion"]["name"] == "Entrée — Les capteurs allument"
+    autos = {a["id"]: a for a in pkg["automation"]}
+    assert "regie_hall_hall_motion_motion_light" not in autos, "never one per sensor"
+    motion = autos["regie_hall_motion"]
+    assert motion["mode"] == "queued"
+    assert [t["entity_id"] for t in motion["triggers"]] == ["binary_sensor.hall_occupied"] * 2
+    assert [t["id"] for t in motion["triggers"]] == ["occupied", "cleared"]
+    assert motion["conditions"] == [
+        {"condition": "state", "entity_id": "input_boolean.hall_motion", "state": "on"},
+        {"condition": "state", "entity_id": "input_boolean.hall_pinned", "state": "off"},
     ]
-    assert motion["conditions"] == [{"condition": "sun", "after": "sunset", "before": "sunrise"}]
-    assert motion["actions"][0]["target"]["entity_id"] == ["light.hall_ceiling"]
-    assert motion["actions"][2] == {"delay": "00:03:00"}
-    assert motion["alias"] == "Entrée — Mouvement → lumières"
+    on, off = motion["actions"][0]["choose"]
+    assert {"condition": "state", "entity_id": "binary_sensor.hall_dark", "state": "on"} in on[
+        "conditions"
+    ], "the light rule: what lights a room without a hand asks the room's dark signal"
+    assert {"condition": "state", "entity_id": "light.hall_lights", "state": "off"} in on[
+        "conditions"
+    ], "a room a hand lit is a hand's room"
+    assert on["sequence"][0] == {"action": "script.hall_default"}, "the look of the hour"
+    assert on["sequence"][1]["target"]["entity_id"] == "input_boolean.hall_lit_by_motion"
+    assert {
+        "condition": "state",
+        "entity_id": "input_boolean.hall_lit_by_motion",
+        "state": "on",
+    } in off["conditions"]
+    assert off["sequence"] == [{"action": "script.hall_off"}]
+    assert "delay" not in yaml.dump(motion), "the hold is the occupancy signal's"
 
 
-def test_a_motion_without_named_lights_drives_the_room(house_with, secrets, tmp_path):
-    path = house_with(
-        lambda d: [t for t in d["things"] if t["id"] == "hall_motion"][0].update(options={})
+def test_the_sensors_switches_sit_on_the_rooms_settings_page(rendered):
+    body = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    assert "input_boolean.hall_motion" in body and "input_boolean.hall_pinned" in body
+    assert "input_boolean.hall_lit_by_motion" not in body, "the sensors' mark is no family dial"
+
+
+def test_the_old_motion_options_are_warned_not_read(house_with):
+    def old(d):
+        m = [t for t in d["things"] if t["id"] == "hall_motion"][0]
+        m["options"] = {"lights": ["hall_ceiling"], "only_at_night": True}
+
+    h = load_house(house_with(old))
+    assert any(
+        "hall_motion: option(s) lights, only_at_night no longer read" in w for w in h.warnings
     )
-    render(load_house(path), tmp_path, secrets)
-    pkg = yaml.safe_load(
-        (tmp_path / "home-assistant/packages/lighting_hall.yaml").read_text(encoding="utf-8")
-    )
-    motion = pkg["automation"][0]
-    assert motion["conditions"] == []
-    assert motion["actions"][0]["target"]["entity_id"] == ["light.hall_lights"]
-    assert motion["actions"][2] == {"delay": "00:05:00"}
+
+
+def test_dark_below_without_a_sensor_is_warned(house_with):
+    path = house_with(lambda d: None)
+    living = path.parent / "rooms" / "living.yml"
+    living.write_text(living.read_text(encoding="utf-8") + "dark_below: 30\n", encoding="utf-8")
+    h = load_house(path)
+    assert any("living: dark_below reads nothing" in w for w in h.warnings)
 
 
 def test_a_room_without_lights_gets_no_package_and_a_way_in_that_names_nothing(

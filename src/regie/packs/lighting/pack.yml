@@ -2,7 +2,7 @@
 # lights, and the room cards on the phone. It brings no service (the base
 # already has Zigbee2MQTT); it instantiates from the things.
 name: lighting
-summary: room light groups (+ one per role and per layout row since 0.4), motion lights, "thing went silent", the room's health sensor
+summary: room light groups (+ one per role and per layout row since 0.4), the rooms that sense (0.17 — one automation per room on its occupancy, its default look when dark and unlit, off only what the sensors lit), "thing went silent", the room's health sensor
 kinds: [light, plug, switch, remote, motion]
 services: []
 schema: schema.json
@@ -14,3 +14,6 @@ templates:
 # a card of its own to a room's page (`each: areas`) or to the house's first
 # page (no `each`); the lighting pack needs neither
 cards: []
+# the sensors' switches on the room's settings page (0.17, H36)
+settings:
+  - { src: settings/room.yaml.j2, each: areas }

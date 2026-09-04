@@ -8,6 +8,58 @@
 {% set _ = drifting.append(p) %}
 {% set _ = drift_switches.append('input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}
 {% endfor %}
+{% set panel = defaults and controls.panel and modes and defaults_base(area) %}
+{% set memory = ['off'] %}
+{% for p in plans if p.id != 'off' %}{% set _ = memory.append(p.id) %}{% endfor %}
+{% if plans or panel %}
+input_select:
+{% if plans %}
+  # the room REMEMBERS its look (0.17): every look script writes these two —
+  # what the room wears now (`off` first, so a fresh helper reads off), and
+  # what it wore before. `prev`/`next` walk the file's order from the first;
+  # `before` gives the second back (the amp switching off, the hood).
+  {{ area.id }}_look:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.look_now) | to_yaml }}
+    icon: mdi:palette
+    options:
+{% for o in memory %}
+      - {{ o | to_yaml }}
+{% endfor %}
+  {{ area.id }}_look_before:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.look_before) | to_yaml }}
+    icon: mdi:history
+    options:
+{% for o in memory %}
+      - {{ o | to_yaml }}
+{% endfor %}
+{% endif %}
+{% if panel %}
+{% set options = look_options(area) %}
+  # the settings panel (controls.panel, W3b): the family edits what "on" MEANS
+  # with a simple form — one select per daylight, one per period (`sun` =
+  # follow the sun); seeded once from the room's file, the UI owns them after
+{% for d in ['dark', 'dim', 'bright'] %}
+  {{ area.id }}_look_{{ d }}:
+    name: {{ (area.label ~ ' — ' ~ labels.ui['look_' ~ d]) | to_yaml }}
+    icon: mdi:{{ {'dark': 'weather-night', 'dim': 'weather-sunset', 'bright': 'weather-sunny'}[d] }}
+    options:
+{% for o in options %}
+      - {{ o }}
+{% endfor %}
+{% endfor %}
+{% for period in modes.periods %}
+  {{ area.id }}_look_{{ period.id }}:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.look_period ~ ' ' ~ period.label) | to_yaml }}
+    icon: mdi:clock-outline
+    options:
+      - sun
+{% for o in options %}
+      - {{ o }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+{% endif %}
 {% if plans %}
 {% if drifting %}
 # the kill-switch (H36): a look that MOVES is a look you can stop. Visible on
@@ -36,6 +88,14 @@ script:
 {# any look the room takes stops every drift first: a moving ceiling belongs
    to ONE look, and leaving it must leave it (the loop reads the switch) #}
 {% set _ = seq.append({'action': 'input_boolean.turn_off', 'target': {'entity_id': drift_switches}}) %}
+{% endif %}
+{% set current = 'input_select.' ~ area.id ~ '_look' %}
+{% set _ = seq.append({'if': [{'condition': 'template', 'value_template': "{{ states('" ~ current ~ "') in " ~ (memory | tojson | replace('"', "'")) ~ " and not is_state('" ~ current ~ "', '" ~ p.id ~ "') }}"}], 'then': [{'action': 'input_select.select_option', 'target': {'entity_id': current ~ '_before'}, 'data': {'option': "{{ states('" ~ current ~ "') }}"}}]}) %}
+{% set _ = seq.append({'action': 'input_select.select_option', 'target': {'entity_id': current}, 'data': {'option': p.id}}) %}
+{% if kinds.get('motion') %}
+{# a look is a hand's act: the sensors let go of the room (the pin is not
+   theirs to clear — a hand set it, its next press lifts it) #}
+{% set _ = seq.append({'action': 'input_boolean.turn_off', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_lit_by_motion'}}) %}
 {% endif %}
 {% set _ = seq.append({'parallel': steps}) %}
 {% if drift_plan(area, p) %}
@@ -71,10 +131,11 @@ script:
     icon: mdi:palette-outline
     mode: restart
     sequence:
-      - action: script.turn_on
+      # the look's own service, not script.turn_on: this waits for the look to
+      # finish, so a caller that marks the room after it (the sensors) never
+      # races the look's own writes (0.17)
+      - action: "script.{{ area.id }}_{{ '{{' }} states('sensor.{{ area.id }}_default') {{ '}}' }}"
         continue_on_error: true
-        target:
-          entity_id: "script.{{ area.id }}_{{ '{{' }} states('sensor.{{ area.id }}_default') {{ '}}' }}"
 {% if drifting %}
 
 # the switch is the ONLY truth about a sustained walk: turning it on starts the
@@ -100,32 +161,7 @@ automation:
 {% endif %}
 {% if defaults %}
 {% set first = (area.scenes | default({}) | list | first) | default('off') %}
-{% if controls.panel and modes and defaults_base(area) %}
-{% set options = look_options(area) %}
-
-# the settings panel (controls.panel, W3b): the family edits what "on" MEANS
-# with a simple form — one select per daylight, one per period (`sun` =
-# follow the sun); seeded once from the room's file, the UI owns them after
-input_select:
-{% for d in ['dark', 'dim', 'bright'] %}
-  {{ area.id }}_look_{{ d }}:
-    name: {{ (area.label ~ ' — ' ~ labels.ui['look_' ~ d]) | to_yaml }}
-    icon: mdi:{{ {'dark': 'weather-night', 'dim': 'weather-sunset', 'bright': 'weather-sunny'}[d] }}
-    options:
-{% for o in options %}
-      - {{ o }}
-{% endfor %}
-{% endfor %}
-{% for period in modes.periods %}
-  {{ area.id }}_look_{{ period.id }}:
-    name: {{ (area.label ~ ' — ' ~ labels.ui.look_period ~ ' ' ~ period.label) | to_yaml }}
-    icon: mdi:clock-outline
-    options:
-      - sun
-{% for o in options %}
-      - {{ o }}
-{% endfor %}
-{% endfor %}
+{% if panel %}
 
 template:
   - sensor:

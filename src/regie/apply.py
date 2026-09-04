@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import socket
 import ssl
 import time
@@ -1239,8 +1240,36 @@ class Conductor:
                     ]
                     if len(mine) == 1 and mine[0]["entity_id"] != entity:
                         rename = (mine[0]["entity_id"], entity)
+                # every OTHER entity of the thing's device wears the thing's
+                # name too (0.17): <domain>.<id>_<what> — the lux a motion
+                # thing reports, a wheel's nine switches by endpoint, a
+                # battery. Derived from the registry's own unique id and the
+                # entity's own name, never from Home Assistant's `_2` counter.
+                more: list[tuple[str, str]] = []
+                if len(found) == 1:
+                    taken = {e["entity_id"] for e in entities}
+                    for e in entities:
+                        if e.get("device_id") != dev["id"] or e.get("disabled_by"):
+                            continue
+                        if (rename and e["entity_id"] == rename[0]) or e["entity_id"] == entity:
+                            continue
+                        suffix = entity_suffix(e)
+                        if not suffix:
+                            continue
+                        want = f"{e['entity_id'].split('.', 1)[0]}.{t['id']}_{suffix}"
+                        if want == e["entity_id"]:
+                            continue
+                        if want in taken:
+                            self.step(
+                                f"device {t['id']} {e['entity_id']}",
+                                "waiting",
+                                f"{want} is another entity's — left as it is",
+                            )
+                            continue
+                        taken.add(want)
+                        more.append((e["entity_id"], want))
                 name = f"device {t['id']}" + (f" ({dev.get('name')})" if len(found) > 1 else "")
-                if not fields and not rename:
+                if not fields and not rename and not more:
                     where = f"{label} in {t['area']}" if area_id else label
                     self.step(
                         name, "ok", where + (f" · {entity}" if entity and len(found) == 1 else "")
@@ -1253,17 +1282,15 @@ class Conductor:
                     what.append(f"name {label}")
                 if rename:
                     what.append(f"{rename[0]} -> {rename[1]}")
+                for was, want in more:
+                    what.append(f"{was} -> {want}")
                 self.step(name, "changed", " · ".join(what))
                 if self.check:
                     continue
                 if fields:
                     ws.call("config/device_registry/update", device_id=dev["id"], **fields)
-                if rename:
-                    ws.call(
-                        "config/entity_registry/update",
-                        entity_id=rename[0],
-                        new_entity_id=rename[1],
-                    )
+                for was, want in ([rename] if rename else []) + more:
+                    ws.call("config/entity_registry/update", entity_id=was, new_entity_id=want)
 
     def plumbing(self, ws) -> None:
         """The lighting pack's group entities are the vocabulary's plumbing
@@ -1512,6 +1539,20 @@ def link(
         if last.state not in ("changed", "ok"):
             return last
     return last
+
+
+def entity_suffix(entity: dict) -> str | None:
+    """What a thing's other entity is called under the thing's name: a Matter
+    switch by its ENDPOINT (a wheel's nine, a dual button's two — the number a
+    gesture profile speaks), anything else by its own name, slugged
+    (illuminance, battery, identify_1). None = an entity with no name of its
+    own: left alone."""
+    uid = str(entity.get("unique_id") or "")
+    if entity.get("platform") == "matter" and "-GenericSwitch-" in uid:
+        endpoint = uid.split("-MatterNodeDevice-", 1)[-1].split("-", 1)[0]
+        return endpoint if endpoint.isdigit() else None
+    slug = re.sub(r"[^a-z0-9]+", "_", str(entity.get("original_name") or "").lower()).strip("_")
+    return slug or None
 
 
 def matter_devices(ws) -> list[dict]:

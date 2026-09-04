@@ -1312,6 +1312,49 @@ def test_the_matter_server_gets_its_entry_and_a_keyed_device_its_room(witness, s
     assert len(ha.entries["matter"]) == 1
 
 
+def test_a_things_other_entities_wear_its_name_too(witness, secrets, tmp_path):
+    """0.17: every entity of a thing's device is <domain>.<id>_<what> — a
+    Matter switch by its endpoint (the number a gesture profile speaks), the
+    rest by its own name; a disabled one and a nameless one are left alone."""
+    ha = FakeHA()
+    bulb = ha.matter_node("EX-000001", "00:00:5e:00:53:41")
+
+    def more(entity_id, name, uid, disabled=None):
+        ha.entities.append(
+            {
+                "entity_id": entity_id,
+                "device_id": bulb["id"],
+                "platform": "matter",
+                "entity_category": None,
+                "disabled_by": disabled,
+                "original_name": name,
+                "unique_id": uid,
+            }
+        )
+
+    more(
+        "sensor.bulb_a19_1_illuminance", "Illuminance", "FF-1-MatterNodeDevice-1-LightSensor-1024-"
+    )
+    more("event.bulb_a19_1_button_3", "Button (3)", "FF-1-MatterNodeDevice-3-GenericSwitch-59-")
+    more(
+        "button.bulb_a19_1_identify_2", "Identify (2)", "FF-1-MatterNodeDevice-2-IdentifyButton-3-"
+    )
+    more("sensor.bulb_a19_1_uptime", "Uptime", "FF-1-MatterNodeDevice-0-GeneralDiag", "integration")
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["device living_bulb"] == "changed"
+    ids = {e["entity_id"] for e in ha.entities}
+    assert {
+        "light.living_bulb",
+        "sensor.living_bulb_illuminance",
+        "event.living_bulb_3",
+        "button.living_bulb_identify_2",
+    } <= ids
+    assert "sensor.bulb_a19_1_uptime" in ids, "disabled: left"
+    assert "update.bulb_a19_1_firmware" in ids, "no name of its own: left"
+    again = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert again["device living_bulb"] == "ok"
+
+
 def test_a_box_that_is_two_devices_is_roomed_twice_and_renamed_never(witness, secrets, tmp_path):
     ha = FakeHA()
     tv_cast = ha.network_device("00:00:5e:00:53:20", "TV cast", platform="cast")

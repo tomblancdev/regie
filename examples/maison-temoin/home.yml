@@ -105,9 +105,9 @@ things:
   # `pair --matter` — keyed on its serial, roomed and named by apply, its
   # address a reservation like any network thing's
   - { id: living_bulb, area: living, kind: light, via: matter, vendor: Example, model: "Bulb A19", serial: "EX-000001", mac: "00:00:5e:00:53:41" }
-  # the hall — a motion light at night, the door, the lock, a camera
+  # the hall — a room that senses (its dark_below is in rooms/hall.yml), the door, the lock, a camera
   - { id: hall_ceiling, area: hall, kind: light, via: zigbee, ieee: "0x000d6ffffe000010", role: main }
-  - { id: hall_motion, area: hall, kind: motion, via: zigbee, ieee: "0x000d6ffffe000011", role: motion, options: { lights: [hall_ceiling], off_after: "00:03:00", only_at_night: true } }
+  - { id: hall_motion, area: hall, kind: motion, via: zigbee, ieee: "0x000d6ffffe000011", role: motion, options: { off_after: "00:03:00" } }
   - { id: hall_door, area: hall, kind: door, via: zigbee, ieee: "0x000d6ffffe000012", role: door }
   - { id: hall_lock, area: hall, kind: lock, via: zigbee, ieee: "0x000d6ffffe000013" }
   - { id: hall_camera, area: hall, kind: camera, via: wifi, integration: generic, host: 192.0.2.30 }

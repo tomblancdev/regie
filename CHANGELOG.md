@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.17.0 — la pièce sent (2026-09-04)
+
+Le premier pas de la grammaire des automatismes (la page « One Grammar,
+Written Once », écrite ce matin sur le spec de Le Carton) : ce qui allume une
+pièce sans une main demande d'abord si elle a besoin de lumière, et une main
+ne demande jamais.
+
+- **`binary_sensor.<pièce>_dark`** (pack signals), pour chaque pièce : la
+  pièce a besoin de lumière — sa lecture de lux la plus HAUTE sous
+  `dark_below:` (le fichier de pièce, en lux ; lue sur l'éclairement que ses
+  capteurs de mouvement rapportent, `sensor.<capteur>_illuminance`), sinon,
+  quand aucune lecture n'est un nombre ou que la pièce n'a pas de seuil, le
+  soleil (`sensor.daylight` à `dark`). `check` avertit d'un `dark_below` dans
+  une pièce sans capteur.
+- **`binary_sensor.<pièce>_occupied` tient** : `delay_off` du `off_after` le
+  plus long de ses capteurs — la seule vérité que lisent l'éclairage et le
+  tableau.
+- **L'éclairage au mouvement, réécrit** (pack lighting, comportement
+  `motion_light`) : UNE automation par pièce sur son occupation, jamais une par
+  capteur (`regie_<pièce>_motion`) ; l'ambiance de l'heure
+  (`script.<pièce>_default`), jamais un `light.turn_on` qui rendait aux
+  ampoules ce qu'elles tenaient la veille ; seulement si la pièce est sombre
+  ET éteinte ; à l'extinction, seulement si ce sont les capteurs qui ont
+  allumé (`input_boolean.<pièce>_lit_by_motion`, que chaque script d'ambiance
+  efface — une pièce qu'une main a allumée est la pièce de la main). Trois
+  aides : l'interrupteur de la famille (H36, `<pièce>_motion`, sur les
+  Réglages de la pièce), la punaise (`<pièce>_pinned` : les capteurs en
+  retrait, qu'un téléphone peut lever), la marque. Les options `lights:` et
+  `only_at_night:` ne sont plus lues — `check` le dit.
+- **La pièce se souvient de son ambiance** (pack scenes) :
+  `input_select.<pièce>_look` et `_look_before`, écrits par chaque script
+  d'ambiance (`off` d'abord — et entre guillemets : nu, YAML en fait un
+  booléen —, une aide neuve lit off ; `before` ne bouge que si l'ambiance
+  change). `script.<pièce>_default` appelle l'ambiance par son propre service
+  et l'ATTEND : `script.turn_on` rendait la main aussitôt, et un appelant qui
+  marque la pièce après lui courait contre les écritures de l'ambiance.
+- **Le chef d'orchestre nomme toutes les entités de l'appareil d'une chose**
+  sous son nom : `<domaine>.<id>_<quoi>` — un interrupteur Matter par son
+  ENDPOINT (les neuf d'une molette, les deux d'un double bouton : le nombre
+  qu'un profil de gestes parlera), le reste par son propre nom (illuminance,
+  battery, identify_1) ; dérivé du `unique_id` du registre et du nom de
+  l'entité, jamais du compteur `_2` de Home Assistant ; une entité désactivée
+  ou sans nom est laissée ; un nom déjà pris est signalé (`waiting`), jamais
+  forcé.
+- Un fichier inclus se valide contre le schéma STRICT, les champs des packs
+  dedans (`dark_below` est au pack lighting) ; la première passe relâche la
+  pièce comme elle relâchait la chose.
+- La maison témoin : l'entrée sent (`dark_below: 15`), son capteur sans
+  `lights:`.
+
 ## 0.16.3 — le test de l'orage rattrape la forme (2026-09-04)
 
 La porte rouverte par 0.16.2, la CI a couru jusqu'aux tests et s'est arrêtée

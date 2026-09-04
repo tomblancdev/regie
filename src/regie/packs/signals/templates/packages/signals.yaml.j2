@@ -69,13 +69,34 @@ template:
 {% else %}
         state: "false"
 {% endif %}
-{% for a in areas %}
+      # per room (0.17): <room>_dark — the room NEEDS LIGHT: its brightest lux
+      # reading below the room's dark_below (its motion things' own
+      # illuminance), or, when no reading is a number, the sun. What lights a
+      # room without a hand asks this first; a hand never does. And
+      # <room>_occupied where a room senses: any sensor sees someone, holding
+      # for the room's off_after (the longest of its sensors') after the last
+      # one clears — the one truth the motion light and the dashboard read.
+{% for a in areas if not house.parking(a) %}
 {% set motions = [] %}
 {% for t in things if t.area == a.id and t.kind == 'motion' and entity(t) %}{% set _ = motions.append(entity(t)) %}{% endfor %}
+{% set below = house.dark_below(a) %}
+{% set lux = house.lux_entities(a) if below is not none else [] %}
+      - name: {{ a.id }}_dark
+        unique_id: regie_{{ a.id }}_dark
+        icon: mdi:brightness-4
+        state: >-
+{% if lux %}
+          {{ '{%' }} set ns = namespace(lux=[]) {{ '%}' }}
+          {{ '{%' }} for e in {{ lux | tojson | replace('"', "'") }} {{ '%}' }}{{ '{%' }} if is_number(states(e)) {{ '%}' }}{{ '{%' }} set ns.lux = ns.lux + [states(e) | float] {{ '%}' }}{{ '{%' }} endif {{ '%}' }}{{ '{%' }} endfor {{ '%}' }}
+          {{ '{{' }} ((ns.lux | max) < {{ below }}) if ns.lux else is_state('sensor.daylight', 'dark') {{ '}}' }}
+{% else %}
+          {{ '{{' }} is_state('sensor.daylight', 'dark') {{ '}}' }}
+{% endif %}
 {% if motions %}
       - name: {{ a.id }}_occupied
         unique_id: regie_{{ a.id }}_occupied
         device_class: occupancy
+        delay_off: {{ house.motion_hold(a) | to_yaml }}
         state: "{{ '{{' }} {% for m in motions %}is_state('{{ m }}', 'on'){{ ' or ' if not loop.last }}{% endfor %} {{ '}}' }}"
 {% endif %}
 {% endfor %}

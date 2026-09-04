@@ -78,50 +78,79 @@ template:
           {{ '{{' }} ns.n {{ '}}' }}
 
 {% if not parking %}
+{% if motions %}
+# the sensors' three helpers (0.17): the family's switch, the pin a hand sets
+# (the sensors stand back until its next press), and the sensors' own mark on
+# the room — every look script clears it, so a hand's room is never switched
+# off by the clock of a sensor
+input_boolean:
+  {{ area.id }}_motion:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.motion_switch) | to_yaml }}
+    icon: mdi:motion-sensor
+  {{ area.id }}_pinned:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.pinned) | to_yaml }}
+    icon: mdi:pin
+  {{ area.id }}_lit_by_motion:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.lit_by_motion) | to_yaml }}
+    icon: mdi:motion-sensor
+
+{% endif %}
 {% if motions or controls.silent or (controls.restore_default and lights) %}
 automation:
 {% endif %}
-{% for m in motions %}
-{% set targets = m.options.lights | default([]) %}
-  - id: regie_{{ area.id }}_{{ m.id }}_motion_light
-    alias: {{ (area.label ~ ' — ' ~ (m.label | default(labels.kind('motion'))) ~ ' → ' ~ labels.ui.lights) | to_yaml }}
-    description: a motion light (La Régie, pack lighting — home.yml, not the UI)
-    mode: restart
+{% if motions %}
+{% set hold = house.motion_hold(area) %}
+  # the room SENSES (0.17, behaviour motion_light — one automation per room, on
+  # its occupancy signal, never one per sensor): when someone comes and the
+  # room is dark and unlit, its default look; when the room clears ({{ hold }}
+  # after the last sensor, the signal's own hold), off — only if the sensors lit
+  # it. A room a hand lit is a hand's room; a pinned room is left alone both
+  # ways; the switch is the family's (H36).
+  - id: regie_{{ area.id }}_motion
+    alias: {{ (area.label ~ ' — ' ~ labels.ui.motion_switch) | to_yaml }}
+    description: "the room senses: script.{{ area.id }}_default when binary_sensor.{{ area.id }}_occupied comes on while {{ area.id }}_dark says so and nothing is lit; off when it clears, if the sensors lit it (La Régie, pack lighting, behaviour motion_light)"
+    mode: queued
     triggers:
       - trigger: state
-        entity_id: {{ entity(m) }}
+        entity_id: binary_sensor.{{ area.id }}_occupied
         to: "on"
-{% if m.options.only_at_night | default(false) %}
+        id: occupied
+      - trigger: state
+        entity_id: binary_sensor.{{ area.id }}_occupied
+        to: "off"
+        id: cleared
     conditions:
-      - condition: sun
-        after: sunset
-        before: sunrise
-{% else %}
-    conditions: []
-{% endif %}
+      - condition: state
+        entity_id: input_boolean.{{ area.id }}_motion
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.{{ area.id }}_pinned
+        state: "off"
     actions:
-      - action: light.turn_on
-        target:
-          entity_id:
-{% for id in targets %}
-            - {{ entity(house.thing(id)) }}
-{% else %}
-            - light.{{ area.id }}_lights
-{% endfor %}
-      - wait_for_trigger:
-          - trigger: state
-            entity_id: {{ entity(m) }}
-            to: "off"
-      - delay: {{ m.options.off_after | default('00:05:00') | to_yaml }}
-      - action: light.turn_off
-        target:
-          entity_id:
-{% for id in targets %}
-            - {{ entity(house.thing(id)) }}
-{% else %}
-            - light.{{ area.id }}_lights
-{% endfor %}
-{% endfor %}
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: occupied
+              - condition: state
+                entity_id: binary_sensor.{{ area.id }}_dark
+                state: "on"
+              - condition: state
+                entity_id: light.{{ area.id }}_lights
+                state: "off"
+            sequence:
+              - action: script.{{ area.id }}_default
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.{{ area.id }}_lit_by_motion
+          - conditions:
+              - condition: trigger
+                id: cleared
+              - condition: state
+                entity_id: input_boolean.{{ area.id }}_lit_by_motion
+                state: "on"
+            sequence:
+              - action: script.{{ area.id }}_off
+{% endif %}
 {% if controls.restore_default and kinds.get('light', []) %}
   # a light back from power takes the room's DEFAULT look, never its last
   # state (controls.restore_default, W3b: "default on first startup")

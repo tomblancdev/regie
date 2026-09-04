@@ -46,8 +46,18 @@ def test_daylight_night_occupied_quiet(rendered):
     assert (
         names["house_quiet"]["state"] == "{{ states('input_select.house_mode') in [night, away] }}"
     )
-    assert names["hall_occupied"]["state"] == "{{ is_state('binary_sensor.hall_motion', 'on') }}"
+    hall = names["hall_occupied"]
+    assert hall["state"] == "{{ is_state('binary_sensor.hall_motion', 'on') }}"
+    assert hall["delay_off"] == "00:03:00", "the room's hold: the longest off_after of its sensors"
     assert "living_occupied" not in names, "no motion thing there: no signal, never 'off'"
+    dark = names["hall_dark"]["state"]
+    assert "['sensor.hall_motion_illuminance']" in dark and "< 15.0" in dark, (
+        "the room needs light: its brightest lux reading below the room's dark_below"
+    )
+    assert "is_state('sensor.daylight', 'dark')" in dark, "no reading yet: the sun"
+    assert names["living_dark"]["state"].strip() == "{{ is_state('sensor.daylight', 'dark') }}", (
+        "no lux there: the sun decides, and the signal exists for every room"
+    )
 
 
 def test_no_modes_file_no_signals(house_with, secrets, tmp_path):

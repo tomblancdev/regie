@@ -4,9 +4,11 @@
 # dim · bright from the sun's elevation), binary_sensor.night,
 # binary_sensor.house_occupied, binary_sensor.house_quiet, and
 # binary_sensor.<room>_occupied wherever a room has a motion thing — a signal
-# that cannot be measured is absent, never "off".
+# that cannot be measured is absent, never "off" — holding for the room's
+# off_after (0.17), and binary_sensor.<room>_dark for every room: its lux
+# below the room's dark_below, else the sun (0.17).
 name: signals
-summary: the semantic sensors — house_period, daylight, night, house_occupied, house_quiet, <room>_occupied
+summary: the semantic sensors — house_period, daylight, night, house_occupied, house_quiet, <room>_occupied (with its hold), <room>_dark (0.17)
 kinds: []
 services: []
 templates:

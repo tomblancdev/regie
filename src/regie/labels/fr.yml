@@ -101,3 +101,10 @@ ui:
   parking_note: >-
     Rien ici n'est automatisé. Ces choses attendent une pièce et un rôle ; on
     peut les allumer pour les essayer, c'est tout.
+  # the rooms that sense and the look memory (0.17)
+  motion_switch: Les capteurs allument
+  pinned: Capteurs en retrait
+  lit_by_motion: Allumée par les capteurs
+  sensors: Capteurs
+  look_now: Ambiance en cours
+  look_before: "Ambiance d'avant"

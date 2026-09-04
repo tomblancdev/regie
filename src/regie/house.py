@@ -328,6 +328,30 @@ class House:
     def by_kind(self) -> Counter:
         return Counter(t["kind"] for t in self.things)
 
+    # --- a room that senses (0.17) -----------------------------------------
+    def motion_hold(self, area: dict) -> str:
+        """How long a room stays occupied after its last sensor clears: the
+        longest `off_after` of its motion things (00:05:00 when none says)."""
+        holds = [
+            (t.get("options") or {}).get("off_after")
+            for t in self.kinds_in(area["id"]).get("motion", [])
+        ]
+        holds = [h for h in holds if h]
+        return max(holds) if holds else "00:05:00"
+
+    def lux_entities(self, area: dict) -> list[str]:
+        """The illuminance a room's motion things report, under the things'
+        names (the conductor renames every entity of a thing's device)."""
+        return [
+            f"sensor.{t['id']}_illuminance" for t in self.kinds_in(area["id"]).get("motion", [])
+        ]
+
+    def dark_below(self, area: dict) -> float | None:
+        """The room needs light below this many lux — `dark_below:` in the room
+        file; None = the sun decides."""
+        value = area.get("dark_below")
+        return None if value is None else float(value)
+
     # --- derived -----------------------------------------------------------
     def entity(self, thing: dict) -> str | None:
         """One name, three systems: the entity is <domain>.<id> unless the row says otherwise."""
@@ -1481,6 +1505,19 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             hints.append(
                 f"{a['id']}: scene(s) {', '.join(waiting)} wait for their roles, no script yet"
             )
+        motions = house.kinds_in(a["id"]).get("motion", [])
+        if a.get("dark_below") is not None and not motions:
+            warnings.append(
+                f"{a['id']}: dark_below reads nothing — no motion thing in the room, "
+                "so no lux; the sun decides"
+            )
+        for t in motions:
+            legacy = [k for k in ("lights", "only_at_night") if k in (t.get("options") or {})]
+            if legacy:
+                warnings.append(
+                    f"{t['id']}: option(s) {', '.join(legacy)} no longer read (0.17) — the "
+                    f"room's motion light lights its default look, when {a['id']}_dark says so"
+                )
         raw_defaults = a.get("defaults") or {}
         has_base = any(d in raw_defaults for d in DAYLIGHT)
         if house.controls()["panel"] and raw_defaults:
@@ -1642,11 +1679,12 @@ def load_house(path: Path) -> House:
     sources = _strip_sources(data)
 
     schema = base_schema()
-    _validate_pieces(schema, data, sources)
-    # pass 1 — the base alone, loosened where the packs own fields, to learn
+    # pass 1 — the base alone, loosened where the packs own fields (a thing's,
+    # and since 0.17 a room's: `dark_below` is the lighting pack's), to learn
     # which profile and packs the house names
     loose = copy.deepcopy(schema)
     loose["$defs"]["thing"]["additionalProperties"] = True
+    loose["$defs"]["area"]["additionalProperties"] = True
     _validate(loose, data, path)
 
     profile = load_profile(data["profile"])
@@ -1660,6 +1698,9 @@ def load_house(path: Path) -> House:
         merge_fragment(strict, p.fragment)
         known_kinds |= set(p.kinds)
         known_via |= set(p.via)
+    # an included file first, on its own, so a fault names the file — against
+    # the STRICT schema, the packs' fields in (a room's `dark_below`)
+    _validate_pieces(strict, data, sources)
     _validate(strict, data, path)
 
     _fill_defaults(data)

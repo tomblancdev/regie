@@ -1,0 +1,11 @@
+{# the sensors' switches on the room's settings page (H36): the family's
+   "the sensors light it", and the pin a hand set, so a phone can lift it #}
+{% if kinds.get('motion') and kinds.get('light') and not house.parking(area) %}
+- type: entities
+  title: {{ (area.label ~ ' — ' ~ labels.ui.sensors) | to_yaml }}
+  entities:
+    - entity: input_boolean.{{ area.id }}_motion
+      name: {{ labels.ui.motion_switch | to_yaml }}
+    - entity: input_boolean.{{ area.id }}_pinned
+      name: {{ labels.ui.pinned | to_yaml }}
+{% endif %}

@@ -97,3 +97,10 @@ ui:
   parking_note: >-
     Nothing here is automated. These things are waiting for a room and a role;
     they can be switched on to try them, and that is all.
+  # the rooms that sense and the look memory (0.17)
+  motion_switch: The sensors light it
+  pinned: Sensors stand back
+  lit_by_motion: Lit by the sensors
+  sensors: Sensors
+  look_now: Current look
+  look_before: Look before

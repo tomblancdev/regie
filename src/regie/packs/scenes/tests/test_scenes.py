@@ -45,8 +45,9 @@ def test_off_is_implicit_and_default_reads_its_sensor(rendered):
         "main and lamp; the screen and the speaker go off only when a scene names them"
     )
     default = pkg["script"]["living_default"]
-    assert default["sequence"][0]["target"]["entity_id"] == (
-        "script.living_{{ states('sensor.living_default') }}"
+    assert default["sequence"][0]["action"] == "script.living_{{ states('sensor.living_default') }}"
+    assert "target" not in default["sequence"][0], (
+        "the look's own service, waited for — script.turn_on returned at once (0.17)"
     )
     assert default["sequence"][0]["continue_on_error"] is True
     sensor = pkg["template"][0]["sensor"][0]
@@ -82,7 +83,7 @@ def test_a_color_and_a_switch_role(house_with, secrets, tmp_path):
     )
     render(load_house(path), tmp_path, secrets)
     pkg = yaml.safe_load((tmp_path / "home-assistant/packages/scenes_kitchen.yaml").read_text())
-    steps = pkg["script"]["kitchen_glow"]["sequence"][0]["parallel"]
+    steps = looks(pkg["script"]["kitchen_glow"])
     by = {s["action"]: s for s in steps}
     assert by["switch.turn_on"]["target"]["entity_id"] == ["switch.kitchen_plug"]
     assert by["light.turn_on"]["data"] == {"rgb_color": [32, 0, 0]}
@@ -97,7 +98,9 @@ def test_without_the_panel_the_sensor_bakes_the_table(house_with, secrets, tmp_p
     pkg = yaml.safe_load(
         (tmp_path / "home-assistant/packages/scenes_living.yaml").read_text(encoding="utf-8")
     )
-    assert "input_select" not in pkg
+    assert list(pkg["input_select"]) == ["living_look", "living_look_before"], (
+        "the memory stays; the panel's selects go"
+    )
     state = pkg["template"][0]["sensor"][0]["state"]
     assert "table" in state and "'dark': 'evening'" in state
 
@@ -256,3 +259,39 @@ def test_the_switch_starts_the_walk_and_a_restart_resumes_it(rendered):
     assert auto["triggers"][1]["to"] == "on"
     assert auto["conditions"][0]["state"] == "on"
     assert auto["actions"][0]["target"]["entity_id"] == "script.living_party_drift"
+
+
+def test_every_look_writes_the_rooms_memory_and_lets_the_sensors_go(rendered):
+    """0.17: the room remembers its look — every look script writes what the
+    room wears now and what it wore before (`off` first, so a fresh helper
+    reads off), and clears the sensors' mark where the room senses."""
+    pkg = load(rendered, "hall")
+    sel = pkg["input_select"]
+    assert sel["hall_look"]["options"] == ["off", "dim"], "a string, never YAML's boolean"
+    assert sel["hall_look_before"]["options"] == ["off", "dim"]
+    seq = pkg["script"]["hall_dim"]["sequence"]
+    assert seq[0]["if"][0]["value_template"] == (
+        "{{ states('input_select.hall_look') in ['off', 'dim'] "
+        "and not is_state('input_select.hall_look', 'dim') }}"
+    ), "before moves only when the look changes, and never takes an unknown"
+    assert seq[0]["then"] == [
+        {
+            "action": "input_select.select_option",
+            "target": {"entity_id": "input_select.hall_look_before"},
+            "data": {"option": "{{ states('input_select.hall_look') }}"},
+        }
+    ]
+    assert seq[1] == {
+        "action": "input_select.select_option",
+        "target": {"entity_id": "input_select.hall_look"},
+        "data": {"option": "dim"},
+    }
+    assert seq[2] == {
+        "action": "input_boolean.turn_off",
+        "target": {"entity_id": "input_boolean.hall_lit_by_motion"},
+    }, "a look is a hand's act: the sensors let go of the room"
+    assert pkg["script"]["hall_off"]["sequence"][1]["data"] == {"option": "off"}
+    living = load(rendered, "living")["script"]["living_day"]["sequence"]
+    assert not any(
+        s.get("target", {}).get("entity_id") == "input_boolean.living_lit_by_motion" for s in living
+    ), "no sensor in the living room: nothing to let go of"
