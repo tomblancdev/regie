@@ -37,7 +37,9 @@ automation:
     triggers:
       - trigger: state
         entity_id: input_button.house_palette_another
-        not_from: [unavailable, unknown]
+        # a button's FIRST press ever comes from `unknown` (0.20.1, read live: the
+        # counter stayed at 0) — only a restart's `unavailable` is not a press
+        not_from: [unavailable]
     actions:
       - action: counter.increment
         target:

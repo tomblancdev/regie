@@ -148,6 +148,10 @@ def test_the_witness_renders_the_sensor_and_the_helpers(rendered, witness):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/palette.yaml").read_text())
     assert pkg["input_select"]["house_palette"]["options"] == ["Du jour", "Nuit bleue"]
     assert pkg["counter"]["house_palette_roll"]["restore"] is True
+    another = pkg["automation"][0]
+    assert another["id"] == "regie_house_palette_another"
+    # the first press ever comes from `unknown` — it must count (0.20.1)
+    assert another["triggers"][0]["not_from"] == ["unavailable"]
     sensor = pkg["template"][0]["sensor"][0]
     assert sensor["unique_id"] == "regie_house_palette"
     attr = sensor["attributes"]["palette"]

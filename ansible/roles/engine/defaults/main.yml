@@ -3,7 +3,7 @@
 
 # the tag to install; the collection's own version by default, so the pin in
 # a fleet's requirements bumps the roles and the engine together
-regie_version: "v0.20.0"
+regie_version: "v0.20.1"
 regie_repo: https://github.com/tomblancdev/regie.git
 regie_venv: /opt/regie
 regie_bin: /usr/local/bin/regie

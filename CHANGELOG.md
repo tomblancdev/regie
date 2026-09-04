@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.20.1 — « Une autre » compte dès la première pression (2026-09-04)
+
+Lu en direct au premier pas de la palette : le bouton pressé, le compteur
+resté à 0, l'automation `on` et jamais déclenchée. Un `input_button` naît
+`unknown` et sa PREMIÈRE pression part de là — le `not_from: [unavailable,
+unknown]` hérité de 0.18.1 (un déclencheur `to:` part aussi d'`unavailable`
+au redémarrage) l'avalait. Seul `unavailable` n'est pas une pression ; le
+test du pack le fixe. Aucun autre code ne change.
+
 ## 0.20.0 — La Palette du jour, le pas 1 : la valeur (2026-09-04)
 
 La page « La Palette du jour » (le design, six corrections et six réponses de
