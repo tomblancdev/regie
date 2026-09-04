@@ -38,6 +38,19 @@ scenes:
     # another look, and its kill-switch is a helper you can see
     run:
       drift: { role: main, places: front, band: [190, 330], period: [80, 175], step: 2.5 }
+  # a look that READS THE PALETTE (0.21): its numbers come from
+  # sensor.house_palette at recall — `band` spreads the front row along the
+  # day's arc (candidates: the day picks how many roam), `accent` is the one
+  # lamp, `ct: white` the palette's white; every brightness goes through the
+  # palette's level curve and the bulb's scatter of the day
+  today:
+    label: Palette du jour
+    icon: mdi:palette
+    palette: today
+    main:
+      front: { color: band, brightness: 40 }
+      back_center: { color: accent, brightness: 30 }
+    lamp: { ct: white, brightness: 50 }
 # daylight-first (H34): the sun drives; night forces the glimmer look
 defaults: { dark: evening, dim: day, bright: day, night: night }
 # the things that pick a look (0.18, pack when): the TV coming on takes the

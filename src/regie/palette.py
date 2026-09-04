@@ -475,3 +475,201 @@ def render_context(house) -> dict:
     lines.append("{% endif %}")
     lines.append("{{ palette }}")
     return {"options": opts, "state": state, "label": label, "attr": "\n".join(lines)}
+
+
+# --- step 2: the room reads the palette ------------------------------------------
+PALETTE_COLOURS = ("band", "roam", "accent")  # `color:` words a look with a palette may use
+WHITE_WORD = "white"  # `ct: white` — the palette's white
+SENSOR = "sensor.house_palette"
+PAL_EXPR = f"state_attr('{SENSOR}', 'palette')"
+
+
+def alive_count(rule, r: float, n_candidates: int) -> int:
+    """How many candidates roam today, from the palette's `alive` rule."""
+    if rule is None or n_candidates == 0:
+        return 0
+    if rule == "all":
+        return n_candidates
+    if isinstance(rule, list):
+        lo, hi = rule
+        hi = n_candidates if hi == "all" else min(int(hi), n_candidates)
+        lo = min(int(lo), hi)
+        return min(lo + int(r * (hi - lo + 1)), hi)
+    return min(int(rule), n_candidates)
+
+
+def room_draw(
+    day: int,
+    roll: int,
+    salt: int,
+    room: str,
+    alive,
+    n_candidates: int,
+    n_targets: int,
+    jitter: float,
+) -> dict:
+    """The room's own draws for the day — which candidates roam (a count and
+    an offset, so the choice rotates with the day) and each bulb's scatter."""
+    x = (day * 7919 + roll * 104729 + salt + salt_of(room)) % M
+    if x <= 0:
+        x = 1
+    r = []
+    for _ in range(2 + n_targets):
+        x = (x * A) % M
+        r.append(x / M)
+    count = alive_count(alive, r[0], n_candidates)
+    offset = int(r[1] * n_candidates) if n_candidates else 0
+    alive_flags = [((k - offset) % n_candidates) < count for k in range(n_candidates)]
+    scatter = [int((r[2 + k] * 2 - 1) * jitter * 10 + 0.5) / 10 for k in range(n_targets)]
+    return {"count": count, "offset": offset, "alive": alive_flags, "scatter": scatter}
+
+
+def room_jinja(
+    salt: int, room: str, alive, n_candidates: int, n_targets: int, jitter_expr: str
+) -> str:
+    """`room_draw` as one Jinja template, reading the day and the roll from the
+    sensor — the same steps, leaving a dict."""
+    nc = n_candidates
+    lines = [
+        f"{{% set s = {PAL_EXPR} %}}",
+        f"{{% set ns = namespace(x=(((s.day | int(0)) * 7919 + (s.roll | int(0)) * 104729 "
+        f"+ {salt + salt_of(room)}) % {M}), r=[], alive=[], scatter=[]) %}}",
+        "{% if ns.x <= 0 %}{% set ns.x = 1 %}{% endif %}",
+        f"{{% for i in range({2 + n_targets}) %}}{{% set ns.x = (ns.x * {A}) % {M} %}}"
+        f"{{% set ns.r = ns.r + [ns.x / {M}] %}}{{% endfor %}}",
+    ]
+    if alive is None or nc == 0:
+        lines.append("{% set count = 0 %}")
+    elif alive == "all":
+        lines.append(f"{{% set count = {nc} %}}")
+    elif isinstance(alive, list):
+        lo, hi = alive
+        hi = nc if hi == "all" else min(int(hi), nc)
+        lo = min(int(lo), hi)
+        lines.append(f"{{% set count = [{lo} + ((ns.r[0] * {hi - lo + 1}) | int), {hi}] | min %}}")
+    else:
+        lines.append(f"{{% set count = {min(int(alive), nc)} %}}")
+    lines.append(f"{{% set offset = (ns.r[1] * {nc}) | int %}}" if nc else "{% set offset = 0 %}")
+    lines.append(f"{{% set jitter = {jitter_expr} %}}")
+    # a `set` inside a `for` is scoped to the loop: the lists live on the namespace
+    if nc:
+        lines.append(
+            f"{{% for k in range({nc}) %}}"
+            f"{{% set ns.alive = ns.alive + [((k - offset) % {nc}) < count] %}}{{% endfor %}}"
+        )
+    lines.append(
+        f"{{% for k in range({n_targets}) %}}"
+        "{% set ns.scatter = ns.scatter + "
+        "[(((ns.r[2 + k] * 2 - 1) * jitter * 10 + 0.5) | int) / 10] %}"
+        "{% endfor %}"
+    )
+    lines.append(
+        "{{ {'count': count, 'offset': offset, 'alive': ns.alive, 'scatter': ns.scatter} }}"
+    )
+    return "\n".join(lines)
+
+
+def level_expr(brightness, k: int) -> str:
+    """The bulb's level at recall: the room's number × the palette's curve at
+    the house's period × the bulb's scatter of the day, 1–100."""
+    return (
+        f"{{{{ [1, [100, ({brightness} * ((pal.curve.get(period, 100) if pal.curve else 100) / 100)"
+        f" * (1 + room.scatter[{k}] / 100)) | int] | min] | max }}}}"
+    )
+
+
+def colour_expr(word: str, f: float | None) -> dict:
+    """The colour of a palette leaf, as the light service's templated data."""
+    if word == WHITE_WORD:
+        return {"color_temp_kelvin": "{{ pal.white_kelvin }}"}
+    if word == "accent":
+        return {
+            "hs_color": "{{ [(pal.accent if pal.accent is not none "
+            "else (pal.lo + pal.width) % 360), pal.saturation] }}"
+        }
+    return {
+        "hs_color": f"{{{{ [((pal.lo + pal.width * {f}) % 360) | round(1), pal.saturation] }}}}"
+    }
+
+
+def scene_palette(house, area: dict, plan: dict) -> dict | None:
+    """A look that names a palette, resolved for the render: the palette as a
+    Jinja expression (the sensor for `today`, the numbers for a named one), the
+    targets with their words and their positions, the candidates, and the
+    variables step every script of the look starts with."""
+    pid = plan.get("palette")
+    if not pid:
+        return None
+    palettes = house.palettes()
+    layout_of: dict[str, list[str]] = {
+        role: list((spec or {}).get("layout") or [])
+        for role, spec in (area.get("roles") or {}).items()
+    }
+    if pid == AUTO:
+        pal_expr = PAL_EXPR
+        alive = palettes["today"]["alive"]
+        jitter_expr = "(s.jitter | int(0))"
+    else:
+        named = palettes["named"].get(pid)
+        if named is None:
+            return None
+        value = named_value(named, house.kelvin())
+        pal_expr = _j(value)
+        alive = named.get("alive")
+        jitter_expr = str((named.get("level") or {}).get("jitter", 0))
+    targets: list[dict] = []
+    for r in plan["roles"]:
+        word = r["look"].get("palette")
+        if word in ("band", "roam") and r.get("group"):
+            # a prefix spread along the arc: each of its places its own hue
+            places = house.places_of(area, r["role"])
+            for place in r.get("places") or [t.get("at") for t in r.get("things", [])]:
+                p = places.get(place)
+                if not p or not p["entities"]:
+                    continue
+                targets.append({**r, "place": place, "entities": p["entities"], "group": False})
+        else:
+            targets.append(dict(r))
+    for k, t in enumerate(targets):
+        t["k"] = k
+        t["word"] = t["look"].get("palette")
+        layout = layout_of.get(t["role"], [])
+        t["order"] = layout.index(t["place"]) if t.get("place") in layout else len(layout)
+    arc = sorted(
+        (t for t in targets if t["word"] in ("band", "roam")), key=lambda t: (t["role"], t["order"])
+    )
+    for i, t in enumerate(arc):
+        t["f"] = round(i / (len(arc) - 1), 4) if len(arc) > 1 else 0.5
+    candidates = [t for t in arc if t["word"] == "band"]
+    for i, t in enumerate(candidates):
+        t["gate"] = i
+    for t in targets:
+        data: dict = {}
+        look = t["look"]
+        if not look.get("on"):
+            t["data"] = None
+            continue
+        if t["word"]:
+            data.update(colour_expr(t["word"], t.get("f")))
+        else:
+            data.update(
+                {k: v for k, v in look.items() if k not in ("on", "brightness_pct", "palette")}
+            )
+        if look.get("brightness_pct") is not None:
+            data["brightness_pct"] = level_expr(look["brightness_pct"], t["k"])
+        t["data"] = data
+    return {
+        "source": pid,
+        "pal": pal_expr,
+        "targets": targets,
+        "arc": arc,
+        "candidates": candidates,
+        "roamers": [t for t in arc if t["word"] == "roam"],
+        "variables": {
+            "pal": f"{{{{ {pal_expr} }}}}",
+            "period": "{{ states('sensor.house_period') }}",
+            "room": room_jinja(
+                house.palette_salt(), area["id"], alive, len(candidates), len(targets), jitter_expr
+            ),
+        },
+    }

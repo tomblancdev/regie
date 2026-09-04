@@ -79,7 +79,7 @@ OFF_DOMAINS = ("light", "switch")
 # what a look itself says; anything else in the mapping is one of the role's PLACES
 LOOK_KEYS = ("brightness", "ct", "color", "transition")
 # a scene's own keys — never a role name (check refuses a role wearing one)
-SCENE_KEYS = ("label", "icon", "tags", "run", "pinned")
+SCENE_KEYS = ("label", "icon", "tags", "run", "pinned", "palette")
 # the standard looks wear a standard face, so a row of buttons is readable at a
 # glance; a look a house invents says its own `icon:` (an icon has no language,
 # so it lives here and not beside the labels)
@@ -143,23 +143,36 @@ def normalise_look(look, kelvin: dict | None = None) -> dict:
         out["brightness_pct"] = look["brightness"]
     if "ct" in look:
         ct = look["ct"]
-        out["color_temp_kelvin"] = k[ct] if isinstance(ct, str) else ct
+        if ct == palette_mod.WHITE_WORD:
+            out["palette"] = ct  # the palette's white (0.21)
+        else:
+            out["color_temp_kelvin"] = k[ct] if isinstance(ct, str) else ct
     if "color" in look:
         c = look["color"]
-        out["rgb_color"] = [int(c[i : i + 2], 16) for i in (1, 3, 5)]
+        if c in palette_mod.PALETTE_COLOURS:
+            out["palette"] = c  # band · roam · accent — read at recall (0.21)
+        else:
+            out["rgb_color"] = [int(c[i : i + 2], 16) for i in (1, 3, 5)]
     if "transition" in look:
         out["transition"] = look["transition"]
     return out
 
 
-def hue_template(period: float, phase: float, lo: float, hi: float) -> str:
+def hue_template(period: float, phase: float, lo: str, width: str, prefix: str = "") -> str:
     """One walker's hue, as a Home Assistant template: a triangle wave of the
     CLOCK. No stored position, no accumulated drift — the brain may restart
-    mid-walk and the ceiling picks up exactly where the time says it should."""
+    mid-walk and the ceiling picks up exactly where the time says it should.
+    `lo` and `width` are expressions: numbers for a look's own band, the
+    palette's fields (0.21) for a look that reads one — `prefix` sets them."""
     return (
-        "{% set x = ((as_timestamp(now()) / " + f"{period}" + ") + " + f"{phase}" + ") % 1 %}"
+        prefix
+        + "{% set x = ((as_timestamp(now()) / "
+        + f"{period}"
+        + ") + "
+        + f"{phase}"
+        + ") % 1 %}"
         "{% set t = 2 * x if x < 0.5 else 2 * (1 - x) %}"
-        "{{ " + f"{lo}" + " + " + f"{hi - lo}" + " * t }}"
+        "{{ (" + f"{lo}" + " + " + f"{width}" + " * t) % 360 }}"
     )
 
 
@@ -977,7 +990,12 @@ class House:
             "tags": list(raw.get("tags") or []),
             "run": raw.get("run") or {},
             "pinned": bool(raw.get("pinned")),
+            # the palette a look reads (0.21): `today` or a named one
+            "palette": raw.get("palette"),
         }
+
+    def scene_palette(self, area: dict, plan: dict) -> dict | None:
+        return palette_mod.scene_palette(self, area, plan)
 
     def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str]]:
         """The (place, entity) pairs a drift walks, in layout order: the places
@@ -1009,42 +1027,62 @@ class House:
         stored. Brightness is absent on purpose: the scene sets it once, and a
         level command would abort the colour ramp running inside the bulb."""
         spec = (plan.get("run") or {}).get("drift")
-        if not spec:
-            return None
-        pairs = self.drift_places(area, spec)
-        if not pairs:
-            return None
-        band = spec.get("band") or DRIFT["band"]
+        pal = self.scene_palette(area, plan)
+        gates: dict[str, int] = {}
+        if pal:
+            # a look with a palette (0.21): the roamers always, the candidates
+            # the day picked — the arc's ends read from the sensor at each step
+            movers = pal["roamers"] + pal["candidates"]
+            if not movers:
+                return None
+            spec = dict(spec or {})
+            spec.setdefault("role", movers[0]["role"])
+            pairs = [(t.get("place") or t["role"], t["entities"][0]) for t in movers]
+            gates = {t["entities"][0]: t["gate"] for t in pal["candidates"]}
+            lo_expr, width_expr = "pal.lo", "pal.width"
+            sat = f"{{{{ ({pal['pal']}).saturation }}}}"
+            prefix = f"{{% set pal = {pal['pal']} %}}"
+        else:
+            if not spec:
+                return None
+            pairs = self.drift_places(area, spec)
+            if not pairs:
+                return None
+            band = spec.get("band") or DRIFT["band"]
+            lo_expr, width_expr, prefix = (
+                str(float(band[0])),
+                str(float(band[1]) - float(band[0])),
+                "",
+            )
+            sat = int(spec.get("saturation", DRIFT["saturation"]))
         period = spec.get("period") or DRIFT["period"]
         step = float(spec.get("step") or DRIFT["step"])
         floor = self.colour_floor(area, spec["role"], [p for p, _ in pairs])
         n = len(pairs)
         walkers = []
         for i, (place, entity) in enumerate(pairs):
+            per = round(period[0] + (period[1] - period[0]) * (i / max(n - 1, 1)), 2)
             walkers.append(
                 {
                     "place": place,
                     "entity": entity,
                     # spread the periods across the band: incommensurate clocks
-                    "period": round(period[0] + (period[1] - period[0]) * (i / max(n - 1, 1)), 2),
+                    "period": per,
                     "phase": round(i / n, 4),
-                    "hue": hue_template(
-                        round(period[0] + (period[1] - period[0]) * (i / max(n - 1, 1)), 2),
-                        round(i / n, 4),
-                        float(band[0]),
-                        float(band[1]),
-                    ),
+                    "hue": hue_template(per, round(i / n, 4), lo_expr, width_expr, prefix),
+                    "gate": gates.get(entity),
                 }
             )
         return {
             "role": spec["role"],
-            "lo": float(band[0]),
-            "hi": float(band[1]),
-            "saturation": int(spec.get("saturation", DRIFT["saturation"])),
+            "lo": None if pal else float(spec.get("band", DRIFT["band"])[0]),
+            "hi": None if pal else float(spec.get("band", DRIFT["band"])[1]),
+            "saturation": sat,
             "step": max(step, floor),
             "asked": step,
             "floor": floor,
             "walkers": walkers,
+            "palette": pal,
         }
 
     def colour_floor(self, area: dict, role: str, places: list[str]) -> float:
@@ -1683,6 +1721,46 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                     f"{a['id']}: scene {plan['id']} asks {d['asked']} s between colours on "
                     f"{d['role']} — the backend gives {d['floor']} s, stretched (a Zigbee bulb "
                     "ramps colour itself; a command inside that ramp aborts it)"
+                )
+        # a look that reads a palette (0.21): the words need the key, the key
+        # needs a palette the file names and the pack that carries it
+        pal_names = set(house.palettes()["named"]) | {palette_mod.AUTO}
+        for scene_id, looks in scenes.items():
+            if not isinstance(looks, dict):
+                continue
+            pid = looks.get("palette")
+            words: list[str] = []
+            for role, look in looks.items():
+                if role in SCENE_KEYS or not isinstance(look, dict):
+                    continue
+                for leaf in [look] + [v for v in look.values() if isinstance(v, dict)]:
+                    if leaf.get("color") in palette_mod.PALETTE_COLOURS:
+                        words.append(leaf["color"])
+                    if leaf.get("ct") == palette_mod.WHITE_WORD:
+                        words.append(palette_mod.WHITE_WORD)
+            where = f"{a['id']}: scene {scene_id}"
+            if pid and pid not in pal_names:
+                errors.append(
+                    f"{where} reads palette {pid!r} — the file names {', '.join(sorted(pal_names))}"
+                )
+            if pid and not house.has_pack("palette"):
+                errors.append(
+                    f"{where} reads a palette and pack 'palette' is not enabled — "
+                    "no sensor carries it"
+                )
+            if words and not pid:
+                errors.append(
+                    f"{where} uses {', '.join(sorted(set(words)))} and names no palette: — "
+                    "a palette word reads one"
+                )
+            if pid and not words:
+                hints.append(
+                    f"{where} names a palette and uses none of its words "
+                    "(band · roam · accent · white) — only the level part applies"
+                )
+            if words.count("accent") > 1:
+                hints.append(
+                    f"{where}: two accent places — one lamp stands out, two make a pattern"
                 )
         unfilled = sorted(r for r in declared if r not in filled)
         waiting = [p["id"] for p in house.scene_plan(a) if not p["renders"] and not p["implicit"]]

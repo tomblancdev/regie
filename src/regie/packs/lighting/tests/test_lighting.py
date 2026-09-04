@@ -192,7 +192,9 @@ def test_a_room_shows_the_look_it_pinned_and_hides_the_rest(rendered):
     assert party["entity"] == "script.living_party" and party["icon"] == "mdi:party-popper"
 
     by_hand = [c["name"] for c in views["living-looks"]["sections"][-1]["cards"][1:]]
-    assert by_hand == ["Jour", "Soirée", "Cinéma", "Nuit", "Éteint"], "off exists, and comes last"
+    assert by_hand == ["Jour", "Soirée", "Cinéma", "Nuit", "Palette du jour", "Éteint"], (
+        "off exists, and comes last"
+    )
     assert "Fête" not in by_hand, "a pinned look is not offered twice"
 
 

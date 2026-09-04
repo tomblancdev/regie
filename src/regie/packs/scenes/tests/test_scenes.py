@@ -110,7 +110,14 @@ def test_the_panel_renders_the_look_selects_and_the_sensor_reads_them(rendered):
         (rendered / "home-assistant/packages/scenes_living.yaml").read_text(encoding="utf-8")
     )
     sel = pkg["input_select"]
-    assert sel["living_look_dark"]["options"] == ["day", "evening", "cinema", "night", "party"]
+    assert sel["living_look_dark"]["options"] == [
+        "day",
+        "evening",
+        "cinema",
+        "night",
+        "party",
+        "today",
+    ]
     assert sel["living_look_night"]["options"][0] == "sun", "the first choice = follow the sun"
     body = pkg["template"][0]["sensor"][0]["state"]
     assert "input_select.living_look_" in body and "sun" in body
@@ -219,12 +226,13 @@ def test_every_other_look_stops_the_drift(rendered):
     for scene in ("living_day", "living_evening", "living_cinema", "living_night", "living_off"):
         first, second = pkg["script"][scene]["sequence"][:2]
         assert first["action"] == "input_boolean.turn_off"
-        assert first["target"]["entity_id"] == ["input_boolean.living_party_drift"], (
-            "a moving ceiling belongs to ONE look: leaving it must leave it"
-        )
+        assert first["target"]["entity_id"] == [
+            "input_boolean.living_party_drift",
+            "input_boolean.living_today_drift",
+        ], "a moving ceiling belongs to ONE look: leaving it must leave it"
         assert second == {
             "action": "script.turn_off",
-            "target": {"entity_id": ["script.living_party_drift"]},
+            "target": {"entity_id": ["script.living_party_drift", "script.living_today_drift"]},
         }, "and the loop in flight is stopped, not left to paint over the next look (0.19.2)"
     party = pkg["script"]["living_party"]["sequence"]
     assert party[-2]["action"] == "input_boolean.turn_on"

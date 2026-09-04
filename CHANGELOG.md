@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.21.0 — La Palette du jour, le pas 2 : la pièce dit sa part (2026-09-04)
+
+Une ambiance LIT la palette : `palette: today` (ou une palette nommée) sur
+n'importe quelle ambiance, et ses nombres deviennent des gabarits lus au
+rappel — le même script peint lundi et mardi autrement sans se re-rendre.
+
+- **Quatre mots sur les clés qui existent** (Tom : « use the words that will
+  standardize ») : `color: band` étale les places le long de l'arc dans
+  l'ordre du layout (un préfixe se déplie place par place, chacune sa teinte)
+  et en fait des CANDIDATES ; `color: roam` marche toujours ; `color: accent`
+  = la lampe seule (l'accent, sinon le bout de l'arc) ; `ct: white` = le blanc
+  de la palette. Un hex ou un mot de ct reste tel quel. **Chaque `brightness:`
+  d'une ambiance à palette** passe par la courbe de niveau (la période de la
+  maison, `sensor.house_period`) et par l'éparpillement du jour de l'ampoule,
+  borné 1–100.
+- **Les tirages de la pièce** (`room_draw` / `room_jinja`, une arithmétique,
+  un test qui les compare sur 400 jours × 5 règles) : depuis le jour et le
+  tirage du capteur, le sel et l'id de la pièce — COMBIEN de candidates
+  marchent (`alive` : un nombre, `all`, une plage) et à partir d'où (le choix
+  tourne avec le jour), puis un éparpillement par ampoule (± jitter). Une
+  liste posée dans une boucle Jinja est locale à la boucle : les listes vivent
+  sur le namespace (lu au premier rendu : `alive: []`).
+- **Le script de l'ambiance** ouvre par un pas `variables` (`pal` = le
+  capteur ou les nombres de la palette nommée, `period`, `room` = les tirages)
+  puis les `light.turn_on` en gabarits ; **la dérive** d'une ambiance à
+  palette est implicite (les `roam` toujours, les candidates derrière une
+  garde `room.alive[k]`), les bouts de l'arc lus sur le capteur à chaque pas
+  (`hue_template` prend des expressions : `(lo + width * t) % 360`), la
+  saturation aussi ; `run: drift: { period, step }` peut encore régler l'allure.
+- **`check`** refuse un mot de palette sans `palette:`, une palette que le
+  fichier ne nomme pas, une ambiance à palette sans le pack ; il indique une
+  ambiance à palette sans aucun de ses mots (seule la courbe s'applique) et
+  deux `accent` dans une pièce. Le schéma apprend les mots et la clé.
+- La maison témoin : Le Salon gagne « Palette du jour » (le devant en `band`,
+  le centre arrière en `accent`, la lampe en `white`). 311 tests.
+
 ## 0.20.1 — « Une autre » compte dès la première pression (2026-09-04)
 
 Lu en direct au premier pas de la palette : le bouton pressé, le compteur

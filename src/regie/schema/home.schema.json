@@ -828,7 +828,8 @@
                   "enum": [
                     "warm",
                     "neutral",
-                    "cool"
+                    "cool",
+                    "white"
                   ]
                 },
                 {
@@ -836,11 +837,24 @@
                   "minimum": 1000,
                   "maximum": 10000
                 }
-              ]
+              ],
+              "description": "warm | neutral | cool | a kelvin — or `white`, the palette's white (0.21, a look with `palette:`)"
             },
             "color": {
-              "type": "string",
-              "pattern": "^#[0-9a-fA-F]{6}$"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                {
+                  "enum": [
+                    "band",
+                    "roam",
+                    "accent"
+                  ]
+                }
+              ],
+              "description": "#rrggbb — or a palette word (0.21, a look with `palette:`): `band` spreads the places along the arc and makes them candidates for roaming, `roam` always roams, `accent` is the one lamp"
             },
             "transition": {
               "type": "number",
@@ -883,12 +897,17 @@
         "pinned": {
           "type": "boolean",
           "description": "put this look on the room's OWN page; every other look of the room waits one tap away, on its `ambiances` page. Nothing is promoted by the engine - a room shows the looks its file pinned and no others"
+        },
+        "palette": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "the palette this look reads (0.21): `today` (the sensor's, the day's draw or the select's choice) or a palette named in fx.palettes — then the words band · roam · accent · white apply, and every brightness goes through the palette's level curve and the bulb's scatter of the day"
         }
       },
       "additionalProperties": {
         "$ref": "#/$defs/look"
       },
-      "description": "a persistent look for the room, BY ROLE — no entity id anywhere; a role nothing fills yet renders nothing. `label`, `icon`, `tags` and `run` are the scene's own keys and can never be role names (check refuses a role wearing one)."
+      "description": "a persistent look for the room, BY ROLE — no entity id anywhere; a role nothing fills yet renders nothing. `label`, `icon`, `tags` and `run` are the scene's own keys and can never be role names (check refuses a role wearing one). `palette` (0.21) is a scene's own key too."
     },
     "role": {
       "type": "object",
@@ -1409,7 +1428,8 @@
                   "enum": [
                     "warm",
                     "neutral",
-                    "cool"
+                    "cool",
+                    "white"
                   ]
                 },
                 {
@@ -1417,11 +1437,24 @@
                   "minimum": 1000,
                   "maximum": 10000
                 }
-              ]
+              ],
+              "description": "warm | neutral | cool | a kelvin — or `white`, the palette's white (0.21, a look with `palette:`)"
             },
             "color": {
-              "type": "string",
-              "pattern": "^#[0-9a-fA-F]{6}$"
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                {
+                  "enum": [
+                    "band",
+                    "roam",
+                    "accent"
+                  ]
+                }
+              ],
+              "description": "#rrggbb — or a palette word (0.21, a look with `palette:`): `band` spreads the places along the arc and makes them candidates for roaming, `roam` always roams, `accent` is the one lamp"
             },
             "transition": {
               "type": "number",

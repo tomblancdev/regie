@@ -75,7 +75,19 @@ input_boolean:
 {% endif %}
 script:
 {% for p in plans %}
+{% set spal = scene_palette(area, p) %}
 {% set steps = [] %}
+{% if spal %}
+{# a look that reads a palette (0.21): every number is a template read at
+   recall — the arc, the accent, the white from sensor.house_palette (or a
+   named palette's own numbers), the level through the curve and the bulb's
+   scatter of the day; the `variables` step below computes them once #}
+{% for t in spal.targets %}
+{% set step = {'action': t.domain ~ '.turn_' ~ ('on' if t.look.on else 'off'), 'target': {'entity_id': t.entities}} %}
+{% if t.look.on and t.data and t.domain == 'light' %}{% set _ = step.update({'data': t.data}) %}{% endif %}
+{% set _ = steps.append(step) %}
+{% endfor %}
+{% else %}
 {% for r in p.roles %}
 {% set data = {} %}
 {% for k, v in r.look.items() if k != 'on' %}{% set _ = data.update({k: v}) %}{% endfor %}
@@ -83,6 +95,7 @@ script:
 {% if r.look.on and data and r.domain == 'light' %}{% set _ = step.update({'data': data}) %}{% endif %}
 {% set _ = steps.append(step) %}
 {% endfor %}
+{% endif %}
 {% set named = [] %}
 {% for r in p.roles %}{% set _ = named.append(r.role ~ ('.' ~ r.place if r.place is defined else '')) %}{% endfor %}
 {% set seq = [] %}
@@ -102,6 +115,7 @@ script:
    theirs to clear — a hand set it, its next press lifts it) #}
 {% set _ = seq.append({'action': 'input_boolean.turn_off', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_lit_by_motion'}}) %}
 {% endif %}
+{% if spal %}{% set _ = seq.append({'variables': spal.variables}) %}{% endif %}
 {% set _ = seq.append({'parallel': steps}) %}
 {% if drift_plan(area, p) %}
 {% set _ = seq.append({'action': 'input_boolean.turn_on', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}) %}
@@ -119,15 +133,24 @@ script:
 {% set d = drift_plan(area, p) %}
 {% set walk = [] %}
 {% for w in d.walkers %}
-{% set _ = walk.append({'action': 'light.turn_on', 'target': {'entity_id': w.entity}, 'data': {'hs_color': [w.hue, d.saturation], 'transition': d.step}}) %}
+{% set act = {'action': 'light.turn_on', 'target': {'entity_id': w.entity}, 'data': {'hs_color': [w.hue, d.saturation], 'transition': d.step}} %}
+{% if w.gate is not none %}
+{# a candidate of a palette look (0.21): it walks only on a day that picked it #}
+{% set _ = walk.append({'if': [{'condition': 'template', 'value_template': '{{ room.alive[' ~ w.gate ~ '] }}'}], 'then': [act]}) %}
+{% else %}
+{% set _ = walk.append(act) %}
+{% endif %}
 {% set _ = walk.append({'delay': {'milliseconds': ((d.step * 1000) / (d.walkers | length)) | round | int}}) %}
 {% endfor %}
+{% set dseq = [] %}
+{% if d.palette %}{% set _ = dseq.append({'variables': d.palette.variables}) %}{% endif %}
+{% set _ = dseq.append({'repeat': {'while': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}], 'sequence': walk}}) %}
 {{ {area.id ~ '_' ~ p.id ~ '_drift': {
   'alias': area.label ~ ' — ' ~ p.label ~ ' ↻',
-  'description': 'the sustained walk of ' ~ p.label ~ ' — ' ~ (d.walkers | length) ~ ' × hue ' ~ d.lo ~ '-' ~ d.hi ~ '°, a colour every ' ~ d.step ~ ' s each, every one on its own clock. Stateless: a hue is a function of the time, so a restart resumes mid-stride. Brightness is never sent — the look set it, and a level command aborts a colour ramp in the bulb (La Régie, pack scenes)',
+  'description': 'the sustained walk of ' ~ p.label ~ ' — ' ~ (d.walkers | length) ~ ' × hue ' ~ ((d.lo ~ '-' ~ d.hi ~ '°') if d.lo is not none else "the palette's arc, read from sensor.house_palette at every step; a candidate walks only on a day that picked it") ~ ', a colour every ' ~ d.step ~ ' s each, every one on its own clock. Stateless: a hue is a function of the time, so a restart resumes mid-stride. Brightness is never sent — the look set it, and a level command aborts a colour ramp in the bulb (La Régie, pack scenes)',
   'icon': p.icon,
   'mode': 'restart',
-  'sequence': [{'repeat': {'while': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}], 'sequence': walk}}],
+  'sequence': dseq,
 }} | to_block(2) }}
 {% endfor %}
   {{ area.id }}_default:

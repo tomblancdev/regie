@@ -79,7 +79,7 @@ def test_a_styrbar_is_heard_on_its_topic_and_a_bound_one_is_completed_never_doub
     assert ("release",) not in b, "a release has no verb: the trigger alone restarts"
     nxt = b[("right",)][0]["action"]
     assert nxt.startswith(
-        "script.living_{% set looks = ['day', 'evening', 'cinema', 'night', 'party'] %}"
+        "script.living_{% set looks = ['day', 'evening', 'cinema', 'night', 'party', 'today'] %}"
     )
     assert "(i + 1) % (looks | length)" in nxt and "(i + -1)" in b[("left",)][0]["action"]
     walk = b[("hold_left",)][0]["repeat"]

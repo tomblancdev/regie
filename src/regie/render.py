@@ -132,6 +132,7 @@ def context(house: House, secrets: dict) -> dict:
         "place_labels": house.place_labels,
         "scene_plan": house.scene_plan,
         "drift_plan": house.drift_plan,
+        "scene_palette": house.scene_palette,
         "when_plan": house.when_plan,
         "hands_plan": house.hands_plan,
         "rendered_scenes": house.rendered_scenes,
