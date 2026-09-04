@@ -442,7 +442,16 @@ def check_hands(house, area: dict) -> tuple[list[str], list[str]]:
             for word, verb in gestures.items():
                 w = f"{where}{' ' + prefix if prefix else ''} {word}"
                 errors += check_verb(house, area, verb, w, hints)
-    return errors, hints
+    # an unfilled role is one hint, not one per gesture that names it
+    seen: set[str] = set()
+    kept: list[str] = []
+    for h in hints:
+        key = h.split(": role ", 1)[1] if ": role " in h and "filled by nothing" in h else h
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(h)
+    return errors, kept
 
 
 def check_verb(house, area: dict, verb: dict, where: str, hints: list[str]) -> list[str]:
