@@ -6,7 +6,6 @@ import yaml
 from regie.errors import HouseError
 from regie.house import load_house
 
-
 WAS = {"not_from": ["unavailable", "unknown"]}
 
 

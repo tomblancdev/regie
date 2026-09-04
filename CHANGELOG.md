@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.2 — le tri des imports (2026-09-04)
+
+Un bloc d'imports non trié dans le test du pack `when` (I001) — passé sous le
+tuyau d'une chaîne qui avalait le code de sortie de `ruff check`. Aucun code du
+produit ne change ; 0.18.1 reste publié, pas à épingler.
+
 ## 0.18.1 — une ligne entend une chose qui ÉTAIT quelque part (2026-09-04)
 
 Lu en direct après 0.18.0 : la ligne `is: off` de la hotte avait couru à
