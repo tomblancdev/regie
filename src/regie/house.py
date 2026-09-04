@@ -1212,6 +1212,18 @@ class House:
                         "reads": lambda state: state,
                     }
                 )
+        for a in self.areas:
+            for s in self.when_plan(a):
+                # a thing that picks a look: its switch is born ON too (0.18)
+                out.append(
+                    {
+                        "entity": f"input_boolean.{s['switch']}",
+                        "action": "input_boolean/turn_on",
+                        "data": {},
+                        "value": "on",
+                        "reads": lambda state: state,
+                    }
+                )
         m = self.modes()
         if not m:
             return out

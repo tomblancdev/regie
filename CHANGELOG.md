@@ -27,6 +27,8 @@ une ambiance, un mode ou une histoire.
   ambiance qu'une des pièces n'a pas ; une histoire ou un mode inconnu ; une
   pièce inconnue dans `rooms:` ; `mode` est un verbe sur la ligne d'une chose
   et le SUJET d'une ligne de maison (qui ne peut donc que `look` ou `story`).
+- **Les interrupteurs naissent allumés** (comme ceux des capteurs, 0.17) : semés
+  une fois par le chef d'orchestre, à la famille ensuite.
 - La maison témoin : le téléviseur du salon prend le salon en cinéma et rend
   l'ambiance d'avant ; l'entrée s'allume à la maison quand il fait sombre.
 
