@@ -1380,6 +1380,28 @@ class Conductor:
             if not self.check:
                 ws.call("config/entity_registry/update", entity_id=e["entity_id"], hidden_by="user")
 
+    def palette_slots(self) -> None:
+        """A Perso slot whose name the file now carries is freed (0.23): the
+        family kept a palette on the phone, `regie palette --keep` printed it,
+        the file has it — the slot's name is emptied, the select still offers
+        the named one."""
+        from . import palette as palette_mod
+
+        if not self.house.has_pack("palette"):
+            return
+
+        def read(e):
+            status, state = self.ha.get(f"/api/states/{e}")
+            return state if status == 200 else None
+
+        for prefix in palette_mod.freed_slots(self.house, read):
+            self.step("palette", "changed", f"slot {prefix} freed — the file carries it now")
+            if not self.check:
+                self.ha.post(
+                    "/api/services/input_text/set_value",
+                    {"entity_id": f"input_text.{prefix}_name", "value": ""},
+                )
+
     def orphans(self, ws) -> None:
         """A package rendered once and gone leaves its entities in the registry
         as ghosts — `unavailable`, restored, never coming back: the motion
@@ -1563,6 +1585,7 @@ class Conductor:
             self.registries(ws)
             self.backup(ws)
         self.knobs()
+        self.palette_slots()
         self.mqtt()
         self.matter()
         self.thread()

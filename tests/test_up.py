@@ -86,10 +86,10 @@ def test_up_needs_a_render_first(witness, tmp_path):
         up(witness, tmp_path, tmp_path / "units", FakeRunner())
 
 
-def test_first_up_places_pulls_starts_then_nothing_to_do(witness, rendered, tmp_path, pinned):
+def test_first_up_places_pulls_starts_then_nothing_to_do(witness, rendered_fresh, tmp_path, pinned):
     units_dir = tmp_path / "systemd"
     runner = FakeRunner()
-    result = up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
+    result = up(witness, rendered_fresh, units_dir, runner, fetcher=lambda url: pinned)
     assert result.units == ["home-assistant", "matter-server", "mosquitto", "zigbee2mqtt-main"]
     assert result.placed == [
         "home-assistant.container",
@@ -105,27 +105,29 @@ def test_first_up_places_pulls_starts_then_nothing_to_do(witness, rendered, tmp_
         "zigbee2mqtt-main",
     ]
     assert result.components == ["auth_oidc v9.9.9"]
-    assert (rendered / "home-assistant/custom_components/auth_oidc/manifest.json").is_file()
-    assert (rendered / "home-assistant/custom_components/auth_oidc/config/schema.py").is_file()
-    assert (rendered / "home-assistant/packages").is_dir()
-    assert (rendered / "matter-server").is_dir()  # the server's data, made before its first start
+    oidc = rendered_fresh / "home-assistant/custom_components/auth_oidc"
+    assert (oidc / "manifest.json").is_file()
+    assert (oidc / "config/schema.py").is_file()
+    assert (rendered_fresh / "home-assistant/packages").is_dir()
+    # the server's data, made before its first start
+    assert (rendered_fresh / "matter-server").is_dir()
     assert (units_dir / "mosquitto.container").read_text() == (
-        rendered / "units/mosquitto.container"
+        rendered_fresh / "units/mosquitto.container"
     ).read_text()
     assert "systemctl daemon-reload" in runner.log
     assert result.changed and "nothing to do" not in result.summary()
 
-    again = up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
+    again = up(witness, rendered_fresh, units_dir, runner, fetcher=lambda url: pinned)
     assert not again.changed and again.summary().endswith("nothing to do")
 
 
-def test_a_changed_file_restarts_only_its_service(witness, rendered, tmp_path, pinned):
+def test_a_changed_file_restarts_only_its_service(witness, rendered_fresh, tmp_path, pinned):
     units_dir = tmp_path / "systemd"
     runner = FakeRunner()
-    up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
-    acl = rendered / "mosquitto/config/acl"
+    up(witness, rendered_fresh, units_dir, runner, fetcher=lambda url: pinned)
+    acl = rendered_fresh / "mosquitto/config/acl"
     acl.write_text(acl.read_text() + "# a change\n")
-    result = up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
+    result = up(witness, rendered_fresh, units_dir, runner, fetcher=lambda url: pinned)
     assert result.restarted == ["mosquitto"] and not result.started and not result.placed
 
 
@@ -164,20 +166,20 @@ def test_a_unit_the_house_dropped_is_stopped_and_removed(house_with, secrets, tm
     assert "systemctl stop zigbee2mqtt-main.service" in runner.log
 
 
-def test_check_plans_and_touches_nothing(witness, rendered, tmp_path, pinned):
+def test_check_plans_and_touches_nothing(witness, rendered_fresh, tmp_path, pinned):
     units_dir = tmp_path / "systemd"
     runner = FakeRunner(check=True)
-    result = up(witness, rendered, units_dir, runner, fetcher=lambda url: pinned)
+    result = up(witness, rendered_fresh, units_dir, runner, fetcher=lambda url: pinned)
     assert result.check and "would place 4" in result.summary()
     assert not units_dir.exists() and not runner.images
-    assert not (rendered / "home-assistant/custom_components").exists()
+    assert not (rendered_fresh / "home-assistant/custom_components").exists()
 
 
-def test_a_wrong_digest_installs_nothing(witness, rendered, tmp_path, pinned):
+def test_a_wrong_digest_installs_nothing(witness, rendered_fresh, tmp_path, pinned):
     bad = fake_zip(with_folder=True)  # different bytes, wrong digest
     with pytest.raises(HouseError, match="sha256"):
-        up(witness, rendered, tmp_path / "s", FakeRunner(), fetcher=lambda url: bad)
-    assert not (rendered / "home-assistant/custom_components").exists()
+        up(witness, rendered_fresh, tmp_path / "s", FakeRunner(), fetcher=lambda url: bad)
+    assert not (rendered_fresh / "home-assistant/custom_components").exists()
 
 
 def test_a_component_pinned_by_the_product_is_pinned_by_digest():
@@ -186,8 +188,8 @@ def test_a_component_pinned_by_the_product_is_pinned_by_digest():
         assert "{version}" in spec["url"]
 
 
-def test_state_files_live_under_dot_regie(witness, rendered, tmp_path, pinned):
-    up(witness, rendered, tmp_path / "s", FakeRunner(), fetcher=lambda url: pinned)
-    names = {p.name for p in (rendered / ".regie").iterdir()}
+def test_state_files_live_under_dot_regie(witness, rendered_fresh, tmp_path, pinned):
+    up(witness, rendered_fresh, tmp_path / "s", FakeRunner(), fetcher=lambda url: pinned)
+    names = {p.name for p in (rendered_fresh / ".regie").iterdir()}
     assert {"manifest.json", "units.json", "stamps.json", "components.json"} <= names
-    assert isinstance(Path(rendered), Path)
+    assert isinstance(Path(rendered_fresh), Path)

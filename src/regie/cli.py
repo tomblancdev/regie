@@ -312,6 +312,11 @@ def cmd_palette(args) -> int:
     secrets = load_secrets(args.secrets)
     ha = HomeAssistant(args.url)
     Conductor(house, secrets, Path(args.root), ha).session_token()
+    if args.keep:
+        # the slots the family filled, as a block for fx.yml: the file is the
+        # design; a slot whose name the file carries is freed at the next converge
+        print(P.keep_block(house, lambda e: ha.get(f"/api/states/{e}")[1]), end="")
+        return 0
     status, state = ha.get("/api/states/sensor.house_palette")
     if status != 200 or not isinstance(state, dict):
         print(f"the brain: sensor.house_palette answers {status} — is the pack converged?")
@@ -763,6 +768,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--name", help="print a named palette instead of the day's")
     s.add_argument("--plain", action="store_true", help="no colour bars")
+    s.add_argument(
+        "--keep",
+        action="store_true",
+        help="print the Perso slots the family filled as a palettes: block for fx.yml "
+        "(needs --root)",
+    )
     _secrets_arg(s)
     s.add_argument(
         "--root",

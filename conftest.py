@@ -43,8 +43,10 @@ def witness_path() -> Path:
     return WITNESS / "home.yml"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def witness(witness_path):
+    """Loaded ONCE for the whole run: no test mutates it (the ones that need a
+    changed house copy it through `house_with`) — the render tests read it."""
     return load_house(witness_path)
 
 
@@ -53,10 +55,14 @@ def secrets() -> dict:
     return load_secrets(WITNESS / "secrets.example.yml", environ={})
 
 
-@pytest.fixture
-def rendered(tmp_path, witness, secrets):
-    render(witness, tmp_path, secrets)
-    return tmp_path
+@pytest.fixture(scope="session")
+def rendered(tmp_path_factory, witness, secrets):
+    """The witness rendered ONCE for the whole run (forty tests read it, none
+    writes into it) — a render was eight seconds by 0.22, and the suite had
+    crossed ten minutes."""
+    out = tmp_path_factory.mktemp("rendered")
+    render(witness, out, secrets)
+    return out
 
 
 @pytest.fixture
@@ -75,3 +81,12 @@ def house_with(tmp_path):
         return target / "home.yml"
 
     return make
+
+
+@pytest.fixture
+def rendered_fresh(rendered, tmp_path):
+    """A copy of the shared render for a test that WRITES into it (`up`
+    installs units and stamps files)."""
+    out = tmp_path / "rendered"
+    shutil.copytree(rendered, out)
+    return out

@@ -7,4 +7,15 @@
       attribute: label
       name: {{ labels.ui.palette | to_yaml }}
       icon: mdi:palette
+{% if palette.house.chip %}
+    - type: button
+      name: {{ labels.ui.palette_today | to_yaml }}
+      icon: mdi:palette-swatch
+      action_name: {{ labels.ui.palette_today | to_yaml }}
+      tap_action:
+        action: perform-action
+        perform_action: script.turn_on
+        target:
+          entity_id: script.house_palette_today
+{% endif %}
 {% endif %}

@@ -21,7 +21,8 @@ RULES = P.normalise(
     }
 )["today"]
 SALT = P.salt_of("Maison témoin")
-DAYS = range(20700, 20700 + 3650)  # ten years of days
+DAYS = range(20700, 20700 + 3650)  # ten years of days (the pure-Python sweeps)
+SAMPLED = range(20700, 20700 + 3650, 5)  # every fifth day, for the sweeps that render Jinja
 
 
 def _arc(p: dict) -> list[int]:
@@ -70,7 +71,7 @@ def test_the_template_agrees_with_python_over_ten_years():
     tpl = jinja2.Environment().from_string(
         "{% set day = D %}{% set roll = R %}" + body + "{{ palette | tojson }}"
     )
-    for day in DAYS:
+    for day in SAMPLED:
         for roll in (0, 3):
             got = json.loads(tpl.render(D=day, R=roll))
             assert got == P.draw(day, roll, SALT, RULES), (day, roll)
@@ -146,7 +147,8 @@ def test_check_on_a_named_palette():
 
 def test_the_witness_renders_the_sensor_and_the_helpers(rendered, witness):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/palette.yaml").read_text())
-    assert pkg["input_select"]["house_palette"]["options"] == ["Du jour", "Nuit bleue"]
+    # the day, the named one, then the Atelier and its slots (0.23)
+    assert pkg["input_select"]["house_palette"]["options"][:2] == ["Du jour", "Nuit bleue"]
     assert pkg["counter"]["house_palette_roll"]["restore"] is True
     another = pkg["automation"][0]
     assert another["id"] == "regie_house_palette_another"
@@ -370,12 +372,20 @@ def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness
     assert loop["while"][0]["entity_id"] == "input_boolean.living_today_drift"
     steps = loop["sequence"]
     assert "pal.life.every" in steps[0]["delay"]["seconds"]
-    pick = steps[1]["variables"]["sign"]
+    # the switch is read again after the wait (0.22.3): a sign never lands
+    # after a hand turned the look's ↻ off
+    assert steps[1] == {
+        "condition": "state",
+        "entity_id": "input_boolean.living_today_drift",
+        "state": "on",
+    }
+    pick = steps[2]["variables"]["sign"]
     assert "pal.life.shapes" in pick and "reject('eq', last)" in pick
     assert "room.alive[" in pick  # a candidate is still only on a day that left it so
-    assert steps[2]["action"] == "script.fx_{{ sign.shape }}"
-    assert steps[2]["data"]["target"] == ["{{ sign.bulb }}"]
-    assert steps[3]["variables"]["last"] == "{{ sign.bulb }}"
+    assert "namespace(still=" in pick  # the still pool grows on a namespace
+    assert steps[3]["action"] == "script.fx_{{ sign.shape }}"
+    assert steps[3]["data"]["target"] == ["{{ sign.bulb }}"]
+    assert steps[4]["variables"]["last"] == "{{ sign.bulb }}"
     # the look starts it beside the drift, every other look stops it
     today = pkg["script"]["living_today"]["sequence"]
     assert today[-1]["target"]["entity_id"] == "script.living_today_life"
@@ -396,7 +406,7 @@ def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness
 def test_life_evaluates_a_pick_from_the_pools(rendered):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/scenes_living.yaml").read_text())
     steps = pkg["script"]["living_today_life"]["sequence"][3]["repeat"]["sequence"]
-    pick = steps[1]["variables"]["sign"]
+    pick = steps[2]["variables"]["sign"]
     env = jinja2.Environment()
     ctx = {
         "pal": {"life": {"shapes": ["glitch"], "every": [120, 600]}},
@@ -450,3 +460,119 @@ def test_a_today_look_gets_life_when_only_a_named_palette_has_it(house_with):
     assert life and life["live"]
     assert life["shapes"] == ["glitch", "lightning"]  # Nuit bleue's, the union
     assert life["colour_shapes"] == ["lightning"]
+
+
+# --- step 4 (0.23): the house — the chip, the repaint, the Atelier ---------------------
+def test_the_witness_house_gets_the_chip_the_repaint_and_the_atelier(rendered, witness):
+    pkg = yaml.safe_load((rendered / "home-assistant/packages/palette.yaml").read_text())
+    assert pkg["input_select"]["house_palette"]["options"] == [
+        "Du jour",
+        "Nuit bleue",
+        "Atelier",
+        "Perso 1",
+        "Perso 2",
+        "Perso 3",
+    ]
+    # the chip: every room with a look `today`
+    chip = pkg["script"]["house_palette_today"]["sequence"][0]["parallel"]
+    assert [s["target"]["entity_id"] for s in chip] == ["script.living_today"]
+    # the repaint: the rooms lit in a palette look take it again; nothing turns on
+    autos = {a["id"]: a for a in pkg["automation"]}
+    rep = autos["regie_house_palette_repaint"]
+    assert rep["triggers"][0]["attribute"] == "palette"
+    assert rep["conditions"][0]["entity_id"] == "input_boolean.house_palette_repaint"
+    branch = rep["actions"][0]["parallel"][0]
+    cond = branch["if"][0]["value_template"]
+    assert "states('input_select.living_look') in ['evening', 'today']" in cond
+    assert "is_state('light.living_lights', 'on')" in cond
+    assert branch["then"][0]["action"] == "script.living_{{ states('input_select.living_look') }}"
+    # the Atelier: four sliders, three selects, a name, two buttons; three slots
+    for key in ("start", "width", "accent", "saturation"):
+        assert f"house_palette_atelier_{key}" in pkg["input_number"]
+        assert f"house_palette_perso3_{key}" in pkg["input_number"]
+    assert pkg["input_select"]["house_palette_atelier_life"]["options"] == [
+        "aucune",
+        "comme Nuit bleue",
+    ]
+    assert pkg["input_select"]["house_palette_perso1_alive"]["options"] == [
+        "0",
+        "1",
+        "2",
+        "3",
+        "all",
+    ]
+    add = autos["regie_house_palette_add"]["actions"][0]["choose"]
+    assert len(add) == 3 and "perso1_name" in add[0]["conditions"][0]["value_template"]
+    assert add[0]["sequence"][-1]["data"]["option"] == "Perso 1"
+    assert autos["regie_house_palette_try"]["actions"][0]["data"]["option"] == "Atelier"
+    knobs = {k["entity"]: k["value"] for k in witness.knobs()}
+    assert knobs["input_boolean.house_palette_repaint"] == "on"
+
+
+def test_the_sensor_reads_the_atelier_and_a_slot(witness):
+    from regie.palette import render_context
+
+    ctx = render_context(witness)
+    attr = ctx["attr"].replace("{{ palette }}", "{{ palette | tojson }}")
+    values = {
+        "input_select.house_palette": "Atelier",
+        "counter.house_palette_roll": "0",
+        "input_datetime.house_palette_turns": "06:30:00",
+        "input_number.house_palette_atelier_start": "300.0",
+        "input_number.house_palette_atelier_width": "90.0",
+        "input_number.house_palette_atelier_accent": "180.0",
+        "input_number.house_palette_atelier_saturation": "80.0",
+        "input_select.house_palette_atelier_white": "neutral",
+        "input_select.house_palette_atelier_alive": "2",
+        "input_select.house_palette_atelier_life": "comme Nuit bleue",
+        "input_text.house_palette_perso1_name": "Soir de pluie",
+    }
+    env = jinja2.Environment()
+    env.globals["states"] = lambda e: values.get(e, "unknown")
+    now = dt.datetime(2026, 9, 5, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=2)))
+    env.globals["now"] = lambda: now
+    env.globals["as_timestamp"] = lambda t: t.timestamp()
+    got = json.loads(env.from_string(attr).render())
+    assert got["lo"] == 300 and got["hi"] == 30 and got["width"] == 90
+    assert got["accent"] == 180 and got["saturation"] == 80
+    assert got["white"] == "neutral" and got["white_kelvin"] == 4000
+    assert got["alive"] == 2 and got["life"] == {
+        "shapes": ["glitch", "lightning"],
+        "every": [120, 600],
+    }
+    assert env.from_string(ctx["state"]).render().strip() == "atelier"
+    values["input_select.house_palette"] = "Perso 1"
+    assert env.from_string(ctx["label"]).render().strip() == "Soir de pluie"
+    values["input_select.house_palette"] = "Perso 2"
+    assert env.from_string(ctx["label"]).render().strip() == "Perso 2"
+
+
+def test_keep_prints_the_slots_and_apply_frees_the_kept_ones(witness):
+    states = {
+        "input_text.house_palette_perso1_name": "Soir de pluie",
+        "input_number.house_palette_perso1_start": "300.0",
+        "input_number.house_palette_perso1_width": "90.0",
+        "input_number.house_palette_perso1_accent": "180.0",
+        "input_number.house_palette_perso1_saturation": "80.0",
+        "input_select.house_palette_perso1_white": "neutral",
+        "input_select.house_palette_perso1_alive": "all",
+        "input_select.house_palette_perso1_life": "comme Nuit bleue",
+        "input_text.house_palette_perso2_name": "Nuit bleue",  # the file carries it
+        "input_number.house_palette_perso2_start": "200.0",
+        "input_number.house_palette_perso2_width": "50.0",
+    }
+
+    def read(e):
+        return {"state": states[e]} if e in states else None
+
+    block = P.keep_block(witness, read)
+    assert block.startswith(
+        "palettes:\n  soir_de_pluie:\n    label: Soir de pluie\n    band: [300, 30]\n"
+    )
+    assert (
+        "    alive: all\n" in block
+        and "life: { shapes: [glitch, lightning], every: [120, 600] }" in block
+    )
+    assert "nuit_bleue" in block  # printed too: the file decides what to keep
+    assert P.freed_slots(witness, read) == ["house_palette_perso2"]
+    assert P.slug("Soir de pluie !") == "soir_de_pluie" and P.slug("2026") == "p_2026"

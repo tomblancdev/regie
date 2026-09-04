@@ -246,7 +246,7 @@ class House:
             "restore_default": bool(c.get("restore_default", False)),
             "silent": bool(c.get("silent", True)),
             # the palette (0.20): the house card's row and the Réglages rows
-            "palette": bool(c.get("palette", False)),
+            "palette": bool(c.get("palette", False)),  # true, or { slots: N } (0.23)
         }
 
     def look_options(self, area: dict) -> list[str]:
@@ -1346,6 +1346,17 @@ class House:
                     "action": "input_select/select_option",
                     "data": {"option": auto},
                     "value": auto,
+                    "reads": lambda state: state,
+                }
+            )
+            # « Repeint les pièces » is born ON (Tom, 2026-09-04): the hour, the
+            # roll or the select repaint the rooms LIT in the palette, never more
+            out.append(
+                {
+                    "entity": "input_boolean.house_palette_repaint",
+                    "action": "input_boolean/turn_on",
+                    "data": {},
+                    "value": "on",
                     "reads": lambda state: state,
                 }
             )

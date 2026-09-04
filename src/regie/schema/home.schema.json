@@ -329,9 +329,25 @@
           "description": "the '<room> — ne répond plus' alerts (a thing unavailable an hour); off = no notification renders"
         },
         "palette": {
-          "type": "boolean",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "slots": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9,
+                  "default": 3
+                }
+              }
+            }
+          ],
           "default": false,
-          "description": "the palette (0.20): the house card's row and the Réglages rows (the select, the hour it turns, « Une autre ») — the pack renders the sensor and the helpers regardless"
+          "description": "the palette (0.20): the house card's chip and row, the Réglages rows (the select, the hour it turns, « Une autre », « Repeint les pièces ») and, since 0.23, the Atelier with its Perso slots (`{ slots: 3 }`; `true` = 3) — the pack renders the sensor and the helpers regardless"
         }
       }
     },

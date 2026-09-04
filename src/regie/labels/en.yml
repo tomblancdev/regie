@@ -67,6 +67,23 @@ ui:
   harmony_duo: duo
   harmony_uni: mono
   harmony_libre: free
+  palette_repaint: Repaint the rooms
+  palette_atelier: Workshop
+  palette_slot: Custom
+  palette_try: Try
+  palette_add: Add
+  palette_name: Palette name
+  atelier_start: Arc start
+  atelier_width: Arc width
+  atelier_accent: Accent
+  atelier_saturation: Saturation
+  atelier_white: White
+  atelier_alive: Alive
+  atelier_life: Life
+  alive_none: none
+  alive_all: all
+  life_none: none
+  life_like: like
   mode: Mode
   period: Period
   period_begins: Begins

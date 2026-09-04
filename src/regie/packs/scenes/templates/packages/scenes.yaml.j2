@@ -170,10 +170,11 @@ script:
    twice in a row. Its switch is the look's own ↻ #}
 {% set shapes_expr = "(pal.life.shapes if pal.life else [])" if l.live else (l.shapes | tojson | replace('"', "'")) %}
 {% set every_expr = "pal.life.every" if l.live else (l.every | tojson) %}
+{# a `set` inside a `for` is the loop's own (0.22.3): the still pool grows on a namespace #}
 {% set pick = "{% set shape = " ~ shapes_expr ~ " | random %}"
-  ~ "{% set still = " ~ (l.still | tojson | replace('"', "'")) ~ " %}"
-  ~ "{% for e, k in " ~ (l.gated | map('list') | list | tojson | replace('"', "'")) ~ " %}{% if not room.alive[k] %}{% set still = still + [e] %}{% endif %}{% endfor %}"
-  ~ "{% set pool = still if shape in " ~ (l.colour_shapes | tojson | replace('"', "'")) ~ " else " ~ (l.any | tojson | replace('"', "'")) ~ " %}"
+  ~ "{% set ns = namespace(still=" ~ (l.still | tojson | replace('"', "'")) ~ ") %}"
+  ~ "{% for e, k in " ~ (l.gated | map('list') | list | tojson | replace('"', "'")) ~ " %}{% if not room.alive[k] %}{% set ns.still = ns.still + [e] %}{% endif %}{% endfor %}"
+  ~ "{% set pool = ns.still if shape in " ~ (l.colour_shapes | tojson | replace('"', "'")) ~ " else " ~ (l.any | tojson | replace('"', "'")) ~ " %}"
   ~ "{% set pool = pool | reject('eq', last) | list or pool %}"
   ~ "{{ {'shape': shape, 'bulb': pool | random} }}" %}
 {% set lseq = [{'variables': l.variables}] %}
@@ -183,6 +184,7 @@ script:
 {% set _ = lseq.append({'variables': {'last': ''}}) %}
 {% set _ = lseq.append({'repeat': {'while': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}], 'sequence': [
   {'delay': {'seconds': '{{ range(' ~ every_expr ~ '[0] | int, ' ~ every_expr ~ '[1] | int + 1) | random }}'}},
+  {'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'},
   {'variables': {'sign': pick}},
   {'action': 'script.fx_{{ sign.shape }}', 'data': {'target': ['{{ sign.bulb }}']}},
   {'variables': {'last': '{{ sign.bulb }}'}},

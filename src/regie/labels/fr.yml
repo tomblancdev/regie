@@ -71,6 +71,23 @@ ui:
   harmony_duo: duo
   harmony_uni: uni
   harmony_libre: libre
+  palette_repaint: Repeint les pièces
+  palette_atelier: Atelier
+  palette_slot: Perso
+  palette_try: Essayer
+  palette_add: Ajouter
+  palette_name: Nom de la palette
+  atelier_start: Début de l'arc
+  atelier_width: Largeur de l'arc
+  atelier_accent: Accent
+  atelier_saturation: Saturation
+  atelier_white: Blanc
+  atelier_alive: Vives
+  atelier_life: Vie
+  alive_none: aucune
+  alive_all: toutes
+  life_none: aucune
+  life_like: comme
   mode: Mode
   period: Période
   period_begins: Début

@@ -1,4 +1,5 @@
 {% if controls.palette %}
+{% set h = palette.house %}
 - type: entities
   title: {{ labels.ui.palette | to_yaml }}
   entities:
@@ -8,4 +9,31 @@
       name: {{ labels.ui.palette_turns | to_yaml }}
     - entity: input_button.house_palette_another
       name: {{ labels.ui.palette_another | to_yaml }}
+    - entity: input_boolean.house_palette_repaint
+      name: {{ labels.ui.palette_repaint | to_yaml }}
+{% if h.atelier %}
+- type: entities
+  title: {{ labels.ui.palette_atelier | to_yaml }}
+  entities:
+{% for key in h.numbers %}
+    - entity: input_number.{{ h.atelier.prefix }}_{{ key }}
+      name: {{ labels.ui['atelier_' ~ key] | to_yaml }}
+{% endfor %}
+    - entity: input_select.{{ h.atelier.prefix }}_white
+      name: {{ labels.ui.atelier_white | to_yaml }}
+    - entity: input_select.{{ h.atelier.prefix }}_alive
+      name: {{ labels.ui.atelier_alive | to_yaml }}
+    - entity: input_select.{{ h.atelier.prefix }}_life
+      name: {{ labels.ui.atelier_life | to_yaml }}
+    - entity: input_button.house_palette_try
+      name: {{ labels.ui.palette_try | to_yaml }}
+    - entity: input_text.house_palette_atelier_name
+      name: {{ labels.ui.palette_name | to_yaml }}
+    - entity: input_button.house_palette_add
+      name: {{ labels.ui.palette_add | to_yaml }}
+{% for slot in h.slots %}
+    - entity: input_text.{{ slot.prefix }}_name
+      name: {{ (labels.ui.palette_slot ~ ' ' ~ slot.n) | to_yaml }}
+{% endfor %}
+{% endif %}
 {% endif %}
