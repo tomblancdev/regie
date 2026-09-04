@@ -134,10 +134,12 @@ automation:
     description: the rooms lit in a palette look take the new palette when the sensor changes; nothing is turned on (La Régie, pack palette)
     mode: queued
     triggers:
+      # the attribute is a dict: a `not_from` on it made the listener throw on
+      # every change and the repaint never ran (read live, 0.23.0) — the
+      # attribute's absence at a restart is not a change of palette anyway
       - trigger: state
         entity_id: sensor.house_palette
         attribute: palette
-        not_from: [unavailable, unknown]
     conditions:
       - condition: state
         entity_id: input_boolean.house_palette_repaint

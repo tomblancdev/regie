@@ -480,6 +480,7 @@ def test_the_witness_house_gets_the_chip_the_repaint_and_the_atelier(rendered, w
     autos = {a["id"]: a for a in pkg["automation"]}
     rep = autos["regie_house_palette_repaint"]
     assert rep["triggers"][0]["attribute"] == "palette"
+    assert "not_from" not in rep["triggers"][0]  # a dict attribute: a not_from throws
     assert rep["conditions"][0]["entity_id"] == "input_boolean.house_palette_repaint"
     branch = rep["actions"][0]["parallel"][0]
     cond = branch["if"][0]["value_template"]

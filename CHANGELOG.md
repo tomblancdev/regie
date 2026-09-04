@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.23.0 — La Palette du jour, le pas 4 : la maison (2026-09-04)
+
+La maison applique la palette avec les verbes qui existent, et la famille la
+fait sur le téléphone.
+
+- **La pastille « Palette du jour »** sur la carte de la maison :
+  `script.house_palette_today` — `look: today, rooms: all`, chaque pièce qui
+  déclare sa part la prend (une seule pression, tout le plat).
+- **« Repeint les pièces »** (`input_boolean.house_palette_repaint`, né allumé
+  — Tom : « it repaints what is on but never puts things on ») : quand le
+  capteur change — l'heure, le tirage, le sélecteur —, chaque pièce ALLUMÉE
+  dans une ambiance qui lit la palette la reprend ; une pièce éteinte reste
+  éteinte, une pièce dans une autre ambiance n'est pas touchée. Lu en direct :
+  un `not_from` sur un attribut-dictionnaire fait lever l'écouteur à chaque
+  changement, et le repeint ne courait jamais — retiré.
+- **L'Atelier** (`controls.palette: true`, ou `{ slots: N }`) : quatre
+  curseurs (début et largeur de l'arc, accent, saturation), trois sélecteurs
+  (blanc, vives, vie « comme <palette nommée> »), un nom ; « Essayer » met le
+  sélecteur sur l'Atelier (le repeint fait le reste) ; « Ajouter » garde les
+  nombres dans la première case Perso libre sous le nom tapé, et le sélecteur
+  la prend — trois cases par défaut, le capteur les lit comme une palette
+  nommée, l'étiquette est le nom tapé.
+- **`regie palette --keep --root`** imprime les cases remplies en bloc
+  `palettes:` pour fx.yml (l'id = le nom en slug) ; **le chef d'orchestre
+  libère une case dont le fichier porte le nom** à la convergence suivante —
+  le fichier est le dessin, le téléphone le brouillon.
+- **La vie (0.22.3 dans ce pas)** : l'interrupteur ↻ est relu APRÈS l'attente
+  — un signe ne tombe plus jusqu'à trois minutes après qu'une main l'a coupé
+  (lu en direct : un éclair à 20:02:39 sur un interrupteur coupé à 20:01) ; le
+  bassin des immobiles grandit sur un namespace (la portée d'un `set` dans une
+  boucle, encore). 319 tests ; la suite en 4 minutes (un seul rendu de la
+  maison témoin par passage, les balayages Jinja échantillonnés).
+
 ## 0.22.2 — une ambiance « today » a de la vie dès qu'UNE palette en a (2026-09-04)
 
 Lu en direct à la preuve du pas 3 : Omega choisie dans le sélecteur, l'ambiance
