@@ -925,6 +925,26 @@ class Conductor:
                 self.step(what, "changed", f"named {room} (was {group['friendly_name']})")
             members = {m.get("ieee_address") for m in (group or {}).get("members", [])}
             want = {t["ieee"] for t in g["things"]}
+            # the coordinator sits in a group whose remote speaks through it
+            # (a STYRBAR's binding shape, hands.PROFILES): added when one binds
+            # to this room, never removed
+            coordinator = (z.info.get("coordinator") or {}).get("ieee_address")
+            hears = [
+                t
+                for t in c["things"]
+                if room in (t.get("bind") or []) and (binding_shape(t) or {}).get("hear_via_group")
+            ]
+            if hears and coordinator and coordinator not in members:
+                if not self.check:
+                    z.request("group/members/add", {"group": room, "device": "Coordinator"})
+                self.step(
+                    f"{what} Coordinator",
+                    "changed",
+                    f"the coordinator in the room's group — {hears[0]['id']} speaks through it",
+                )
+                members.add(coordinator)
+            if coordinator:
+                members.discard(coordinator)
             unreachable = set()
             for t in g["things"]:
                 if t["ieee"] in members:
@@ -960,6 +980,7 @@ class Conductor:
         ours to undo."""
         ours = {g["number"]: g["area"]["id"] for g in c["groups"]}
         by_ieee = {t["ieee"]: t for t in c["things"]}
+        self._groups, self._things = c["groups"], c["things"]
         for t in c["things"]:
             targets = list(t.get("bind") or [])
             dev = z.device(t["ieee"])
@@ -975,6 +996,8 @@ class Conductor:
                         else f"device:{tgt.get('ieee_address')}"
                     )
                     live.setdefault(key, set()).add(b.get("cluster"))
+            shape = binding_shape(t)
+            coordinator = (z.info.get("coordinator") or {}).get("ieee_address")
             for target in targets:
                 key = self.bind_key(target, c)
                 if key is None:
@@ -985,12 +1008,22 @@ class Conductor:
                         "thing on this radio",
                     )
                     continue
-                if key in live:
+                shaped = bool(shape) and key.startswith("group:")
+                if shaped:
+                    # ONE cluster to the group, the converter's per-cluster
+                    # bindings stripped from the coordinator and the group
+                    if not self.strip_bindings(name, z, t, target, shape, live, coordinator):
+                        continue
+                bound = key in live and (not shaped or shape["cluster"] in live[key])
+                if bound:
                     self.step(f"{name} bind {t['id']} -> {target}", "ok", "bound in the mesh")
                     continue
+                ask = {"from": t["id"], "to": target}
+                if shaped:
+                    ask["clusters"] = [shape["cluster"]]
                 if not self.check:
                     try:
-                        out = z.request("device/bind", {"from": t["id"], "to": target}, timeout=60)
+                        out = z.request("device/bind", ask, timeout=60)
                     except HouseError as exc:
                         # a binding is written into the CONTROL's own table over
                         # the air: a remote asleep or a bulb out of its socket
@@ -1041,6 +1074,44 @@ class Conductor:
                 self.step(
                     f"{name} bind {t['id']} -> {target}", "changed", "unbound (no row names it)"
                 )
+
+    def strip_bindings(
+        self, name: str, z: Z2M, t: dict, target: str, shape: dict, live: dict, coordinator
+    ) -> bool:
+        """The per-cluster bindings a shaped remote must NOT carry: on the
+        group (only the shape's cluster stays) and on the coordinator (the
+        converter's, which starve the group). False = the remote did not
+        answer, the rest waits."""
+        strip = set(shape["strip"])
+        todo = []
+        key = self.bind_key(target, {"groups": self._groups, "things": self._things})
+        extra = (live.get(key) or set()) & strip
+        if extra:
+            todo.append((target, sorted(extra)))
+        if coordinator:
+            extra = (live.get(f"device:{coordinator}") or set()) & strip
+            if extra:
+                todo.append(("Coordinator", sorted(extra)))
+        for to, clusters in todo:
+            self.step(
+                f"{name} bind {t['id']} -> {to}",
+                "changed",
+                f"unbound {', '.join(clusters)} (a {shape['cluster']} binding carries them)",
+            )
+            if self.check:
+                continue
+            try:
+                z.request(
+                    "device/unbind", {"from": t["id"], "to": to, "clusters": clusters}, timeout=60
+                )
+            except HouseError as exc:
+                self.step(f"{name} bind {t['id']} -> {to}", "waiting", self.unreachable_said(exc))
+                return False
+            if to == "Coordinator":
+                live[f"device:{coordinator}"] -= set(clusters)
+            else:
+                live[key] -= set(clusters)
+        return True
 
     def bind_key(self, target: str, c: dict) -> str | None:
         """What a `bind:` target is in the mesh: a room = its group's number,
@@ -1560,6 +1631,15 @@ def link(
     return last
 
 
+def binding_shape(thing: dict) -> dict | None:
+    """How a remote of this model binds to a room, when its gesture profile
+    says (hands.PROFILES[...]["binding"]); None = the mesh's default."""
+    from .hands import profile_of
+
+    found = profile_of(thing)
+    return (found[1].get("binding") if found else None) or None
+
+
 def entity_suffix(entity: dict) -> str | None:
     """What a thing's other entity is called under the thing's name: a Matter
     switch by its ENDPOINT (a wheel's nine, a dual button's two — the number a
@@ -1796,6 +1876,7 @@ def pair_zigbee(
     coordinator: str | None = None,
     seconds: int = 254,
     adopt: str | None = None,
+    anywhere: bool = False,
     say: Callable[[str], None] = lambda _line: None,
 ) -> dict:
     """`regie pair --room <room>` — the walk, one thing at a time.
@@ -1855,7 +1936,7 @@ def pair_zigbee(
                     f"({', '.join(d['ieee_address'] for d in strangers)}) — `--adopt <address>` "
                     "writes a row for one without a new join"
                 )
-            ieee = _join(z, known, seconds, say)
+            ieee = _join(z, known, seconds, say, anywhere)
             dev = z.device(ieee)
         if dev is None:
             raise HouseError(f"{ieee}: interviewed, but the bridge does not list it yet")
@@ -1910,16 +1991,20 @@ def pair_zigbee(
         return row
 
 
-def _join(z: Z2M, known: set, seconds: int, say: Callable[[str], None]) -> str:
+def _join(
+    z: Z2M, known: set, seconds: int, say: Callable[[str], None], anywhere: bool = False
+) -> str:
     """Open the window and follow `bridge/event` until one thing the house
-    does not name finishes its interview. Returns its address."""
+    does not name finishes its interview. Returns its address. The window is
+    the coordinator's alone unless `anywhere` (0.19.1)."""
     say(
-        f"the join window is open for {seconds} s — reset the thing now "
-        "(a bulb: the switch off/on the number of times its manual says; a remote: hold "
-        "its pairing button until it blinks)"
+        f"the join window is open for {seconds} s"
+        + ("" if anywhere else " on the coordinator's radio alone")
+        + " — reset the thing now (a bulb: the switch off/on the number of times its manual "
+        "says; a remote: hold its pairing button until it blinks)"
     )
     end = time.monotonic() + seconds
-    with z.join_window(seconds):
+    with z.join_window(seconds, None if anywhere else "Coordinator"):
         while time.monotonic() < end:
             got = z.recv(timeout=max(1, end - time.monotonic()))
             if got is None:

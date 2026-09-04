@@ -17,6 +17,8 @@ from .test_apply import (
     states,
 )
 
+COORDINATOR = "0x00124b00c00rd1"
+
 
 class FakeZ2M:
     """Zigbee2MQTT's frontend, as the engine uses it."""
@@ -40,7 +42,7 @@ class FakeZ2M:
         self.windows: list[int] = []
         self.online = online
         self.opened = False
-        self.info = {"version": "2.13.0"}
+        self.info = {"version": "2.13.0", "coordinator": {"ieee_address": COORDINATOR}}
 
     # --- the connection ---
     def open(self, timeout=20, wait=0):
@@ -69,6 +71,8 @@ class FakeZ2M:
         return next((d for d in self.mesh if d["ieee_address"] == ieee), None)
 
     def by_name(self, name):
+        if name == "Coordinator":
+            return {"ieee_address": COORDINATOR, "friendly_name": "Coordinator"}
         return next((d for d in self.mesh if d.get("friendly_name") == name), None)
 
     def recv(self, timeout):
@@ -79,7 +83,7 @@ class FakeZ2M:
         self.published.append((topic, payload))
 
     @contextmanager
-    def join_window(self, seconds):
+    def join_window(self, seconds, device="Coordinator"):
         self.windows.append(seconds)
         try:
             yield
@@ -152,10 +156,16 @@ class FakeZ2M:
             )
             ep = source.setdefault("endpoints", {}).setdefault("1", {})
             binds = ep.setdefault("bindings", [])
+            clusters = payload.get("clusters") or ["genOnOff"]
             if name == "device/bind":
-                binds.append({"cluster": "genOnOff", "target": target})
-                return {"clusters": ["genOnOff"], "failed": []}
-            ep["bindings"] = [b for b in binds if b["target"] != target]
+                binds.extend({"cluster": c, "target": target} for c in clusters)
+                return {"clusters": list(clusters), "failed": []}
+            keep = None if "clusters" not in payload else set(clusters)
+            ep["bindings"] = [
+                b
+                for b in binds
+                if b["target"] != target or (keep is not None and b["cluster"] not in keep)
+            ]
         elif name == "permit_join":
             self.windows.append(payload.get("time"))
         return {}
@@ -209,12 +219,18 @@ def test_the_mesh_is_made_to_match_the_rows(witness, secrets, tmp_path, furnishe
         "0x000d6ffffe000005",
         "0x000d6ffffe000006",
         "0x000d6ffffe000002",
+        COORDINATOR,  # a STYRBAR binds to this room: the coordinator listens in (0.19.1)
     }
     assert z.group("bedroom_a") and not z.group("bathroom"), "no Zigbee light, no group"
     # the bindings the rows name: a remote to its room's GROUP, a wall control
     # to one bulb — the half that works with the brain down
     remote = z.by_name("living_remote")["endpoints"]["1"]["bindings"]
-    assert remote == [{"cluster": "genOnOff", "target": {"type": "group", "id": living["id"]}}]
+    assert remote == [{"cluster": "genBasic", "target": {"type": "group", "id": living["id"]}}], (
+        "a STYRBAR binds ONE cluster to its room (its profile's shape, 0.19.1)"
+    )
+    assert COORDINATOR in {m["ieee_address"] for m in living["members"]}, (
+        "and the coordinator joins the group to keep hearing it"
+    )
     wall = z.by_name("bedroom_a_wall")["endpoints"]["1"]["bindings"]
     assert wall[0]["target"] == {
         "type": "endpoint",
@@ -247,7 +263,7 @@ def test_a_thing_that_does_not_answer_waits_and_the_run_goes_on(
     assert st["zigbee main group living living_ceiling"] == "changed"
     living = z.group("living")
     assert silent not in {m["ieee_address"] for m in living["members"]}
-    assert len(living["members"]) == 3, "everyone that answered is in"
+    assert len(living["members"]) == 4, "everyone that answered is in, and the coordinator"
     assert "failed" not in {s.state for s in steps}
 
 
@@ -540,3 +556,48 @@ def test_two_rooms_that_derive_the_same_number_are_refused(house_with, monkeypat
     monkeypatch.setattr(house_module, "zigbee_group_id", lambda area_id: 42)
     with pytest.raises(HouseError, match="derive the same Zigbee group number"):
         load_house(house_with(lambda d: None))
+
+
+def test_a_styrbar_bound_to_its_room_carries_one_binding_and_the_coordinator_listens_in(
+    witness, secrets, tmp_path, furnished
+):
+    """Read live 2026-09-04: a 2.4 STYRBAR sends each command to the FIRST
+    binding it holds for that cluster — the converter's coordinator bindings
+    starved the group, and the group's own per-cluster bindings did nothing.
+    The shape that works: genBasic to the group alone, the converter's
+    on/off, level and scenes bindings stripped, the coordinator a member of
+    the group; the poll control stays."""
+    z = mesh_of(witness)
+    coord = {"type": "endpoint", "ieee_address": COORDINATOR, "endpoint": 1}
+    remote = z.by_name("0x000d6ffffe000003")["endpoints"]["1"]
+    remote["bindings"] += [
+        {"cluster": c, "target": coord}
+        for c in ("genPollCtrl", "genOnOff", "genLevelCtrl", "genScenes")
+    ]
+    furnished(z)
+    apply(witness, secrets, tmp_path, FakeHA(), check=False)
+    living = z.group("living")
+    binds = z.by_name("living_remote")["endpoints"]["1"]["bindings"]
+    assert {"cluster": "genBasic", "target": {"type": "group", "id": living["id"]}} in binds
+    assert [b["cluster"] for b in binds if b["target"] == coord] == ["genPollCtrl"], (
+        "the converter's per-cluster bindings stripped from the coordinator, the poll kept"
+    )
+    assert not any(b["cluster"] in ("genOnOff", "genLevelCtrl", "genScenes") for b in binds), (
+        "and none on the group either"
+    )
+    assert (
+        "device/unbind",
+        {
+            "from": "living_remote",
+            "to": "Coordinator",
+            "clusters": ["genLevelCtrl", "genOnOff", "genScenes"],
+        },
+    ) in z.calls
+    assert COORDINATOR in {m["ieee_address"] for m in living["members"]}
+    n = len(z.calls)
+    again = states(apply(witness, secrets, tmp_path, FakeHA(), check=False))
+    assert again["zigbee main bind living_remote -> living"] == "ok"
+    assert COORDINATOR in {m["ieee_address"] for m in z.group("living")["members"]}, (
+        "never removed as a member no row names"
+    )
+    assert not any(c[0] == "device/unbind" for c in z.calls[n:]), "nothing to strip twice"

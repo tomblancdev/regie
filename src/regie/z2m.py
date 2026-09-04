@@ -157,10 +157,17 @@ class Z2M:
         raise HouseError(f"zigbee2mqtt {name}: no answer in {timeout:g} s")
 
     @contextmanager
-    def join_window(self, seconds: int):
+    def join_window(self, seconds: int, device: str | None = "Coordinator"):
         """The join window, closed again whatever happens — a window left open
-        is a stranger's door (any thing in range joins the house's mesh)."""
-        self.request("permit_join", {"time": seconds})
+        is a stranger's door (any thing in range joins the house's mesh). On
+        the COORDINATOR alone by default (0.19.1): a STYRBAR that joins through
+        a router keeps its buttons to itself (its own page says so; three of
+        them did, 2026-09-04) — `device=None` opens every router's door, for a
+        thing the coordinator's radio cannot reach."""
+        payload = {"time": seconds}
+        if device:
+            payload["device"] = device
+        self.request("permit_join", payload)
         try:
             yield
         finally:

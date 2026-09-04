@@ -38,6 +38,17 @@ PROFILES: dict[str, dict] = {
             "hold_right",
         ],
         "mesh": ["on", "off", "hold_on", "hold_off"],
+        # how a 2.4 STYRBAR binds to a room (read live 2026-09-04, and the
+        # device's own page): ONE binding, genBasic -> the group, carries every
+        # command; the per-cluster ones the converter puts on the coordinator
+        # take precedence and starve the group, so they are stripped; the
+        # coordinator joins the group to keep hearing (the frames come with the
+        # group id). Unbound, the converter's coordinator bindings stay.
+        "binding": {
+            "cluster": "genBasic",
+            "strip": ["genOnOff", "genLevelCtrl", "genScenes"],
+            "hear_via_group": True,
+        },
         "raw": {
             "on": "on",
             "off": "off",

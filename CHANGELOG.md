@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.19.1 — un STYRBAR se lie d'UNE seule attache, et rejoint par le coordinateur (2026-09-04)
+
+Lu en direct l'après-midi, aucune télécommande ne parlait plus depuis
+l'installation de la veille — trois causes, toutes dans la page du STYRBAR
+et dans ses trames :
+
+- **Un STYRBAR qui rejoint par un routeur garde ses boutons pour lui** (sa
+  page : « *it's important to pair this device through the coordinator* »).
+  La fenêtre d'appairage de `regie pair` s'ouvre sur le coordinateur SEUL
+  désormais (`permit_join` avec `device: Coordinator`) ; `--anywhere` ouvre
+  la porte de chaque routeur, pour une chose que la radio du coordinateur
+  n'atteint pas.
+- **Une remise à zéro efface la table d'attaches de la télécommande, et
+  Zigbee2MQTT ne refait pas sa configuration à un rejoin qu'il connaît** :
+  `bridge/request/device/configure` (nommé ainsi, `configure` seul ne fait
+  rien) pendant que la télécommande est pressée — documenté ; le chef
+  d'orchestre ne le fait pas encore (13.34 g bis).
+- **La forme de l'attache d'un STYRBAR 2.4 à une pièce** (profil `styrbar`,
+  `binding:`) : UNE attache, `genBasic` → le groupe, porte toutes ses
+  commandes ; les attaches par cluster que le convertisseur pose sur le
+  coordinateur (`genOnOff · genLevelCtrl · genScenes`) passent devant et
+  affament le groupe — elles sont retirées, du coordinateur comme du groupe
+  ; le coordinateur rejoint le groupe pour continuer d'entendre (les trames
+  arrivent avec l'id du groupe), et n'en est jamais retiré. Prouvé cerveau
+  éteint : off, on, plus fort — et le cerveau entend chaque geste. Une
+  télécommande non liée garde les attaches du convertisseur.
+
 ## 0.19.0 — les mains (2026-09-04)
 
 Le pas 3 de la grammaire (« One Grammar, Written Once ») : les télécommandes.

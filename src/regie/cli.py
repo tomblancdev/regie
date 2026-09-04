@@ -414,6 +414,7 @@ def cmd_pair(args) -> int:
             coordinator=args.coordinator,
             seconds=args.time,
             adopt=args.adopt,
+            anywhere=args.anywhere,
             say=lambda line: print(line, flush=True),
         )
         found = row.pop("_found")
@@ -630,6 +631,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument(
         "--coordinator", help="which radio to walk (default: the house's first coordinator)"
+    )
+    s.add_argument(
+        "--anywhere",
+        action="store_true",
+        help="open the join window on every router, not the coordinator's radio alone (for a "
+        "thing the coordinator cannot reach; a remote joined through a router keeps its "
+        "buttons to itself)",
     )
     s.add_argument(
         "--adopt",
