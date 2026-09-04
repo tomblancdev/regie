@@ -18,7 +18,13 @@ roles:
   satellite: {}
 scenes:
   day:     { main: on, lamp: off }
-  evening: { main: { brightness: 60, ct: warm }, lamp: on }
+  # an existing look FOLLOWING the palette for one part (0.21) and refusing its
+  # life (0.22): the lamp takes the day's accent, nothing flickers here
+  evening:
+    palette: today
+    life: false
+    main: { brightness: 60, ct: warm }
+    lamp: { color: accent, brightness: 30 }
   cinema:  { main: off, lamp: { brightness: 10, ct: warm }, strip: { color: "#200000" } }
   night:   { main: off, lamp: { brightness: 5, ct: warm } }   # a LOOK (H34): the night-light glimmer, never all-off
   # a look that names the PLACES inside a role: the role's own `layout:` words

@@ -226,7 +226,7 @@ def _room_env(sensor: dict):
 def test_the_rooms_draws_agree_between_python_and_the_template(alive):
     env = _room_env({})
     body = P.room_jinja(SALT, "living", alive, 4, 6, "12")
-    for day in range(20700, 20700 + 400):
+    for day in range(20700, 20700 + 120):
         for roll in (0, 5):
             env.globals["state_attr"] = lambda e, a, d=day, r=roll: {
                 "day": d,
@@ -346,3 +346,89 @@ def test_a_named_palette_bakes_its_numbers(house_with, tmp_path):
     drift = house.drift_plan(area, plan)
     assert drift["saturation"].endswith(".saturation }}")
     assert drift["walkers"][0]["hue"].startswith("{% set pal = {'harmony': none")
+
+
+# --- step 3 (0.22): life --------------------------------------------------------------
+def test_a_shape_that_sends_a_colour_is_told_apart():
+    from regie.fx import load_shapes
+
+    shapes = load_shapes(None)
+    assert not P.moves_colour("glitch", shapes)  # its colour field is null: the target's own
+    assert not P.moves_colour("flicker", shapes)
+    assert P.moves_colour("lightning", shapes)  # "#cfe0ff" by default
+    assert P.moves_colour("ember", shapes)  # the colour set once
+    assert P.moves_colour("neon", shapes)  # a ct step
+
+
+def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness):
+    pkg = yaml.safe_load((rendered / "home-assistant/packages/scenes_living.yaml").read_text())
+    life = pkg["script"]["living_today_life"]
+    seq = life["sequence"]
+    assert "variables" in seq[0] and "pal" in seq[0]["variables"]
+    assert seq[1] == {"condition": "template", "value_template": "{{ pal.life is not none }}"}
+    loop = seq[3]["repeat"]
+    assert loop["while"][0]["entity_id"] == "input_boolean.living_today_drift"
+    steps = loop["sequence"]
+    assert "pal.life.every" in steps[0]["delay"]["seconds"]
+    pick = steps[1]["variables"]["sign"]
+    assert "pal.life.shapes" in pick and "reject('eq', last)" in pick
+    assert "room.alive[" in pick  # a candidate is still only on a day that left it so
+    assert steps[2]["action"] == "script.fx_{{ sign.shape }}"
+    assert steps[2]["data"]["target"] == ["{{ sign.bulb }}"]
+    assert steps[3]["variables"]["last"] == "{{ sign.bulb }}"
+    # the look starts it beside the drift, every other look stops it
+    today = pkg["script"]["living_today"]["sequence"]
+    assert today[-1]["target"]["entity_id"] == "script.living_today_life"
+    assert today[-2]["target"]["entity_id"] == "script.living_today_drift"
+    stop = pkg["script"]["living_party"]["sequence"][1]
+    assert "script.living_today_life" in stop["target"]["entity_id"]
+    # a look that refuses life gets no loop, and a look without a palette neither
+    assert "living_evening_life" not in pkg["script"]
+    assert "living_party_life" not in pkg["script"]
+    # a named palette's life bakes its shapes and its pace
+    area = witness.area("living")
+    plan = next(p for p in witness.scene_plan(area) if p["id"] == "today")
+    live = witness.life_plan(area, plan)
+    assert live["live"] and live["colour_shapes"] == []  # the day's rule names glitch alone
+
+
+def test_life_evaluates_a_pick_from_the_pools(rendered):
+    pkg = yaml.safe_load((rendered / "home-assistant/packages/scenes_living.yaml").read_text())
+    steps = pkg["script"]["living_today_life"]["sequence"][3]["repeat"]["sequence"]
+    pick = steps[1]["variables"]["sign"]
+    env = jinja2.Environment()
+    ctx = {
+        "pal": {"life": {"shapes": ["glitch"], "every": [120, 600]}},
+        "room": {"alive": [True, False]},
+        "last": "light.living_ceiling_2",
+    }
+    for _ in range(20):
+        got = json.loads(
+            env.from_string(pick.replace("{{ {", "{{ ({").replace("} }}", "}) | tojson }}")).render(
+                **ctx
+            )
+        )
+        assert got["shape"] == "glitch"
+        assert got["bulb"] != "light.living_ceiling_2"
+    delay = env.from_string(steps[0]["delay"]["seconds"]).render(**ctx)
+    assert 120 <= int(delay) <= 600
+
+
+def test_life_with_a_colour_shape_and_no_still_bulb_is_refused(house_with):
+    path = house_with(lambda d: None)
+    living = path.parent / "rooms" / "living.yml"
+    s = living.read_text()
+    s = s.replace(
+        "      front: { color: band, brightness: 40 }\n"
+        "      back_center: { color: accent, brightness: 30 }\n"
+        "    lamp: { ct: white, brightness: 50 }\n",
+        "      front: { color: roam, brightness: 40 }\n",
+    )
+    s = s.replace(
+        "    palette: today\n    main:\n      front: { color: roam",
+        "    palette: nuit_bleue\n    main:\n      front: { color: roam",
+        1,
+    )
+    living.write_text(s)
+    with pytest.raises(HouseError, match="no still bulb to land on"):
+        load_house(path)

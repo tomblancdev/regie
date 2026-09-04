@@ -5,10 +5,12 @@
 {% set drifting = [] %}
 {% set drift_switches = [] %}
 {% set drift_scripts = [] %}
-{% for p in plans if drift_plan(area, p) %}
+{% set living = [] %}
+{% for p in plans if moving(area, p) %}
 {% set _ = drifting.append(p) %}
 {% set _ = drift_switches.append('input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}
-{% set _ = drift_scripts.append('script.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}
+{% if drift_plan(area, p) %}{% set _ = drift_scripts.append('script.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}{% endif %}
+{% if life_plan(area, p) %}{% set _ = living.append(p) %}{% set _ = drift_scripts.append('script.' ~ area.id ~ '_' ~ p.id ~ '_life') %}{% endif %}
 {% endfor %}
 {% set panel = defaults and controls.panel and modes and defaults_base(area) %}
 {% set memory = ['off'] %}
@@ -117,9 +119,14 @@ script:
 {% endif %}
 {% if spal %}{% set _ = seq.append({'variables': spal.variables}) %}{% endif %}
 {% set _ = seq.append({'parallel': steps}) %}
-{% if drift_plan(area, p) %}
+{% if moving(area, p) %}
 {% set _ = seq.append({'action': 'input_boolean.turn_on', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}) %}
+{% if drift_plan(area, p) %}
 {% set _ = seq.append({'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}) %}
+{% endif %}
+{% if life_plan(area, p) %}
+{% set _ = seq.append({'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ area.id ~ '_' ~ p.id ~ '_life'}}) %}
+{% endif %}
 {% endif %}
 {{ {area.id ~ '_' ~ p.id: {
   'alias': area.label ~ ' — ' ~ p.label,
@@ -129,7 +136,7 @@ script:
   'sequence': seq,
 }} | to_block(2) }}
 {% endfor %}
-{% for p in drifting %}
+{% for p in drifting if drift_plan(area, p) %}
 {% set d = drift_plan(area, p) %}
 {% set walk = [] %}
 {% for w in d.walkers %}
@@ -151,6 +158,41 @@ script:
   'icon': p.icon,
   'mode': 'restart',
   'sequence': dseq,
+}} | to_block(2) }}
+{% endfor %}
+{% for p in living %}
+{% set l = life_plan(area, p) %}
+{# LIFE (0.22): a random shape on a random bulb, now and then, while the look
+   holds — the pace and the shapes are the palette's (the sensor's for `today`:
+   none on a day without life), the bulb is drawn from the pool the ENVELOPE
+   allows: a level shape anywhere, a colour shape on a still bulb alone (never a
+   roamer; a candidate only on a day that left it still), never the same bulb
+   twice in a row. Its switch is the look's own ↻ #}
+{% set shapes_expr = "(pal.life.shapes if pal.life else [])" if l.live else (l.shapes | tojson | replace('"', "'")) %}
+{% set every_expr = "pal.life.every" if l.live else (l.every | tojson) %}
+{% set pick = "{% set shape = " ~ shapes_expr ~ " | random %}"
+  ~ "{% set still = " ~ (l.still | tojson | replace('"', "'")) ~ " %}"
+  ~ "{% for e, k in " ~ (l.gated | map('list') | list | tojson | replace('"', "'")) ~ " %}{% if not room.alive[k] %}{% set still = still + [e] %}{% endif %}{% endfor %}"
+  ~ "{% set pool = still if shape in " ~ (l.colour_shapes | tojson | replace('"', "'")) ~ " else " ~ (l.any | tojson | replace('"', "'")) ~ " %}"
+  ~ "{% set pool = pool | reject('eq', last) | list or pool %}"
+  ~ "{{ {'shape': shape, 'bulb': pool | random} }}" %}
+{% set lseq = [{'variables': l.variables}] %}
+{% if l.live %}
+{% set _ = lseq.append({'condition': 'template', 'value_template': '{{ pal.life is not none }}'}) %}
+{% endif %}
+{% set _ = lseq.append({'variables': {'last': ''}}) %}
+{% set _ = lseq.append({'repeat': {'while': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}], 'sequence': [
+  {'delay': {'seconds': '{{ range(' ~ every_expr ~ '[0] | int, ' ~ every_expr ~ '[1] | int + 1) | random }}'}},
+  {'variables': {'sign': pick}},
+  {'action': 'script.fx_{{ sign.shape }}', 'data': {'target': ['{{ sign.bulb }}']}},
+  {'variables': {'last': '{{ sign.bulb }}'}},
+]}}) %}
+{{ {area.id ~ '_' ~ p.id ~ '_life': {
+  'alias': area.label ~ ' — ' ~ p.label ~ ' ✦',
+  'description': 'the life of ' ~ p.label ~ ' — a random shape (' ~ (l.shapes | join(', ')) ~ ') on a random bulb, ' ~ l.every[0] ~ '-' ~ l.every[1] ~ ' s apart, never the same bulb twice in a row; a colour shape lands on a still bulb alone' ~ (' — the sensor says whether today has life' if l.live else '') ~ ' (La Régie, pack scenes)',
+  'icon': p.icon,
+  'mode': 'restart',
+  'sequence': lseq,
 }} | to_block(2) }}
 {% endfor %}
   {{ area.id }}_default:

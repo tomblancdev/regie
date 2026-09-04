@@ -11,6 +11,7 @@ palettes:
     saturation: 90
     white: warm
     alive: 1
+    life: { shapes: [glitch, lightning], every: [120, 600] }   # signs of life: a level shape anywhere, the storm on a still bulb alone
   today:
     harmonies: { degrade: 5, duo: 3, uni: 2, libre: 0 }
     avoid: [45, 105]

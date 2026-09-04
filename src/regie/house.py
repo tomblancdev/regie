@@ -79,7 +79,7 @@ OFF_DOMAINS = ("light", "switch")
 # what a look itself says; anything else in the mapping is one of the role's PLACES
 LOOK_KEYS = ("brightness", "ct", "color", "transition")
 # a scene's own keys — never a role name (check refuses a role wearing one)
-SCENE_KEYS = ("label", "icon", "tags", "run", "pinned", "palette")
+SCENE_KEYS = ("label", "icon", "tags", "run", "pinned", "palette", "life")
 # the standard looks wear a standard face, so a row of buttons is readable at a
 # glance; a look a house invents says its own `icon:` (an icon has no language,
 # so it lives here and not beside the labels)
@@ -992,10 +992,38 @@ class House:
             "pinned": bool(raw.get("pinned")),
             # the palette a look reads (0.21): `today` or a named one
             "palette": raw.get("palette"),
+            # life (0.22): a room may refuse the palette's signs with one word
+            "life": raw.get("life", True),
         }
 
+    def life_plan(self, area: dict, plan: dict) -> dict | None:
+        cache = self.__dict__.setdefault("_life_plan", {})
+        key = (area["id"], plan["id"])
+        if key not in cache:
+            cache[key] = palette_mod.life_plan(self, area, plan, self.shapes())
+        return cache[key]
+
+    def moving(self, area: dict, plan: dict) -> bool:
+        """A look that MOVES while it holds — a drift, or life (0.22): it gets
+        the switch a person can see and turn off (H36)."""
+        return bool(self.drift_plan(area, plan) or self.life_plan(area, plan))
+
     def scene_palette(self, area: dict, plan: dict) -> dict | None:
-        return palette_mod.scene_palette(self, area, plan)
+        """Memoised per (room, look): the templates ask for it many times per
+        render, and the plan is a pure function of the files."""
+        cache = self.__dict__.setdefault("_scene_palette", {})
+        key = (area["id"], plan["id"])
+        if key not in cache:
+            cache[key] = palette_mod.scene_palette(self, area, plan)
+        return cache[key]
+
+    def shapes(self) -> dict:
+        """The fx shapes, loaded once per house (the library is files on disk)."""
+        if "_shapes" not in self.__dict__:
+            from .fx import load_shapes
+
+            self.__dict__["_shapes"] = load_shapes(self.fx().get("shapes"))
+        return self.__dict__["_shapes"]
 
     def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str]]:
         """The (place, entity) pairs a drift walks, in layout order: the places
@@ -1761,6 +1789,16 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             if words.count("accent") > 1:
                 hints.append(
                     f"{where}: two accent places — one lamp stands out, two make a pattern"
+                )
+            if "life" in looks and not pid:
+                hints.append(f"{where} says life: and names no palette — life is a palette's")
+        for plan in house.scene_plan(a):
+            life = house.life_plan(a, plan)
+            if life and life["colour_shapes"] and not life["still"] and not life["gated"]:
+                errors.append(
+                    f"{a['id']}: scene {plan['id']}: life's colour shape(s) "
+                    f"{', '.join(life['colour_shapes'])} have no still bulb to land on — "
+                    "every bulb of the look roams"
                 )
         unfilled = sorted(r for r in declared if r not in filled)
         waiting = [p["id"] for p in house.scene_plan(a) if not p["renders"] and not p["implicit"]]

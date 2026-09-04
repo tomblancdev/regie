@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.22.0 — La Palette du jour, le pas 3 : la vie (2026-09-04)
+
+Une palette peut porter des SIGNES DE VIE — `life: { shapes, every, chance }` —
+et une ambiance qui la lit les montre : un effet au hasard sur une ampoule au
+hasard, à quelques minutes d'intervalle, tant que l'ambiance tient.
+
+- **Le script `<pièce>_<ambiance>_life`** à côté de la dérive, derrière le même
+  interrupteur ↻ (H36 : ce qui bouge s'arrête d'un doigt) : `variables` (la
+  palette, les tirages de la pièce), une condition — pour `today`, le capteur
+  dit si le jour a de la vie (`pal.life`, rien les jours sans) —, puis la
+  boucle tant que l'interrupteur est on : une attente tirée dans `every`, un
+  tirage (une forme parmi celles de la palette, une ampoule dans le bassin que
+  L'ENVELOPPE permet), `script.fx_<forme>` sur elle avec son instantané et sa
+  remise, et jamais la même ampoule deux fois de suite (`last`).
+- **L'enveloppe choisit l'ampoule** : une forme de NIVEAU seul (glitch, flicker,
+  thump…) peut tomber sur n'importe quelle ampoule, une vagabonde comprise — un
+  flash de niveau se pose sur la couleur et le pas suivant de la dérive repeint
+  ; une forme de COULEUR (lightning, ember, neon — `moves_colour` lit les pas,
+  briques comprises : un `colour` non nul ou un `ct`) ne tombe que sur une
+  ampoule IMMOBILE — jamais une `roam`, une candidate seulement un jour qui l'a
+  laissée immobile (`room.alive`). `check` refuse une forme de couleur sans
+  ampoule immobile où se poser.
+- **Une pièce refuse d'un mot** : `life: false` sur l'ambiance (La Piaule, les
+  Douches, Doux) — rien ne clignote là quoi que dise la palette ; `check`
+  indique un `life:` sur une ambiance sans palette. La maison témoin : `nuit_bleue`
+  a de la vie (glitch + lightning), Soirée suit la palette pour sa lampe et
+  refuse la vie ; 315 tests.
+
 ## 0.21.0 — La Palette du jour, le pas 2 : la pièce dit sa part (2026-09-04)
 
 Une ambiance LIT la palette : `palette: today` (ou une palette nommée) sur

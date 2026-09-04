@@ -133,6 +133,8 @@ def context(house: House, secrets: dict) -> dict:
         "scene_plan": house.scene_plan,
         "drift_plan": house.drift_plan,
         "scene_palette": house.scene_palette,
+        "life_plan": house.life_plan,
+        "moving": house.moving,
         "when_plan": house.when_plan,
         "hands_plan": house.hands_plan,
         "rendered_scenes": house.rendered_scenes,
