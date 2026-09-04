@@ -719,11 +719,24 @@ def life_plan(house, area: dict, plan: dict, shapes: dict) -> dict | None:
         return None
     palettes = house.palettes()
     if spal["source"] == AUTO:
-        life = palettes["today"].get("life")
+        # a `today` look follows the SELECT: the day's rules may carry no life
+        # (the house's default) while a named palette the family pins does —
+        # the loop exists for every shape any of them names, and the sensor
+        # says at each start which shapes, which pace, or none (0.22.2)
+        lives = [palettes["today"].get("life")] + [
+            p.get("life") for p in palettes["named"].values()
+        ]
+        lives = [life for life in lives if life and life.get("shapes")]
+        if not lives:
+            return None
+        life = {
+            "shapes": sorted({s for life in lives for s in life["shapes"]}),
+            "every": list((palettes["today"].get("life") or lives[0])["every"]),
+        }
     else:
         life = (palettes["named"].get(spal["source"]) or {}).get("life")
-    if not life or not life.get("shapes"):
-        return None
+        if not life or not life.get("shapes"):
+            return None
     lit = [t for t in spal["targets"] if t["data"] is not None and t["domain"] == "light"]
     if not lit:
         return None

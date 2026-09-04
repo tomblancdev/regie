@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.2 — une ambiance « today » a de la vie dès qu'UNE palette en a (2026-09-04)
+
+Lu en direct à la preuve du pas 3 : Omega choisie dans le sélecteur, l'ambiance
+« Palette du jour » du Passage tirée, et `script.corridor_today_life` absent —
+les règles du jour n'ont pas de vie (le défaut de la maison) et `life_plan` ne
+regardait qu'elles. Une ambiance `palette: today` SUIT LE SÉLECTEUR : sa boucle
+existe pour toutes les formes que le jour OU une palette nommée peuvent porter,
+et le capteur dit à chaque départ lesquelles, à quel rythme, ou rien.
+
 ## 0.22.1 — deux tests rouges passés sous un tuyau, et les plans mis en cache (2026-09-04)
 
 `v0.22.0` a été étiqueté avec deux tests rouges : la chaîne de release lisait

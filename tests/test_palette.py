@@ -389,7 +389,8 @@ def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness
     area = witness.area("living")
     plan = next(p for p in witness.scene_plan(area) if p["id"] == "today")
     live = witness.life_plan(area, plan)
-    assert live["live"] and live["colour_shapes"] == []  # the day's rule names glitch alone
+    # the union of every palette's shapes: the day's glitch, Nuit bleue's lightning too
+    assert live["live"] and live["colour_shapes"] == ["lightning"]
 
 
 def test_life_evaluates_a_pick_from_the_pools(rendered):
@@ -432,3 +433,20 @@ def test_life_with_a_colour_shape_and_no_still_bulb_is_refused(house_with):
     living.write_text(s)
     with pytest.raises(HouseError, match="no still bulb to land on"):
         load_house(path)
+
+
+def test_a_today_look_gets_life_when_only_a_named_palette_has_it(house_with):
+    """The day's rules carry no life (the house's default) and Nuit bleue does:
+    the look that follows the select must have its loop, the sensor deciding."""
+    path = house_with(lambda d: None)
+    fx = path.parent / "fx.yml"
+    s = fx.read_text()
+    assert "    life: { shapes: [glitch], every: [120, 600], chance: 50 }\n" in s
+    fx.write_text(s.replace("    life: { shapes: [glitch], every: [120, 600], chance: 50 }\n", ""))
+    house = load_house(path)
+    area = house.area("living")
+    plan = next(p for p in house.scene_plan(area) if p["id"] == "today")
+    life = house.life_plan(area, plan)
+    assert life and life["live"]
+    assert life["shapes"] == ["glitch", "lightning"]  # Nuit bleue's, the union
+    assert life["colour_shapes"] == ["lightning"]
