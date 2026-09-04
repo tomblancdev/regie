@@ -60,6 +60,17 @@ ui:
   floor: Étage
   # the vocabulary (0.4): the signals, the modes, the mouth
   house: Maison
+  # the palette (0.20)
+  palette: La palette
+  palette_auto: Du jour
+  palette_today: Palette du jour
+  palette_turns: Change à
+  palette_another: Une autre
+  palette_roll: Palette — le tirage
+  harmony_degrade: dégradé
+  harmony_duo: duo
+  harmony_uni: uni
+  harmony_libre: libre
   mode: Mode
   period: Période
   period_begins: Début

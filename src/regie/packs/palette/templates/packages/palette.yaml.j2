@@ -1,0 +1,68 @@
+# rendered by La Régie — the palette (pack palette, 0.20): ONE value every look
+# may read, sensor.house_palette. The select says which source fills it: Auto =
+# the day's draw (a pure function of the day, the roll and the house's name —
+# the same arithmetic as `regie palette`), or a palette named in fx.yml. The
+# hour it turns and the roll are the family's helpers; the file seeds them once.
+input_select:
+  house_palette:
+    name: {{ labels.ui.palette | to_yaml }}
+    icon: mdi:palette
+    options:
+{% for opt in palette.options %}
+      - {{ opt.label | to_yaml }}
+{% endfor %}
+input_datetime:
+  house_palette_turns:
+    name: {{ labels.ui.palette_turns | to_yaml }}
+    has_date: false
+    has_time: true
+    icon: mdi:clock-outline
+counter:
+  house_palette_roll:
+    name: {{ labels.ui.palette_roll | to_yaml }}
+    icon: mdi:dice-multiple
+    initial: 0
+    step: 1
+    restore: true
+input_button:
+  house_palette_another:
+    name: {{ labels.ui.palette_another | to_yaml }}
+    icon: mdi:dice-multiple
+automation:
+  # « Une autre »: the roll moves, the day's draw changes — for the day (La Régie, pack palette)
+  - id: regie_house_palette_another
+    alias: {{ (labels.ui.palette ~ ' — ' ~ labels.ui.palette_another) | to_yaml }}
+    description: the roll behind « Une autre » — the day's palette is drawn again, and stays until the next press or the next day (La Régie, pack palette)
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.house_palette_another
+        not_from: [unavailable, unknown]
+    actions:
+      - action: counter.increment
+        target:
+          entity_id: counter.house_palette_roll
+template:
+  # the palette: re-read every minute (the hour it turns), at start, and when
+  # the select, the hour or the roll move
+  - triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id:
+          - input_select.house_palette
+          - input_datetime.house_palette_turns
+          - counter.house_palette_roll
+    sensor:
+      - name: house_palette
+        unique_id: regie_house_palette
+        icon: mdi:palette
+        state: >-
+{{ palette.state | indent(10, first=True) }}
+        attributes:
+          label: >-
+{{ palette.label | indent(12, first=True) }}
+          palette: >-
+{{ palette.attr | indent(12, first=True) }}

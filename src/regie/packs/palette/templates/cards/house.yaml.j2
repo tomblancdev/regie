@@ -1,0 +1,10 @@
+{% if controls.palette %}
+- type: entities
+  title: {{ labels.ui.palette | to_yaml }}
+  entities:
+    - type: attribute
+      entity: sensor.house_palette
+      attribute: label
+      name: {{ labels.ui.palette | to_yaml }}
+      icon: mdi:palette
+{% endif %}

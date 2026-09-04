@@ -272,6 +272,75 @@ def cmd_look(args) -> int:
     return 0
 
 
+def cmd_palette(args) -> int:
+    """The palette of the day (0.20): the coming days as the house would draw
+    them — the same arithmetic as the sensor's template — and, with --root,
+    what the brain says today, to prove they agree."""
+    import datetime as dt
+
+    from . import palette as P
+
+    house = load_house(args.home)
+    pal = house.palettes()
+    rules = pal["today"]
+    salt = house.palette_salt()
+    colour = not args.plain and P.colour_terminal()
+    harmonies = {n: getattr(house.labels.ui, f"harmony_{n}", n) for n in P.ORDER}
+    if args.name:
+        if args.name not in pal["named"]:
+            print(f"no palette {args.name!r} — the file names: {', '.join(pal['named']) or 'none'}")
+            return 1
+        p = P.named_value(pal["named"][args.name], house.kelvin())
+        label = pal["named"][args.name]["label"]
+        print(f"{label:<12} {P.bar(p, colour=colour)}  {P.describe(p, harmonies)}")
+        return 0
+    import zoneinfo
+
+    tz = zoneinfo.ZoneInfo(house.data["house"].get("timezone", "UTC"))
+    start = args.day and dt.date.fromisoformat(args.day) or dt.datetime.now(tz).date()
+    for i in range(args.next):
+        date = start + dt.timedelta(days=i)
+        when = dt.datetime.combine(date, dt.time(12), tzinfo=tz)
+        day = P.day_of(when, rules["turns"], tz)
+        p = P.draw(day, args.roll, salt, rules)
+        print(f"{date.isoformat()} {P.bar(p, colour=colour)}  {P.describe(p, harmonies)}")
+    if not args.root:
+        return 0
+    from .apply import Conductor
+    from .ha import HomeAssistant
+
+    secrets = load_secrets(args.secrets)
+    ha = HomeAssistant(args.url)
+    Conductor(house, secrets, Path(args.root), ha).session_token()
+    status, state = ha.get("/api/states/sensor.house_palette")
+    if status != 200 or not isinstance(state, dict):
+        print(f"the brain: sensor.house_palette answers {status} — is the pack converged?")
+        return 1
+    brain = (state.get("attributes") or {}).get("palette") or {}
+    print(
+        f"the brain says ({state.get('state')}, day {brain.get('day')}, roll {brain.get('roll')}):"
+    )
+    if colour and brain.get("lo") is not None:
+        print(f"{'':10} {P.bar(brain, colour=True)}  {P.describe(brain, harmonies)}")
+    else:
+        print(f"{'':10} {P.describe(brain, harmonies) if brain.get('lo') is not None else brain}")
+    keys = ("harmony", "lo", "hi", "width", "accent", "saturation", "white", "jitter")
+    if state.get("state") != P.AUTO:
+        print("the select holds a named palette — nothing to compare with the day's draw")
+        return 0
+    mine = P.draw(brain.get("day", 0), brain.get("roll", 0), salt, rules)
+    same = all(mine.get(k) == brain.get(k) for k in keys)
+    print(
+        "AGREE"
+        if same
+        else "DIFFER: "
+        + ", ".join(
+            f"{k} {mine.get(k)}≠{brain.get(k)}" for k in keys if mine.get(k) != brain.get(k)
+        )
+    )
+    return 0 if same else 1
+
+
 def cmd_plan(args) -> int:
     """The plan's workbench: `push` re-seeds the editor's draft from the files
     (what `apply` does at every converge unless the draft holds edits not yet
@@ -680,6 +749,28 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
     s.set_defaults(func=cmd_look)
+
+    s = sub.add_parser(
+        "palette",
+        help="the palette of the day (0.20): the coming days as the house draws them — the "
+        "sensor's own arithmetic; with --root, what the brain says today, and whether they agree",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("--next", type=int, default=7, help="how many days to print (default 7)")
+    s.add_argument("--day", help="the first day, YYYY-MM-DD (default today)")
+    s.add_argument(
+        "--roll", type=int, default=0, help="the roll (« Une autre » bumps it; default 0)"
+    )
+    s.add_argument("--name", help="print a named palette instead of the day's")
+    s.add_argument("--plain", action="store_true", help="no colour bars")
+    _secrets_arg(s)
+    s.add_argument(
+        "--root",
+        type=Path,
+        help="the brain's root (the conductor's token) — compare with the brain",
+    )
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.set_defaults(func=cmd_palette)
 
     s = sub.add_parser(
         "plan",

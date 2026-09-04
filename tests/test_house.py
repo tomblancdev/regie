@@ -19,6 +19,7 @@ def test_witness_loads_with_one_of_every_kind(witness):
         "when",
         "hands",
         "matter",
+        "palette",
         "chalet",
     ]
     assert witness.packs[-1].origin == "house"
@@ -139,7 +140,7 @@ def test_unknown_pack_lists_the_known_ones(house_with):
     with pytest.raises(
         HouseError,
         match=r"unknown pack 'voice' — product packs: fx, hands, lighting, matter, modes, notify, "
-        r"scenarios, scenes, signals, when; house packs \(packs\): chalet",
+        r"palette, scenarios, scenes, signals, when; house packs \(packs\): chalet",
     ):
         load_house(house_with(lambda d: d.update(packs=["voice"])))
 
@@ -280,7 +281,7 @@ def test_the_knobs_carry_the_panel_and_the_presence_switch(witness):
     assert knobs["input_boolean.hall_mode_when"] == "on"
     # 4 rooms with a base × (3 daylights + 4 periods) + 4 times + mode + presence
     # + the one room that senses (0.17) + the two that pick a look (0.18)
-    assert len(knobs) == 4 * 7 + 6 + 1 + 2
+    assert len(knobs) == 4 * 7 + 6 + 1 + 2 + 2  # + the palette's hour and select (0.20)
 
 
 def test_the_panel_needs_a_daylight_base(house_with):

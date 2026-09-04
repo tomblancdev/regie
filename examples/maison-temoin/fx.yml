@@ -1,3 +1,20 @@
 # fx.yml — which effects the house enables (every shape when `enable` is
 # absent), on which backend (0.4: ha, the generic loop), its own shapes.
 backend: ha
+# the palettes (0.20, « La Palette du jour »): a named one with numbers, and
+# the day's rules — the sensor carries whichever the select holds
+palettes:
+  nuit_bleue:
+    label: Nuit bleue
+    band: [200, 250]
+    accent: 30
+    saturation: 90
+    white: warm
+    alive: 1
+  today:
+    harmonies: { degrade: 5, duo: 3, uni: 2, libre: 0 }
+    avoid: [45, 105]
+    level: { curve: { morning: 60, day: 40, evening: 100, night: 50 }, jitter: [0, 15] }
+    alive: [0, all]
+    life: { shapes: [glitch], every: [120, 600], chance: 50 }
+    turns: "06:30"

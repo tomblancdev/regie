@@ -15,6 +15,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, PrefixLoader, StrictUndefined
 
 from . import __version__, dash
+from . import palette as palette_mod
 from . import theme as skin
 from .errors import HouseError
 from .fx import compile_all
@@ -138,6 +139,8 @@ def context(house: House, secrets: dict) -> dict:
         "mode_scene": house.mode_scene,
         "area_aliases": house.area_aliases,
         "controls": house.controls(),
+        # the palette (0.20): the select's options and the sensor's templates
+        "palette": palette_mod.render_context(house),
         "look_options": house.look_options,
         "defaults_base": house.defaults_base,
     }

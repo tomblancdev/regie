@@ -21,11 +21,11 @@ house:
     name: temoin                 # what Home Assistant calls it (default: the library's name)
     dark: { lit: "#f0a92a" }     # this house's own filament; everything else is Nuit's
 profile: ct
-packs: [modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, matter, chalet]
+packs: [modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, matter, palette, chalet]
 # the family's controls (W3b): the settings view, the phones driving
 # home/away (behind a visible kill-switch), lights back from power taking
 # the default look; the ne-répond-plus alerts stay on here
-controls: { panel: true, presence: true, restore_default: true }
+controls: { panel: true, presence: true, restore_default: true, palette: true }
 paths:
   house_packs: packs
 # one file holds one thing (0.4): the rooms' looks, the modes, the effects and

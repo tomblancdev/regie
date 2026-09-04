@@ -1,0 +1,18 @@
+# Pack `palette` — ONE value every look may read (0.20, « La Palette du
+# jour », home.md §6.9, H49): sensor.house_palette, filled by the select
+# « La palette » — Auto = the day's draw within the rules of fx.yml's
+# `palettes.today` (a pure function of the day, the roll and the house's
+# name: nothing stored, a restart changes nothing), or a palette named in
+# fx.yml. The hour it turns (« Change à ») and the roll (« Une autre ») are
+# helpers the family owns; the file seeds them once. The rooms' parts, the
+# life loop and the Atelier come with the next steps.
+name: palette
+summary: sensor.house_palette — the house's palette (Auto = the day's draw, or a named one), the select, the hour it turns, « Une autre »
+kinds: []
+services: []
+templates:
+  - { src: packages/palette.yaml.j2, dst: home-assistant/packages/palette.yaml }
+settings:
+  - { src: settings/house.yaml.j2 }
+cards:
+  - { src: cards/house.yaml.j2 }

@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.20.0 — La Palette du jour, le pas 1 : la valeur (2026-09-04)
+
+La page « La Palette du jour » (le design, six corrections et six réponses de
+Tom) : une palette pour toute la maison, tirée chaque jour sans tête de clown.
+Ce pas pose LA VALEUR ; les pièces, la vie et l'atelier viennent aux pas suivants.
+
+- **`palette.py`** : une palette est une valeur en quatre parts, chacune
+  facultative — les couleurs (UN arc du cercle chromatique parcouru dans le
+  sens croissant et qui ne traverse jamais le quart jaune-vert `avoid:
+  [45, 105]`, UN accent pris de l'autre côté — rouge à ambre pour un arc
+  froid, cyan à bleu pour un arc chaud —, une saturation, un mot de blanc :
+  neutre quand le milieu de l'arc est froid, chaud sinon), le niveau (une
+  courbe sur les périodes de la maison + un `jitter`), les vives (`alive`),
+  la vie (`life`, des effets de temps en temps). Une palette NOMMÉE donne des
+  nombres ; `today` donne des RÈGLES (harmonies pondérées `degrade` 100–150°
+  · `duo` 30–50° · `uni` 15–25° · `libre` 150–220° à poids 0, l'arc évité,
+  les plages) et le jour TIRE dedans — une fonction pure de (jour, tirage,
+  sel) comme la teinte de la dérive l'est de l'horloge : rien de stocké, un
+  redémarrage ne change rien, Noël s'imprime d'avance. Le générateur
+  minimal-standard (Park–Miller, x ← 16807·x mod 2³¹−1) tourne DEUX fois
+  depuis une seule arithmétique : ici, et dans le gabarit du capteur
+  (`jinja_body`) — un test prouve qu'ils s'accordent sur dix ans de jours.
+  Le sel est le nom de la maison ; le jour tourne à l'heure de `turns`
+  (06:30), dans le fuseau de la MAISON.
+- **Pack `palette`** : `sensor.house_palette` (l'état = la source `today` ou
+  le nom ; les attributs `label` et `palette`, ce dernier un dictionnaire
+  `lo · hi · width · accent · saturation · white · white_kelvin · curve ·
+  jitter · alive · life · day · roll`), `input_select.house_palette` (Du jour
+  · les nommées), `input_datetime.house_palette_turns` (« Change à »),
+  `counter.house_palette_roll` derrière `input_button.house_palette_another`
+  (« Une autre » : un tirage de plus pour la journée) ; les deux boutons
+  semés UNE fois par le chef d'orchestre (les knobs), la famille les possède
+  ensuite. `controls.palette: true` met une ligne sur la carte de la maison
+  et les trois lignes sur les Réglages.
+- **`fx.palettes:`** dans le schéma (à côté de `kelvin:`) ; `check` refuse
+  une harmonie inconnue, des poids nuls, un arc évité qui ne laisse pas la
+  plus large harmonie, un `jitter` au-dessus de 30, une forme de `life`
+  inconnue ou pas activée, un `every` sous 60 s, une `turns` qui n'est pas
+  une heure, une courbe sur une période inconnue ; il indique un arc nommé
+  qui traverse le quart évité (un choix de la main, dit), `libre` plus lourd
+  que les autres, les palettes écrites sans le pack, le pack sans
+  `controls.palette`.
+- **`regie palette <home> [--next N] [--day] [--roll] [--name] [--plain]
+  [--root]`** : les jours à venir tels que la maison les tirera, en barres
+  de couleur dans le terminal ; avec `--root`, ce que le cerveau dit
+  aujourd'hui et s'ils s'ACCORDENT.
+- La maison témoin porte une palette nommée (`nuit_bleue`) et les règles du
+  jour. 301 tests.
+
 ## 0.19.2 — une ambiance arrête la dérive en vol, les flèches parcourent les ambiances nommées (2026-09-04)
 
 Lu en direct, la flèche → pressée onze fois en trente secondes : la pièce a

@@ -56,6 +56,17 @@ ui:
   floor: Floor
   # the vocabulary (0.4): the signals, the modes, the mouth
   house: House
+  # the palette (0.20)
+  palette: The palette
+  palette_auto: Of the day
+  palette_today: Palette of the day
+  palette_turns: Turns at
+  palette_another: Another one
+  palette_roll: Palette — the roll
+  harmony_degrade: gradient
+  harmony_duo: duo
+  harmony_uni: mono
+  harmony_libre: free
   mode: Mode
   period: Period
   period_begins: Begins

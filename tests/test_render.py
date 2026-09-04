@@ -36,6 +36,7 @@ EXPECTED = {
     "home-assistant/packages/scenes_bedroom_a.yaml",
     "home-assistant/packages/scenes_bedroom_b.yaml",
     "home-assistant/packages/fx.yaml",
+    "home-assistant/packages/palette.yaml",
     "home-assistant/packages/notify.yaml",
     "home-assistant/packages/scenarios.yaml",
     "home-assistant/packages/when_living.yaml",

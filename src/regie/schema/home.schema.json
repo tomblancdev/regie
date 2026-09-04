@@ -327,6 +327,11 @@
           "type": "boolean",
           "default": true,
           "description": "the '<room> — ne répond plus' alerts (a thing unavailable an hour); off = no notification renders"
+        },
+        "palette": {
+          "type": "boolean",
+          "default": false,
+          "description": "the palette (0.20): the house card's row and the Réglages rows (the select, the hour it turns, « Une autre ») — the pack renders the sensor and the helpers regardless"
         }
       }
     },
@@ -1191,6 +1196,21 @@
             }
           },
           "description": "what warm / neutral / cool mean in a scene (2700 / 4000 / 5500 by default)"
+        },
+        "palettes": {
+          "type": "object",
+          "description": "the palettes (0.20): named ones with numbers, `today` with rules",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "properties": {
+            "today": {
+              "$ref": "#/$defs/house_palette_today"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/house_palette"
+          }
         }
       }
     },
@@ -1723,6 +1743,261 @@
       "minItems": 4,
       "maxItems": 4,
       "description": "[x1, y1, x2, y2] in centimetres, the house's frame: one straight wall"
+    },
+    "house_palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "band"
+      ],
+      "description": "a palette named in the file (0.20): one arc, one accent, a saturation, a white — and the level, alive and life parts",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "band": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "the arc, walked the increasing way"
+        },
+        "accent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "saturation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "white": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "curve": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              },
+              "description": "a percentage of the room's number per period, interpolated between"
+            },
+            "jitter": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              ],
+              "description": "± %, drawn once a day per bulb (a range on today)"
+            }
+          }
+        },
+        "alive": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "const": "all"
+            },
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "const": "all"
+                  }
+                ]
+              }
+            }
+          ],
+          "description": "how many of a room's candidate bulbs roam: a count, all, or a range the day draws"
+        },
+        "life": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shapes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "minItems": 1
+            },
+            "every": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "seconds between two signs, drawn each time"
+            },
+            "chance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "today: the share of days that have life at all"
+            }
+          },
+          "required": [
+            "shapes",
+            "every"
+          ]
+        }
+      }
+    },
+    "house_palette_today": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the day's rules (0.20): the day draws within them — weighted harmonies, the avoided arc, the ranges",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "harmonies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "avoid": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "saturation": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "level": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "curve": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              },
+              "description": "a percentage of the room's number per period, interpolated between"
+            },
+            "jitter": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              ],
+              "description": "± %, drawn once a day per bulb (a range on today)"
+            }
+          }
+        },
+        "alive": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "const": "all"
+            },
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "const": "all"
+                  }
+                ]
+              }
+            }
+          ],
+          "description": "how many of a room's candidate bulbs roam: a count, all, or a range the day draws"
+        },
+        "life": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shapes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "minItems": 1
+            },
+            "every": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "seconds between two signs, drawn each time"
+            },
+            "chance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "today: the share of days that have life at all"
+            }
+          },
+          "required": [
+            "shapes",
+            "every"
+          ]
+        },
+        "turns": {
+          "type": "string",
+          "pattern": "^[0-2][0-9]:[0-5][0-9]$",
+          "description": "the hour the palette turns — seeds « Change à » once"
+        }
+      }
     }
   },
   "x-known": {

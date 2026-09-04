@@ -1,0 +1,11 @@
+{% if controls.palette %}
+- type: entities
+  title: {{ labels.ui.palette | to_yaml }}
+  entities:
+    - entity: input_select.house_palette
+      name: {{ labels.ui.palette | to_yaml }}
+    - entity: input_datetime.house_palette_turns
+      name: {{ labels.ui.palette_turns | to_yaml }}
+    - entity: input_button.house_palette_another
+      name: {{ labels.ui.palette_another | to_yaml }}
+{% endif %}

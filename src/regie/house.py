@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator
 
+from . import palette as palette_mod
 from . import theme as theme_lib
 from .errors import HouseError
 from .fx import KELVIN, known_backends, load_shapes
@@ -231,6 +232,8 @@ class House:
             "presence": bool(c.get("presence", False)),
             "restore_default": bool(c.get("restore_default", False)),
             "silent": bool(c.get("silent", True)),
+            # the palette (0.20): the house card's row and the Réglages rows
+            "palette": bool(c.get("palette", False)),
         }
 
     def look_options(self, area: dict) -> list[str]:
@@ -1250,6 +1253,29 @@ class House:
                         "reads": lambda state: state,
                     }
                 )
+        if self.has_pack("palette"):
+            # the palette (0.20): the hour it turns and the select, seeded from
+            # fx.yml once — the family owns them after
+            pal = self.palettes()
+            out.append(
+                {
+                    "entity": "input_datetime.house_palette_turns",
+                    "action": "input_datetime/set_datetime",
+                    "data": {"time": pal["today"]["turns"] + ":00"},
+                    "value": pal["today"]["turns"],
+                    "reads": lambda state: state[:5],
+                }
+            )
+            auto = palette_mod.auto_label(pal, self.labels.ui)
+            out.append(
+                {
+                    "entity": "input_select.house_palette",
+                    "action": "input_select/select_option",
+                    "data": {"option": auto},
+                    "value": auto,
+                    "reads": lambda state: state,
+                }
+            )
         m = self.modes()
         if not m:
             return out
@@ -1318,6 +1344,14 @@ class House:
         f = dict(self.data.get("fx") or {})
         f.setdefault("backend", "ha")
         return f
+
+    def palettes(self) -> dict:
+        """The house's palettes (0.20, `fx.palettes`): the named ones and the
+        day's rules, normalised — a house that writes none still has a day."""
+        return palette_mod.normalise((self.data.get("fx") or {}).get("palettes"))
+
+    def palette_salt(self) -> int:
+        return palette_mod.salt_of(self.data["house"]["label"])
 
 
 # --- loading ----------------------------------------------------------------
@@ -1841,6 +1875,25 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                 errors.append(f"{where}: shape {step['fx']['shape']!r} is not one")
             if "fx" in step and fx.get("enable") and step["fx"]["shape"] not in fx["enable"]:
                 errors.append(f"{where}: shape {step['fx']['shape']!r} is not enabled in fx")
+    # the palettes (0.20): the rules of the design page, mechanical
+    raw_palettes = (data.get("fx") or {}).get("palettes")
+    if raw_palettes or house.has_pack("palette"):
+        periods = [p["id"] for p in modes["periods"]] if modes else None
+        p_errors, p_hints = palette_mod.check(
+            house.palettes(), set(shapes), fx.get("enable"), periods
+        )
+        errors += p_errors
+        hints += p_hints
+        if raw_palettes and not house.has_pack("palette"):
+            hints.append(
+                "the house writes fx.palettes but pack 'palette' is not enabled — "
+                "no sensor carries them"
+            )
+        if house.has_pack("palette") and not house.controls()["palette"]:
+            hints.append(
+                "pack palette is enabled and controls.palette is off — the sensor exists, "
+                "the family sees no row"
+            )
     for word, pack in VOCABULARY_PACKS.items():
         present = (
             bool(data.get(word)) if word != "scenes" else any(a.get("scenes") for a in house.areas)
