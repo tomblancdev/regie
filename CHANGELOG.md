@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.16.0 — le brouillon suit les fichiers (2026-09-04)
+
+Tom, au matin, après l'installation : les choses posées par la convergence
+(les capteurs, les télécommandes, les étoiles, les six du Passage) étaient
+dans les fichiers de pièce et PAS dans son éditeur — `apply` ensemençait
+l'atelier UNE fois et seul `plan push` le ré-ensemençait, à la main. La règle
+désormais : **à chaque convergence le brouillon suit les fichiers, SAUF s'il
+tient des retouches pas encore tirées** — alors la convergence le dit et garde
+le travail de la personne (`hand` quand les fichiers ont bougé aussi : les deux
+vérités attendent le pull). Jamais l'autre sens : les fichiers changent par
+`regie plan pull`, un geste de la main. Pour distinguer un geste de la personne
+d'un mouvement des fichiers, le chef d'orchestre se souvient de ce qu'il a
+ensemencé en dernier (`<root>/.regie/plan-seed.json`, écrit par `apply` comme
+par `plan push`) et compare le brouillon et les fichiers à cette mémoire sous
+leur forme normale — ce que le pull LIT : une pièce par son id, une chose par
+son entité, une ouverture par ce qu'elle est et où elle est, les murs, tout
+arrondi au centimètre ; jamais les ids, l'éditeur les refrappe à chaque Save.
+Le pas `workbench` dit le chemin en quelques mots (*2 thing(s) placed (…), the
+walls*). Un brouillon sans carte de plan est ré-ensemencé (rien d'une personne
+à garder) ; un atelier dont le chef n'a pas la mémoire (ouvert avant 0.16)
+n'est jamais écrasé — `hand`, `plan pull` si c'est votre travail, puis `plan
+push`. Trois tests de plus.
+
 ## 0.15.1 — un point posé reste où on l'a posé (2026-09-03)
 
 Lu au premier aller-retour complet : le capteur d'air du Passage, posé côté

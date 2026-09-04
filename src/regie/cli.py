@@ -273,8 +273,10 @@ def cmd_look(args) -> int:
 
 
 def cmd_plan(args) -> int:
-    """The plan's workbench: `push` re-seeds the editor's draft from the files;
-    `pull` writes the draft back into the room files' `plan:` blocks."""
+    """The plan's workbench: `push` re-seeds the editor's draft from the files
+    (what `apply` does at every converge unless the draft holds edits not yet
+    pulled - `push` does it regardless, and says so); `pull` writes the draft
+    back into the room files' `plan:` blocks."""
     from .apply import Conductor
     from .dash import link
     from .ha import HomeAssistant
@@ -286,7 +288,7 @@ def cmd_plan(args) -> int:
         rewrite,
         rewrite_walls,
         room_files,
-        workbench_config,
+        seed,
     )
 
     house = load_house(args.home)
@@ -299,9 +301,7 @@ def cmd_plan(args) -> int:
         return 1
     with ha.ws() as ws:
         if args.what == "push":
-            ws.call(
-                "lovelace/config/save", url_path=WORKBENCH, config=workbench_config(house, link)
-            )
+            seed(ws, house, root, link)
             print(f"/{WORKBENCH}: seeded from the files — the draft it held is gone")
             return 0
         try:
@@ -675,7 +675,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser(
         "plan",
-        help="the plan's workbench (0.14): `push` seeds the editor's draft from the files, "
+        help="the plan's workbench (0.14): `push` seeds the editor's draft from the files "
+        "(apply does it at every converge unless the draft holds edits not yet pulled), "
         "`pull` writes the draft back into the room files' plan: blocks",
     )
     s.add_argument("what", choices=["push", "pull"])

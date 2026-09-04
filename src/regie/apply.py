@@ -1391,12 +1391,14 @@ class Conductor:
             ws.call("lovelace/resources/create", res_type="module", url=CARD_URL)
 
     def workbench(self, ws) -> None:
-        """THE PLAN'S WORKBENCH (0.14): a storage dashboard, admins only, seeded
-        ONCE with the card as the files draw it - the editor's draft. It is never
-        re-seeded here (a draft is a person's); `regie plan push` does that on
-        purpose, `regie plan pull` writes the draft back into the room files."""
+        """THE PLAN'S WORKBENCH (0.14): a storage dashboard, admins only - the
+        editor's draft. Since 0.16 THE DRAFT FOLLOWS THE FILES at every
+        converge, unless it holds edits not yet pulled: then the converge says
+        so and keeps the person's work (`hand` once the files moved too). The
+        other way is never automatic: `regie plan pull` writes the draft into
+        the room files, by hand; `regie plan push` re-seeds it on purpose."""
         from .dash import link
-        from .plan import WORKBENCH, workbench_config
+        from .plan import WORKBENCH, seed, sync
 
         if self.house.plan() is None:
             return
@@ -1405,27 +1407,28 @@ class Conductor:
         # (read at the first converge, 2026-09-03: `unknown_command`)
         dashboards = ws.call("lovelace/dashboards/list") or []
         have = [d for d in dashboards if d.get("url_path") == WORKBENCH]
-        if have:
-            self.step(
-                "workbench",
-                "ok",
-                f"/{WORKBENCH} (the editor's draft; `regie plan push` re-seeds it)",
+        if not have:
+            self.step("workbench", "changed", f"/{WORKBENCH} created and seeded from the files")
+            if self.check:
+                return
+            ws.call(
+                "lovelace/dashboards/create",
+                url_path=WORKBENCH,
+                title=self.house.labels.ui.workbench,
+                icon="mdi:pencil-ruler",
+                require_admin=True,
+                show_in_sidebar=True,
             )
+            seed(ws, self.house, self.root, link)
             return
-        self.step("workbench", "changed", f"/{WORKBENCH} created and seeded from the files")
-        if self.check:
-            return
-        ws.call(
-            "lovelace/dashboards/create",
-            url_path=WORKBENCH,
-            title=self.house.labels.ui.workbench,
-            icon="mdi:pencil-ruler",
-            require_admin=True,
-            show_in_sidebar=True,
-        )
-        ws.call(
-            "lovelace/config/save", url_path=WORKBENCH, config=workbench_config(self.house, link)
-        )
+        try:
+            draft = ws.call("lovelace/config", url_path=WORKBENCH)
+        except HouseError:
+            draft = None  # a dashboard holding no config yet: nothing to keep
+        state, detail, reseed = sync(self.house, self.root, draft, link)
+        self.step("workbench", state, detail)
+        if reseed and not self.check:
+            seed(ws, self.house, self.root, link)
 
     # --- the run ----------------------------------------------------------------
     def run(self) -> list[Step]:

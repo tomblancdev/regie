@@ -18,6 +18,7 @@ centimetre. What the pull cannot place is named, never dropped in silence.
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from pathlib import Path
@@ -388,3 +389,177 @@ def rewrite_walls(path: Path, walls: list[list[int]]) -> bool:
         return False
     path.write_text(out, encoding="utf-8")
     return True
+
+
+# --- the sync (0.16): the draft follows the files, unless it holds a person's work -----
+# Tom, 2026-09-04: the things the install placed (sensors, remotes, the stars,
+# the corridor's six) were in the room files and NOT in his editor - apply
+# seeded the workbench once and only `plan push` re-seeded it, by hand. The
+# rule now: at every converge the draft follows the files, UNLESS it holds
+# edits not yet pulled - then the converge says so and keeps the person's
+# work. Never the other way: the files change by `regie plan pull`, a hand's
+# act. To tell a person's gesture from the files' own move, the conductor
+# remembers what it last seeded (<root>/.regie/plan-seed.json) and compares
+# the draft and the files against that memory - the way the pull would read
+# them, never on ids: the editor re-mints every id on Save.
+SEED = "plan-seed.json"
+
+
+def seed_path(root: Path) -> Path:
+    from .host import STATE
+
+    return Path(root) / STATE / SEED
+
+
+def _json(value):
+    return json.loads(json.dumps(value))
+
+
+def read_seed(root: Path) -> dict | None:
+    """The card as it was last seeded, or None when the conductor has no memory
+    of one (a workbench opened before 0.16, a fresh root)."""
+    p = seed_path(root)
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    return data.get("card") if isinstance(data, dict) else None
+
+
+def seed(ws, house: House, root: Path, link) -> dict:
+    """Seed the workbench with the card as the files draw it, and remember
+    what was seeded - the memory is what lets a later converge tell a draft
+    still equal to its seed (it follows the files) from one a person drew on
+    since (it is kept)."""
+    config = workbench_config(house, link)
+    ws.call("lovelace/config/save", url_path=WORKBENCH, config=config)
+    p = seed_path(root)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"card": find_card(config)}, indent=2) + "\n", encoding="utf-8")
+    return config
+
+
+def _thing_key(item: dict) -> str:
+    # the entity survives a Save (the picker set it), the id does not; a thing
+    # with no entity is known by its name, the pull's own limit
+    return item.get("entity") or item.get("name") or item.get("id") or "?"
+
+
+def normal(house: House, card: dict) -> dict:
+    """What the pull READS and nothing the editor rewrites by itself: a room's
+    outline by the room's own id (an area re-minted on Save is found the way
+    the pull finds it), a thing's point by its entity, an opening by what it
+    is and where it stands, the walls - every number rounded to the
+    centimetre. Two cards with the same normal form pull into the same files."""
+    keys = room_keys(house)
+    rooms: dict[str, list] = {}
+    things: dict[str, list] = {}
+    openings: list[list] = []
+    for f in _floors(card):
+        for a in f.get("areas") or []:
+            rid = _room_of_area(house, keys, a) or slug(
+                str(a.get("haArea") or a.get("name") or a.get("id") or "?")
+            )
+            rooms.setdefault(rid, [_pt(p["x"], p["y"]) for p in a.get("points") or []])
+        for o in f.get("openings") or []:
+            openings.append(
+                [
+                    "window" if o.get("type") == "window" else "door",
+                    *_pt(o.get("x", 0), o.get("y", 0)),
+                    int(round(float(o.get("length") or 80))),
+                    o.get("entity") or "",
+                    bool(o.get("flipH")),
+                    bool(o.get("flipV")),
+                ]
+            )
+        for it in f.get("items") or []:
+            things.setdefault(_thing_key(it), _pt(it.get("x", 0), it.get("y", 0)))
+    return {
+        "rooms": rooms,
+        "things": things,
+        "openings": sorted(openings, key=json.dumps),
+        "walls": sorted(pull_walls(card)),
+    }
+
+
+def _some(names, n: int = 3) -> str:
+    names = list(names)
+    return ", ".join(names[:n]) + (f", +{len(names) - n}" if len(names) > n else "")
+
+
+def describe(before: dict, after: dict) -> str:
+    """The way from one normal form to the other, in a few words."""
+    out: list[str] = []
+    ra, rb = before["rooms"], after["rooms"]
+    for word, rooms in (
+        ("drawn", [r for r in rb if r not in ra]),
+        ("gone", [r for r in ra if r not in rb]),
+        ("redrawn", [r for r in rb if r in ra and ra[r] != rb[r]]),
+    ):
+        if rooms:
+            out.append(f"{len(rooms)} room(s) {word} ({_some(rooms)})")
+    ta, tb = before["things"], after["things"]
+    for word, things in (
+        ("placed", [t for t in tb if t not in ta]),
+        ("removed", [t for t in ta if t not in tb]),
+        ("moved", [t for t in tb if t in ta and ta[t] != tb[t]]),
+    ):
+        if things:
+            out.append(f"{len(things)} thing(s) {word} ({_some(things)})")
+    if before["openings"] != after["openings"]:
+        out.append("the openings")
+    if before["walls"] != after["walls"]:
+        out.append("the walls")
+    return ", ".join(out) or "nothing"
+
+
+def sync(house: House, root: Path, draft: dict | None, link) -> tuple[str, str, bool]:
+    """THE ONE-WAY SYNC: the step's state and detail, and whether to re-seed.
+    Three readings decide - the draft, the files, and the memory of the last
+    seed: a draft that still is its seed follows the files; a draft a person
+    drew on since is kept, and the converge says so - `hand` when the files
+    moved too, so the two truths wait for the pull to meet."""
+    fresh = _json(find_card(workbench_config(house, link)))
+    files_n = normal(house, fresh)
+    card = find_card(draft or {})
+    if card is None:
+        return "changed", f"/{WORKBENCH} re-seeded from the files (it held no plan card)", True
+    draft_n = normal(house, card)
+    seeded = read_seed(root)
+    seed_n = normal(house, seeded) if seeded else None
+    if draft_n == files_n:
+        # nothing a pull would write: the draft agrees with the files, and what
+        # the files alone say (a label, the drawing, a badge's face) reaches it
+        if seeded == fresh:
+            return "ok", f"/{WORKBENCH} follows the files", False
+        return (
+            "changed",
+            f"/{WORKBENCH} re-seeded from the files (the draft agreed with them - nothing lost)",
+            True,
+        )
+    if seed_n is None:
+        return (
+            "hand",
+            f"/{WORKBENCH} differs from the files ({describe(files_n, draft_n)}) and the "
+            "conductor has no memory of the last seed - kept; `regie plan pull` if that is "
+            "your work, then `regie plan push`",
+            False,
+        )
+    if draft_n == seed_n:
+        way = describe(seed_n, files_n)
+        return "changed", f"/{WORKBENCH} re-seeded from the files ({way})", True
+    edits = describe(seed_n, draft_n)
+    if files_n == seed_n:
+        return (
+            "ok",
+            f"/{WORKBENCH} holds edits not yet pulled ({edits}) - `regie plan pull` writes them",
+            False,
+        )
+    return (
+        "hand",
+        f"/{WORKBENCH} holds edits not yet pulled ({edits}) and the files moved since "
+        f"({describe(seed_n, files_n)}) - kept; `regie plan pull`, then converge",
+        False,
+    )

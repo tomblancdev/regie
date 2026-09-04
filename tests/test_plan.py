@@ -655,3 +655,72 @@ def test_a_point_the_card_placed_stays_even_outside_its_room(witness):
     blocks, notes = pull(witness, card)
     assert blocks["living"]["at"]["lamp"] == [600, 100], "placed by a person: kept as is"
     assert not any("lamp" in n and "fell outside" in n for n in notes)
+
+
+# --- the one-way sync (0.16) -------------------------------------------------------------
+def test_normal_reads_past_minted_ids_and_float_noise(witness):
+    """On Save the editor re-mints every id and may write floats; neither is an
+    edit. The normal form keys a room by the room's own id, a thing by its
+    entity, rounds to the centimetre - two cards with the same normal form
+    pull into the same files - and `describe` says the way from one to the
+    other in a few words."""
+    import copy
+    import json
+
+    from regie.dash import link
+    from regie.plan import describe, find_card, normal, workbench_config
+
+    card = find_card(workbench_config(witness, link))
+    saved = json.loads(json.dumps(card))
+    for f in saved["floors"]:
+        for n, a in enumerate(f["areas"]):
+            a["haArea"], a["id"] = a["id"], f"area_{n}"
+            for p in a["points"]:
+                p["x"] = float(p["x"]) + 0.2
+        for n, it in enumerate(f["items"]):
+            it["id"], it["x"] = f"item_{n}", float(it["x"]) - 0.4
+        for n, o in enumerate(f["openings"]):
+            o["id"] = f"door_{n}"
+    n = normal(witness, card)
+    assert normal(witness, saved) == n
+    assert n["rooms"]["living"][0] == [20, 20]
+    assert n["things"]["light.living_ceiling"] == [120, 90]
+    assert ["door", 420, 250, 80, "", False, False] in n["openings"]
+    assert describe(n, n) == "nothing"
+    moved = copy.deepcopy(n)
+    moved["things"]["light.living_ceiling"] = [130, 90]
+    moved["things"]["sensor.new"] = [1, 1]
+    moved["rooms"]["living"][0] = [21, 20]
+    moved["walls"] = []
+    assert describe(n, moved) == (
+        "1 room(s) redrawn (living), 1 thing(s) placed (sensor.new), "
+        "1 thing(s) moved (light.living_ceiling), the walls"
+    )
+
+
+def test_sync_reads_the_draft_the_files_and_the_memory(witness, tmp_path):
+    """No plan card in the draft: re-seed (nothing to keep). A seed remembered
+    and a draft equal to the files: it follows them, nothing to do."""
+    import json
+
+    from regie.dash import link
+    from regie.plan import WORKBENCH, find_card, read_seed, seed, seed_path, sync
+
+    class WS:
+        calls: list = []
+
+        def call(self, type_, **payload):
+            self.calls.append((type_, payload))
+
+    assert read_seed(tmp_path) is None
+    state, detail, reseed = sync(witness, tmp_path, None, link)
+    assert (state, reseed) == ("changed", True) and "no plan card" in detail
+    config = seed(WS(), witness, tmp_path, link)
+    assert WS.calls[0][0] == "lovelace/config/save" and WS.calls[0][1]["url_path"] == WORKBENCH
+    assert seed_path(tmp_path).name == "plan-seed.json"
+    assert read_seed(tmp_path) == json.loads(json.dumps(find_card(config)))
+    assert sync(witness, tmp_path, config, link) == (
+        "ok",
+        f"/{WORKBENCH} follows the files",
+        False,
+    )

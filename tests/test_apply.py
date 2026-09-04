@@ -1680,8 +1680,8 @@ def test_a_house_without_a_plan_owns_no_card_resource(house_with, secrets, tmp_p
 # --- the plan's workbench (0.14) ----------------------------------------------------------
 def test_the_workbench_is_opened_and_seeded_once(witness, secrets, tmp_path):
     """A storage dashboard for the card's own editor, admins only, seeded with
-    the card as the files draw it — once. A second run leaves the draft alone:
-    re-seeding is `regie plan push`, on purpose."""
+    the card as the files draw it. A draft holding no plan card at all is
+    re-seeded (0.16: nothing of a person's in it to keep)."""
     from regie.plan import WORKBENCH
 
     ha = FakeHA()
@@ -1702,7 +1702,90 @@ def test_the_workbench_is_opened_and_seeded_once(witness, secrets, tmp_path):
         "views": [{"cards": [{"type": "markdown", "content": "a draft"}]}]
     }
     steps = apply(witness, secrets, tmp_path, ha, check=False)
-    assert states(steps)["workbench"] == "ok"
-    assert ha.dashboard_configs[WORKBENCH]["views"][0]["cards"][0]["type"] == "markdown", (
-        "the draft survives"
+    assert states(steps)["workbench"] == "changed", "no plan card: nothing of a person's to keep"
+    assert (
+        ha.dashboard_configs[WORKBENCH]["views"][0]["cards"][0]["type"]
+        == "custom:easy-floorplan-card"
     )
+
+
+def test_the_draft_follows_the_files_unless_it_holds_edits(witness, secrets, tmp_path, house_with):
+    """THE ONE-WAY SYNC (0.16 - Tom, 2026-09-04: the things the install placed
+    were in the room files and NOT in his editor). At every converge the draft
+    follows the files - unless it holds edits not yet pulled: then the converge
+    says so and keeps the person's work, by hand once the files moved too. A
+    Save that re-mints every id and writes floats is not an edit; the memory
+    of the last seed is what tells the two apart, and a workbench the conductor
+    has no memory of is never overwritten."""
+    import copy
+
+    from regie.plan import WORKBENCH, find_card, rewrite, seed_path
+
+    def detail(steps):
+        return next(s.detail for s in steps if s.name == "workbench")
+
+    def moved(**points):
+        """A copy of the house whose living ceiling holds these points."""
+        path = house_with(lambda d: None)
+        plan = copy.deepcopy(witness.area("living")["plan"])
+        for place, point in points.items():
+            plan["at"]["main"][place] = point
+        rewrite(path.parent / "rooms" / "living.yml", plan)
+        return load_house(path)
+
+    def ceiling():
+        card = find_card(ha.dashboard_configs[WORKBENCH])
+        return next(i for i in card["floors"][0]["items"] if i["entity"] == "light.living_ceiling")
+
+    ha = FakeHA()
+    apply(witness, secrets, tmp_path, ha, check=False)
+    assert seed_path(tmp_path).is_file(), "the conductor remembers what it seeded"
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "ok" and "follows the files" in detail(steps)
+    # a Save: every id re-minted, haArea set, floats - not an edit
+    card = find_card(ha.dashboard_configs[WORKBENCH])
+    for f in card["floors"]:
+        for n, a in enumerate(f["areas"]):
+            a["haArea"], a["id"] = a["id"], f"area_{n}"
+            for p in a["points"]:
+                p["x"] = float(p["x"]) + 0.2
+        for n, it in enumerate(f["items"]):
+            it["id"], it["x"] = f"item_{n}", float(it["x"]) - 0.4
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "ok" and ceiling()["id"].startswith("item_")
+    # the files move (a converge placed a thing elsewhere): the draft follows
+    h2 = moved(front_left=[130, 90])
+    steps = apply(h2, secrets, tmp_path, ha, check=True)
+    assert states(steps)["workbench"] == "would" and ceiling()["id"].startswith("item_")
+    steps = apply(h2, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "changed"
+    assert "1 thing(s) moved (light.living_ceiling)" in detail(steps)
+    assert [ceiling()["x"], ceiling()["y"]] == [130, 90] and ceiling()["id"] == "living_ceiling"
+    steps = apply(h2, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "ok"
+    # a person draws: the draft is kept and the converge says so
+    ceiling()["x"] = 180
+    steps = apply(h2, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "ok"
+    assert "edits not yet pulled (1 thing(s) moved (light.living_ceiling))" in detail(steps)
+    assert ceiling()["x"] == 180, "kept"
+    # the files move too: by hand, and the draft is still kept
+    h3 = moved(front_left=[130, 90], front_right=[300, 95])
+    steps = apply(h3, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "hand"
+    assert "files moved since (1 thing(s) moved (light.living_ceiling_2))" in detail(steps)
+    assert ceiling()["x"] == 180, "kept"
+    assert "by hand" in summary(steps, False)
+    # the pull met them (the files say what the draft says): re-seeded once so
+    # the files' own faces reach the editor, then quiet
+    h4 = moved(front_left=[180, 90])
+    steps = apply(h4, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "changed" and "nothing lost" in detail(steps)
+    steps = apply(h4, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "ok" and "follows the files" in detail(steps)
+    # no memory of the seed (a workbench from before 0.16): never overwritten
+    seed_path(tmp_path).unlink()
+    h5 = moved(front_left=[200, 100])
+    steps = apply(h5, secrets, tmp_path, ha, check=False)
+    assert states(steps)["workbench"] == "hand" and "no memory" in detail(steps)
+    assert ceiling()["x"] == 180, "kept"
