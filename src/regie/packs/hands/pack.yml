@@ -1,0 +1,14 @@
+# Pack `hands` — the remotes (0.19, the grammar's step 3): a `hands:` block in
+# a room file names a remote of the room, a behaviour from this pack's shelf
+# (behaviours/*.yml) and what differs; the product's gesture PROFILES
+# (hands.py) turn what the radio says into the house's words; one automation
+# per remote, restart mode, so the next gesture ends a hold. The verbs are
+# verbs.py's — a when: row and a story step speak the same.
+name: hands
+summary: "the remotes — `hands:` per room (a behaviour from the shelf: room_remote · house_remote · dimmer_wheel · bath_button; a gesture profile per model: STYRBAR, BILRESA wheel, BILRESA dual button), one automation per remote (0.19)"
+kinds: [remote]
+services: []
+schema: schema.json
+templates:
+  - { src: packages/hands.yaml.j2, dst: "home-assistant/packages/hands_{{ area.id }}.yaml", each: areas }
+cards: []

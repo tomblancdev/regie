@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.19.0 — les mains (2026-09-04)
+
+Le pas 3 de la grammaire (« One Grammar, Written Once ») : les télécommandes.
+Quatre couches, un rôle chacune — l'appareil dit (du brut, par transport) ; un
+PROFIL de gestes par modèle le traduit dans les mots de la maison ; un
+COMPORTEMENT sur l'étagère du produit lie les mots aux verbes, avec des champs
+que la maison remplit (comme une forme d'fx) ; un verbe se rend une fois. La
+maison écrit une ligne par télécommande.
+
+- **Trois profils** (`hands.py`), lus sur les appareils du cerveau : le STYRBAR
+  (Zigbee2MQTT — entendu sur `<base_topic>/<chose>/action`, la valeur nue
+  republiée à chaque geste ; `on · off · hold_on · hold_off · left · right ·
+  hold_left · hold_right`, chaque relâchement = `release`), la molette BILRESA
+  (Matter — neuf `event.<chose>_<endpoint>` ; par canal n : 3n−2 monte, 3n−1
+  descend, 3n clique ; un tour de K crans = un seul `multi_press_K` ; `turn ·
+  click · double · triple · hold`), le double bouton BILRESA (`top · bottom`,
+  `_double`, `_hold`). Un événement Matter ne compte que si son heure change
+  (ni un redémarrage, ni un retour d'unavailable).
+- **Quatre comportements** sur l'étagère (`packs/hands/behaviours/`) :
+  `room_remote`, `house_remote` (champs `welcome`, `open_plan`),
+  `dimmer_wheel` (un canal prend le profil de sa cible — une lumière ou un
+  lecteur), `bath_button` (champs `full`, `dim`). Une télécommande LIÉE
+  (`bind:`) garde ses gestes du maillage sans `level` du cerveau : le cerveau
+  complète on/off avec l'ambiance de l'heure, ne double jamais.
+- **Sept verbes de plus** (`verbs.py`) : `toggle` (l'ambiance si la pièce est
+  éteinte, sinon off), `level` (`up`/`down` tenus — une boucle que le geste
+  suivant arrête —, `step` = les crans d'un tour), `walk` (`whites` du chaud au
+  froid et retour, `colours` autour de la roue ; un pas toutes les 2 s sur
+  Zigbee, jamais de niveau avec), `pin` (les capteurs en retrait ; le geste
+  suivant de la même télécommande le lève), `power: off` sur des `kinds:`,
+  `volume: step`, `media` (play_pause · stop · next · prev), `say` (un indice
+  jusqu'aux histoires) ; `look` prend `prev`/`next` (la mémoire de la pièce
+  parcourt les ambiances du fichier) et une LISTE qui tourne ; `rooms: all` =
+  chaque pièce qui a l'ambiance ; `then:` enchaîne un second verbe.
+- **Pack `hands`** : `hands:` (propriété de pièce) — une clé par télécommande
+  de la pièce, `behaviour:` et ce qui diffère ; UNE automation par télécommande
+  (`regie_<pièce>_<télécommande>_hands`, mode restart : le geste suivant, le
+  relâchement compris, termine une tenue) ; pas d'interrupteur — une
+  télécommande est une main.
+- **`check` refuse** : une clé qui n'est pas une télécommande de la pièce, un
+  modèle sans profil, un comportement absent de l'étagère ou écrit pour un
+  autre profil, un geste que le modèle n'a pas, un canal hors de 1–3 ou sans
+  cible unique, une ambiance qu'une pièce n'a pas, `pin` sans capteur,
+  `volume`/`media` sans lecteur, un mode/une histoire/une pièce inconnus, un
+  champ vide, zéro ou deux verbes ; **indices** : `say`, un rôle que rien ne
+  remplit (rend rien), une molette sans canal.
+- La maison témoin : le STYRBAR du salon (lié), une molette au lit, un double
+  bouton dans l'entrée.
+
 ## 0.18.2 — le tri des imports (2026-09-04)
 
 Un bloc d'imports non trié dans le test du pack `when` (I001) — passé sous le

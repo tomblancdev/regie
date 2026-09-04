@@ -146,7 +146,17 @@ def test_a_unit_the_house_dropped_is_stopped_and_removed(house_with, secrets, tm
         d.pop("zigbee")
         d["things"] = [t for t in d["things"] if t["via"] != "zigbee"]
 
-    house2 = load_house(house_with(no_zigbee))
+    path2 = house_with(no_zigbee)
+    living = (
+        path2.parent / "rooms" / "living.yml"
+    )  # its remote went with the radio: so does its hands: line
+    living.write_text(
+        living.read_text(encoding="utf-8").replace(
+            "hands:\n  living_remote: { behaviour: room_remote }\n", ""
+        ),
+        encoding="utf-8",
+    )
+    house2 = load_house(path2)
     render(house2, root, secrets)
     result = up(house2, root, units_dir, runner, fetcher=lambda url: pinned)
     assert result.removed == ["zigbee2mqtt-main.container"]

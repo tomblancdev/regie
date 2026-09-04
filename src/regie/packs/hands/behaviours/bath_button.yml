@@ -1,0 +1,12 @@
+# A BILRESA dual button by a door: the top is on, the bottom off; a double
+# on the top is the full light (`full`, day), on the bottom the dim one
+# (`dim`, night); held, brighter or dimmer.
+profiles: [bilresa_dual]
+fields: { full: day, dim: night }
+gestures:
+  top:           { look: default }
+  top_double:    { look: $full }
+  top_hold:      { level: up }
+  bottom:        { look: "off" }
+  bottom_double: { look: $dim }
+  bottom_hold:   { level: down }

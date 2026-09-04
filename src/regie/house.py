@@ -328,6 +328,12 @@ class House:
     def by_kind(self) -> Counter:
         return Counter(t["kind"] for t in self.things)
 
+    # --- the hands (0.19, pack hands) ------------------------------------------
+    def hands_plan(self, area: dict) -> list[dict]:
+        from . import hands
+
+        return hands.hands_plan(self, area)
+
     # --- the things that pick a look (0.18, pack when) ----------------------
     def when_rows(self, area: dict) -> list[dict]:
         return list(area.get("when") or []) if self.has_pack("when") else []
@@ -1690,6 +1696,11 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                 m = house.modes()
                 if not m or row["mode"] not in {x["id"] for x in m["modes"]}:
                     errors.append(f"{where}: mode {row['mode']!r} — not in modes.yml")
+        from . import hands as _hands
+
+        hand_errors, hand_hints = _hands.check_hands(house, a)
+        errors += hand_errors
+        hints += hand_hints
         motions = house.kinds_in(a["id"]).get("motion", [])
         if a.get("dark_below") is not None and not motions:
             warnings.append(

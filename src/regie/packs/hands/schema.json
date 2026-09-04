@@ -1,0 +1,23 @@
+{
+  "area_properties": {
+    "hands": {
+      "type": "object",
+      "description": "the remotes of the room (0.19): each key a remote's id, its value `behaviour:` (a file on the shelf) and what differs \u2014 a field the behaviour declares, a gesture with its verb, a wheel's `channels:`",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "behaviour": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "required": [
+          "behaviour"
+        ]
+      }
+    }
+  }
+}

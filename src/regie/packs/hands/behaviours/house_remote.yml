@@ -1,0 +1,12 @@
+# The remote by the front door: the house's states. Two fields a house
+# fills: `welcome` (the rooms the door opens on) and `open_plan` (the rooms a
+# guests' evening lights together).
+profiles: [styrbar]
+fields: { welcome: [], open_plan: [] }
+gestures:
+  "on":       { mode: home, then: { look: default, rooms: $welcome } }
+  "off":      { mode: away }
+  hold_on:  { look: day, rooms: all }
+  hold_off: { power: off, kinds: [tv, receiver, speaker], then: { mode: away } }
+  left:     { look: evening, rooms: $open_plan }
+  right:    { look: night, rooms: all }

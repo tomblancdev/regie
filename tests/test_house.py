@@ -17,6 +17,7 @@ def test_witness_loads_with_one_of_every_kind(witness):
         "scenarios",
         "lighting",
         "when",
+        "hands",
         "matter",
         "chalet",
     ]
@@ -137,7 +138,7 @@ def test_a_hardware_address_is_six_bytes_or_a_thread_eui64(house_with):
 def test_unknown_pack_lists_the_known_ones(house_with):
     with pytest.raises(
         HouseError,
-        match=r"unknown pack 'voice' — product packs: fx, lighting, matter, modes, notify, "
+        match=r"unknown pack 'voice' — product packs: fx, hands, lighting, matter, modes, notify, "
         r"scenarios, scenes, signals, when; house packs \(packs\): chalet",
     ):
         load_house(house_with(lambda d: d.update(packs=["voice"])))

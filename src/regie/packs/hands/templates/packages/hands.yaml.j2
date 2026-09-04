@@ -1,0 +1,10 @@
+{% set remotes = hands_plan(area) %}
+{% if remotes %}
+# rendered by La Régie — {{ area.label }}: the hands (pack hands — rooms/{{ area.id }}.yml, not the UI)
+# One automation per remote, its gestures as branches; restart mode, so the
+# next gesture (a release included) ends a hold. A remote is a hand: no switch.
+automation:
+{% for r in remotes %}
+{{ [r.automation] | to_block(0) }}
+{% endfor %}
+{% endif %}

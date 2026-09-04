@@ -40,6 +40,7 @@ EXPECTED = {
     "home-assistant/packages/scenarios.yaml",
     "home-assistant/packages/when_living.yaml",
     "home-assistant/packages/when_hall.yaml",
+    "home-assistant/packages/hands_living.yaml",
     "mosquitto/config/mosquitto.conf",
     "mosquitto/config/acl",
     "mosquitto/config/passwd",

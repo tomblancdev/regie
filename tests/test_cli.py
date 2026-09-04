@@ -11,7 +11,8 @@ def test_check_reports_and_passes(witness_path, capsys):
     out = capsys.readouterr().out
     assert "maison_temoin — Maison témoin (fr, Europe/Paris)" in out
     assert (
-        "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, when, matter, "
+        "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, "
+        "matter, "
         "chalet (house)" in out
     )
     assert (
@@ -49,7 +50,7 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "38 written, 0 unchanged, 0 kept, 0 removed" in out
+    assert "39 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 

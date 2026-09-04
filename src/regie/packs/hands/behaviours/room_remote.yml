@@ -1,0 +1,16 @@
+# A STYRBAR that owns one room (the page « One Grammar, Written Once »): on
+# means the look of the hour, off means off, held on/off moves the level (the
+# mesh does that on a bound remote: the brain then completes on/off only),
+# the arrows walk the room's looks in the file's order, held they walk the
+# whites (left) or the colours (right) on the main role; release keeps.
+profiles: [styrbar]
+fields: {}
+gestures:
+  "on":         { look: default }
+  "off":        { look: "off" }
+  hold_on:    { level: up }
+  hold_off:   { level: down }
+  left:       { look: prev }
+  right:      { look: next }
+  hold_left:  { walk: whites,  role: main }
+  hold_right: { walk: colours, role: main }

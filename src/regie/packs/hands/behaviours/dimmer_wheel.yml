@@ -1,0 +1,15 @@
+# A BILRESA wheel: three channels, each a target the room file names (a
+# role, or a thing); a channel takes the profile of its target — a light or a
+# player. A turn steps the level (or the volume) by the notches turned at
+# once; a click toggles the look of the hour (or play/pause); a hold walks
+# the whites (or stops). `double:` is the room's to say.
+profiles: [bilresa_wheel]
+channels:
+  light:
+    turn:   { level: step }
+    click:  { toggle: default }
+    hold:   { walk: whites }
+  media:
+    turn:   { volume: step }
+    click:  { media: play_pause }
+    hold:   { media: stop }

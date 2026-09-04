@@ -42,6 +42,10 @@ scenes:
 defaults: { dark: evening, dim: day, bright: day, night: night }
 # the things that pick a look (0.18, pack when): the TV coming on takes the
 # room to cinema; the TV going off gives the look before back
+# the hands (0.19): the room's STYRBAR, bound to the room — the brain completes
+# on/off with the look of the hour and drives the arrows
+hands:
+  living_remote: { behaviour: room_remote }
 when:
   - { thing: living_tv, is: on,  look: cinema }
   - { thing: living_tv, is: off, look: before }
