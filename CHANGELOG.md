@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.22.1 — deux tests rouges passés sous un tuyau, et les plans mis en cache (2026-09-04)
+
+`v0.22.0` a été étiqueté avec deux tests rouges : la chaîne de release lisait
+`pytest | tail` et le tuyau cachait le code de sortie (0.16.3 avait vu le même
+piège dans la CI). Le produit ne change pas ; 0.22.0 reste publié et n'est pas
+à épingler.
+
+- Les deux attentes : Soirée de la maison témoin suit la palette (0.21) donc sa
+  luminosité est un gabarit, pas un nombre ; et l'arrêt des dérives par toute
+  autre ambiance nomme aussi le script de vie.
+- **Les plans sont mémorisés par (pièce, ambiance)** — `scene_palette`,
+  `drift_plan`, `life_plan`, et les formes chargées une fois par maison : le
+  gabarit des scènes les demande des dizaines de fois par rendu, et la vie
+  relisait toute la bibliothèque des formes sur le disque à chaque appel (la
+  suite entière passée de 3 à 8 minutes, puis au-delà des 10).
+
 ## 0.22.0 — La Palette du jour, le pas 3 : la vie (2026-09-04)
 
 Une palette peut porter des SIGNES DE VIE — `life: { shapes, every, chance }` —

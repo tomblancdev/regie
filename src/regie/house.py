@@ -997,7 +997,7 @@ class House:
         }
 
     def life_plan(self, area: dict, plan: dict) -> dict | None:
-        cache = self.__dict__.setdefault("_life_plan", {})
+        cache = self.__dict__.setdefault("_life_cache", {})
         key = (area["id"], plan["id"])
         if key not in cache:
             cache[key] = palette_mod.life_plan(self, area, plan, self.shapes())
@@ -1011,7 +1011,7 @@ class House:
     def scene_palette(self, area: dict, plan: dict) -> dict | None:
         """Memoised per (room, look): the templates ask for it many times per
         render, and the plan is a pure function of the files."""
-        cache = self.__dict__.setdefault("_scene_palette", {})
+        cache = self.__dict__.setdefault("_scene_palette_cache", {})
         key = (area["id"], plan["id"])
         if key not in cache:
             cache[key] = palette_mod.scene_palette(self, area, plan)
@@ -1048,6 +1048,13 @@ class House:
         return [(p, places[p]["entities"][0]) for p in chosen]
 
     def drift_plan(self, area: dict, plan: dict) -> dict | None:
+        cache = self.__dict__.setdefault("_drift_cache", {})
+        key = (area["id"], plan["id"])
+        if key not in cache:
+            cache[key] = self._drift_plan(area, plan)
+        return cache[key]
+
+    def _drift_plan(self, area: dict, plan: dict) -> dict | None:
         """A scene's sustained colour walk, resolved: one walker per place, each
         with its OWN period, so no two are ever in step and the ceiling never
         falls into a pattern. Stateless by design — a walker's hue is a pure

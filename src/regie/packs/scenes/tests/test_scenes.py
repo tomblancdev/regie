@@ -20,13 +20,17 @@ def test_a_scene_renders_for_its_filled_roles_and_waits_for_the_rest(rendered):
     pkg = load(rendered, "living")
     evening = pkg["script"]["living_evening"]
     steps = {s["target"]["entity_id"][0]: s for s in looks(evening)}
-    assert steps["light.living_main"] == {
-        "action": "light.turn_on",
-        "target": {"entity_id": ["light.living_main"]},
-        "data": {"brightness_pct": 60, "color_temp_kelvin": 2700},
-    }
+    main = steps["light.living_main"]
+    assert main["action"] == "light.turn_on"
+    assert main["target"] == {"entity_id": ["light.living_main"]}
+    # the witness's evening FOLLOWS the palette (0.21): its warm white stays a
+    # number, its level goes through the palette's curve at recall, and the
+    # lamp (the role group) takes the day's accent
+    assert main["data"]["color_temp_kelvin"] == 2700
+    assert "pal.curve" in main["data"]["brightness_pct"]
+    assert "(60 *" in main["data"]["brightness_pct"]
     assert steps["light.living_lamp"]["action"] == "light.turn_on"  # the role group
-    assert "data" not in steps["light.living_lamp"], "a plain `on`"
+    assert "pal.accent" in steps["light.living_lamp"]["data"]["hs_color"]
     cinema = pkg["script"]["living_cinema"]
     ids = [s["target"]["entity_id"][0] for s in looks(cinema)]
     assert "light.living_strip" not in ids, "the strip role is filled by nothing yet"
@@ -232,7 +236,13 @@ def test_every_other_look_stops_the_drift(rendered):
         ], "a moving ceiling belongs to ONE look: leaving it must leave it"
         assert second == {
             "action": "script.turn_off",
-            "target": {"entity_id": ["script.living_party_drift", "script.living_today_drift"]},
+            "target": {
+                "entity_id": [
+                    "script.living_party_drift",
+                    "script.living_today_drift",
+                    "script.living_today_life",
+                ]
+            },
         }, "and the loop in flight is stopped, not left to paint over the next look (0.19.2)"
     party = pkg["script"]["living_party"]["sequence"]
     assert party[-2]["action"] == "input_boolean.turn_on"
