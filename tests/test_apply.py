@@ -430,6 +430,8 @@ class FakeHA(HomeAssistant):
             return 200, {"message": "API running."}
         if path.startswith("/api/states/"):
             entity = path.rsplit("/", 1)[1]
+            if entity in self.states:
+                return 200, {"entity_id": entity, "state": self.states[entity]}
             if entity.split(".")[0] not in ("input_datetime", "input_select", "input_boolean"):
                 return 404, {"message": "Entity not found."}
             fresh = {"input_datetime": "00:00:00", "input_select": "home", "input_boolean": "off"}[
@@ -641,6 +643,9 @@ class FakeHA(HomeAssistant):
             raise AssertionError(payload)
         if type_ == "config/entity_registry/list":
             return list(self.entities)
+        if type_ == "config/entity_registry/remove":
+            self.entities = [e for e in self.entities if e["entity_id"] != payload["entity_id"]]
+            return None
         if type_ == "config/entity_registry/update":
             if "new_entity_id" in payload and any(
                 e["entity_id"] == payload["new_entity_id"] for e in self.entities
@@ -848,6 +853,64 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert set(states(again).values()) == {"ok", "hand", "waiting"}, states(again)
     assert states(again)["entry kitchen_printer"] == "ok"
     assert len(ha.entries["ipp"]) == 1 and len(ha.entries["cast"]) == 1  # keyed on the domain
+
+
+def test_the_sensors_switch_is_born_on_and_then_the_familys(witness, secrets, tmp_path):
+    """0.17: a room that senses gets its switch seeded ON once — a fresh
+    helper reads off — and the family's off after that is kept."""
+    ha = FakeHA()
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["knob hall_motion"] == "changed"
+    assert ha.states["input_boolean.hall_motion"] == "on"
+    assert "knob living_motion" not in states(steps), "no sensor there: no switch"
+    ha.states["input_boolean.hall_motion"] = "off"  # the family's word
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert next(s for s in steps if s.name == "knob hall_motion").detail == (
+        "off — set from the UI (the file says on), kept"
+    )
+
+
+def test_a_ghost_of_ours_is_removed_and_a_live_one_or_a_persons_kept(witness, secrets, tmp_path):
+    """0.17 (13.34 g): an entity the house minted (unique id regie_*) that reads
+    unavailable — a package rendered once and gone — is removed from the
+    registry; one that lives, and a person's ghost, are not ours to touch."""
+    ha = FakeHA()
+    for entity_id, uid, state in (
+        ("automation.hall_motion_light_old", "regie_hall_hall_motion_motion_light", "unavailable"),
+        ("automation.hall_motion", "regie_hall_motion", "on"),
+        ("automation.mine", "a_persons_own", "unavailable"),
+    ):
+        ha.entities.append(
+            {
+                "entity_id": entity_id,
+                "device_id": None,
+                "platform": "automation",
+                "entity_category": None,
+                "disabled_by": None,
+                "unique_id": uid,
+            }
+        )
+        ha.states[entity_id] = state
+    ha.entities.append(
+        {
+            "entity_id": "binary_sensor.spare_occupied",
+            "device_id": None,
+            "platform": "template",
+            "entity_category": None,
+            "disabled_by": None,
+            "unique_id": "regie_spare_occupied",
+        }
+    )  # no state at all: the same ghost
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    orphans = sorted(s.detail for s in steps if s.name == "orphan")
+    assert orphans == [
+        "automation.hall_motion_light_old removed (nothing renders it now)",
+        "binary_sensor.spare_occupied removed (nothing renders it now)",
+    ]
+    ids = {e["entity_id"] for e in ha.entities}
+    assert "automation.hall_motion_light_old" not in ids
+    assert "binary_sensor.spare_occupied" not in ids
+    assert {"automation.hall_motion", "automation.mine"} <= ids
 
 
 def test_a_knob_the_family_moved_is_read_and_kept(witness, secrets, tmp_path):

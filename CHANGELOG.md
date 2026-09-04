@@ -44,6 +44,16 @@ ne demande jamais.
   l'entité, jamais du compteur `_2` de Home Assistant ; une entité désactivée
   ou sans nom est laissée ; un nom déjà pris est signalé (`waiting`), jamais
   forcé.
+- **L'interrupteur des capteurs naît allumé** : une aide neuve lit off, et
+  off est le mot de la famille, pas celui du fichier — le chef d'orchestre le
+  sème une fois (`knobs`, comme la position), puis le garde tel que la famille
+  l'a mis. Trouvé en direct : les trois pièces inertes après la première
+  convergence.
+- **Les fantômes du registre** (13.34 g) : une entité que la maison a frappée
+  (unique id `regie_*`) et qui lit `unavailable` — un paquet rendu une fois et
+  disparu : les éclairages au mouvement de la forme de 0.16, l'occupation d'un
+  parking — est retirée du registre ; une vivante, ou celle d'une personne,
+  n'est pas à nous.
 - Un fichier inclus se valide contre le schéma STRICT, les champs des packs
   dedans (`dark_below` est au pack lighting) ; la première passe relâche la
   pièce comme elle relâchait la chose.

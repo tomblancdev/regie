@@ -1092,11 +1092,26 @@ class House:
 
     def knobs(self) -> list[dict]:
         """What the conductor seeds ONCE from the files and the UI owns after:
-        the periods' times, the house's first mode."""
+        the periods' times, the house's first mode, the sensors' switches."""
+        out: list[dict] = []
+        for a in self.areas:
+            kinds = self.kinds_in(a["id"])
+            if kinds.get("motion") and kinds.get("light") and not self.parking(a):
+                # the room senses: its switch is born ON (0.17) — a fresh
+                # helper reads off, and off is the family's word, not the file's
+                out.append(
+                    {
+                        "entity": f"input_boolean.{a['id']}_motion",
+                        "action": "input_boolean/turn_on",
+                        "data": {},
+                        "value": "on",
+                        "reads": lambda state: state,
+                    }
+                )
         m = self.modes()
         if not m:
-            return []
-        out = [
+            return out
+        out += [
             {
                 "entity": f"input_datetime.house_period_{p['id']}",
                 "action": "input_datetime/set_datetime",

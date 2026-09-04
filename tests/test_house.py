@@ -273,8 +273,10 @@ def test_the_knobs_carry_the_panel_and_the_presence_switch(witness):
     assert knobs["input_select.living_look_night"] == "night"
     assert knobs["input_select.living_look_morning"] == "sun"  # no override: follow the sun
     assert knobs["input_select.hall_look_night"] == "sun"
+    assert knobs["input_boolean.hall_motion"] == "on", "a room that senses: its switch born on"
     # 4 rooms with a base × (3 daylights + 4 periods) + 4 times + mode + presence
-    assert len(knobs) == 4 * 7 + 6
+    # + the one room that senses (0.17)
+    assert len(knobs) == 4 * 7 + 6 + 1
 
 
 def test_the_panel_needs_a_daylight_base(house_with):

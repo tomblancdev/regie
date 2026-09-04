@@ -1309,6 +1309,24 @@ class Conductor:
             if not self.check:
                 ws.call("config/entity_registry/update", entity_id=e["entity_id"], hidden_by="user")
 
+    def orphans(self, ws) -> None:
+        """A package rendered once and gone leaves its entities in the registry
+        as ghosts — `unavailable`, restored, never coming back: the motion
+        lights of 0.16's shape after 0.17, a parking room's occupancy. Every
+        id the house mints carries the `regie_` unique id, so its ghosts are
+        told from a person's: one of ours that reads unavailable (or has no
+        state at all) is removed (0.17, home.md 13.34 g)."""
+        entities = ws.call("config/entity_registry/list") or []
+        for e in entities:
+            if not str(e.get("unique_id") or "").startswith("regie_"):
+                continue
+            status, state = self.ha.get(f"/api/states/{e['entity_id']}")
+            if status == 200 and (state or {}).get("state") != "unavailable":
+                continue
+            self.step("orphan", "changed", f"{e['entity_id']} removed (nothing renders it now)")
+            if not self.check:
+                ws.call("config/entity_registry/remove", entity_id=e["entity_id"])
+
     def backup(self, ws) -> None:
         want = self.house.backup()
         info = ws.call("backup/config/info")
@@ -1483,6 +1501,7 @@ class Conductor:
             self.entries(ws)
             self.devices(ws)
             self.plumbing(ws)
+            self.orphans(ws)
             self.skin(ws)
             self.resources(ws)
             self.workbench(ws)
