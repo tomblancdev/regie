@@ -68,14 +68,38 @@ def _pt(x, y) -> list[int]:
     return [int(round(float(x))), int(round(float(y)))]
 
 
-def _nearest_room(rooms: dict[str, list], point: list) -> str | None:
-    """The room whose outline the point lies on (within a hand), else None."""
+def _nearest_room(
+    rooms: dict[str, list], point: list, declared: dict[str, list] | None = None
+) -> str | None:
+    """The room whose outline the point lies on (within a hand), else None.
+    A point on a wall two rooms share lies on both outlines: the room whose
+    block already declares an opening there keeps it (0.16.1 - a seed-then-pull
+    round trip moves nothing, and the editor's order of areas decides nothing);
+    a new opening goes to the nearest, the first drawn on a tie."""
+    near = {rid: _edge_distance(outline, point) for rid, outline in rooms.items()}
+    near = {rid: d for rid, d in near.items() if d <= 15}
+    if not near:
+        return None
+    for rid in near:
+        if declared and _declared_at(declared.get(rid) or [], point):
+            return rid
+    return min(near, key=near.get)
+
+
+def _declared_at(openings: list, point: list) -> dict | None:
+    """The opening a block declares at this point (within a hand) - the
+    nearest if several."""
+    import math
+
     best, best_d = None, None
-    for rid, outline in rooms.items():
-        d = _edge_distance(outline, point)
-        if best_d is None or d < best_d:
-            best, best_d = rid, d
-    return best if best_d is not None and best_d <= 15 else None
+    for o in openings:
+        at = o.get("at") or []
+        if len(at) != 2:
+            continue
+        d = math.hypot(at[0] - point[0], at[1] - point[1])
+        if d <= 15 and (best_d is None or d < best_d):
+            best, best_d = o, d
+    return best
 
 
 def _edge_distance(outline: list, point: list) -> float:
@@ -184,13 +208,14 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
     for f in _floors(card):
         for o in f.get("openings") or []:
             point = _pt(o.get("x", 0), o.get("y", 0))
-            rid = _nearest_room(outlines, point)
+            kind = "windows" if o.get("type") == "window" else "doors"
+            olds = {r: (p or {}).get(kind) or [] for r, p in old_plans.items()}
+            rid = _nearest_room(outlines, point, olds)
             if rid is None:
                 notes.append(
                     f"opening {o.get('id')} at {point} lies on no room's outline — skipped"
                 )
                 continue
-            kind = "windows" if o.get("type") == "window" else "doors"
             entry: dict = {"at": point, "width": int(round(float(o.get("length") or 80)))}
             thing, _hint = _thing_of_entity(house, by_entity, o.get("entity") or "")
             if thing and thing.get("role") and thing["area"] == rid:
@@ -199,11 +224,12 @@ def pull(house: House, card: dict) -> tuple[dict[str, dict], list[str]]:
                 entry["flip_h"] = True
             if o.get("flipV"):
                 entry["flip_v"] = True
-            # `to:` is for the reader: kept from the old block by position
-            index = len(blocks[rid].get(kind) or [])
-            olds = (old_plans.get(rid) or {}).get(kind) or []
-            if index < len(olds) and olds[index].get("to"):
-                entry["to"] = olds[index]["to"]
+            # `to:` is for the reader: kept from the opening the old block
+            # declares at this point (0.16.1 - by its place, never its rank:
+            # a door drawn before it in the editor's list must not steal it)
+            old = _declared_at(olds.get(rid) or [], point)
+            if old and old.get("to"):
+                entry["to"] = old["to"]
             blocks[rid].setdefault(kind, []).append(entry)
 
         for it in f.get("items") or []:

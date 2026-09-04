@@ -724,3 +724,52 @@ def test_sync_reads_the_draft_the_files_and_the_memory(witness, tmp_path):
         f"/{WORKBENCH} follows the files",
         False,
     )
+
+
+def test_a_door_on_a_shared_wall_stays_with_the_room_that_declared_it(house_with):
+    """Le Passage's four doors (2026-09-04): a door on a wall two rooms share
+    lies on BOTH outlines, and the pull gave it to whichever area the editor
+    listed first - a seed-then-pull round trip with nothing touched moved four
+    doors into the corridor's file and dropped their `to:`. The room whose block
+    already declares an opening at that point keeps it, whatever the order; and
+    `to:` follows the opening at the same point, never the same rank - a door
+    drawn before it in the editor's list must not steal it."""
+    from regie.house import load_house
+    from regie.plan import pull
+
+    path = house_with(lambda d: None)
+    hall = path.parent / "rooms" / "hall.yml"
+    hall.write_text(
+        hall.read_text(encoding="utf-8").replace(
+            "[[440, 20], [780, 20], [780, 200], [440, 200]]",
+            "[[420, 20], [780, 20], [780, 200], [420, 200]]",
+        ),
+        encoding="utf-8",
+    )
+    living = path.parent / "rooms" / "living.yml"
+    living.write_text(
+        living.read_text(encoding="utf-8").replace(
+            "{ at: [420, 250], width: 80, to: hall }", "{ at: [420, 100], width: 80, to: hall }"
+        ),
+        encoding="utf-8",
+    )
+    house = load_house(path)
+    assert house.area("living")["plan"]["doors"] == [{"at": [420, 100], "width": 80, "to": "hall"}]
+    card = _witness_card(house)
+    floor = card["floors"][0]
+    assert [a["name"] for a in floor["areas"]][:2] == ["Entrée", "Salon"], "the hall is listed first"
+    # the editor re-orders on Save, and a new door is drawn before the old one
+    floor["openings"].reverse()
+    floor["openings"].insert(0, {"id": "door_n3w", "type": "door", "x": 200, "y": 20, "length": 70})
+    blocks, notes = pull(house, card)
+    assert notes == []
+    assert blocks["living"]["doors"] == [
+        {"at": [200, 20], "width": 70},
+        {"at": [420, 100], "width": 80, "to": "hall"},
+    ] or blocks["living"]["doors"] == [
+        {"at": [420, 100], "width": 80, "to": "hall"},
+        {"at": [200, 20], "width": 70},
+    ]
+    assert blocks["hall"]["doors"] == [
+        {"at": [610, 20], "width": 90, "role": "door", "to": "outside"}
+    ], "the hall did not take the living's door"

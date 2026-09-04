@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.16.1 — une porte sur un mur partagé reste à la pièce qui l'a déclarée (2026-09-04)
+
+Lu au premier `plan pull` après le ré-ensemencement de 0.16 : Tom avait
+déplacé huit points dans l'atelier et pas une porte, et le pull réécrivait
+quatre portes des Douches, de La Piaule, de L'Atelier et des Waters dans le
+fichier du Passage, sans leur `to:`. Une porte posée sur un mur que deux pièces
+partagent est SUR LES DEUX CONTOURS, à zéro centimètre de chacun ; le pull la
+donnait à la première aire de la liste de l'éditeur, une liste que le
+ré-ensemencement venait de réécrire dans l'ordre de la maison. Un aller-retour
+ensemencer-puis-tirer sans rien toucher n'était pas l'identité. La règle
+désormais : **la pièce dont le bloc déclare déjà une ouverture à cet endroit la
+garde**, quel que soit l'ordre des aires ; une ouverture neuve va à la pièce la
+plus proche, la première dessinée à égalité. Et `to:` suit l'ouverture posée au
+même point (à une main, 15 cm), jamais le même rang dans la liste — une porte
+dessinée avant elle dans l'éditeur ne lui volait son `to:` que par accident de
+rang. Un test qui met la porte du salon sur le mur de l'entrée, l'entrée listée
+première, la liste des ouvertures renversée et une porte neuve insérée devant.
+
 ## 0.16.0 — le brouillon suit les fichiers (2026-09-04)
 
 Tom, au matin, après l'installation : les choses posées par la convergence
