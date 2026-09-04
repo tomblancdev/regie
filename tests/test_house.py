@@ -16,6 +16,7 @@ def test_witness_loads_with_one_of_every_kind(witness):
         "notify",
         "scenarios",
         "lighting",
+        "when",
         "matter",
         "chalet",
     ]
@@ -137,7 +138,7 @@ def test_unknown_pack_lists_the_known_ones(house_with):
     with pytest.raises(
         HouseError,
         match=r"unknown pack 'voice' — product packs: fx, lighting, matter, modes, notify, "
-        r"scenarios, scenes, signals; house packs \(packs\): chalet",
+        r"scenarios, scenes, signals, when; house packs \(packs\): chalet",
     ):
         load_house(house_with(lambda d: d.update(packs=["voice"])))
 

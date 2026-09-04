@@ -104,3 +104,8 @@ ui:
   sensors: Sensors
   look_now: Current look
   look_before: Look before
+
+  # the things that pick a look (0.18)
+  when_switch: "picks the look"
+  mode_when: "The house"
+  when_title: "What picks the look"

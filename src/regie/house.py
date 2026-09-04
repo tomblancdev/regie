@@ -328,6 +328,110 @@ class House:
     def by_kind(self) -> Counter:
         return Counter(t["kind"] for t in self.things)
 
+    # --- the things that pick a look (0.18, pack when) ----------------------
+    def when_rows(self, area: dict) -> list[dict]:
+        return list(area.get("when") or []) if self.has_pack("when") else []
+
+    def when_plan(self, area: dict) -> list[dict]:
+        """The room's `when:` rows, grouped by what speaks — a thing of the
+        room, or the house's mode — and rendered: one automation per subject,
+        its rows as branches keyed on the trigger that fired, behind one switch.
+        A thing's `source:` is heard twice: the attribute moving to it, and the
+        thing coming on while it already reads it (a receiver keeps its source
+        through off), the branch checking the source either way. `look: before`
+        is the verbs' business; `if: dark` asks this room's signal."""
+        from . import verbs
+
+        rows = self.when_rows(area)
+        if not rows:
+            return []
+        ui = self.labels.ui
+        groups: dict[str, list[tuple[int, dict]]] = {}
+        for i, row in enumerate(rows):
+            groups.setdefault(row.get("thing") or "mode", []).append((i, row))
+        out = []
+        for subject, items in groups.items():
+            is_thing = subject != "mode"
+            if is_thing:
+                t = self.thing(subject)
+                entity = self.entity(t)
+                name = f"{t.get('label') or t['id']} {ui['when_switch']}"
+            else:
+                entity = "input_select.house_mode"
+                name = f"{ui['mode_when']} {ui['when_switch']}"
+            switch = f"{area['id']}_{subject}_when"
+            alias = f"{area['label']} — {name}"
+            triggers: list[dict] = []
+            branches: list[dict] = []
+            for i, row in items:
+                rid = f"r{i}"
+                conditions: list[dict] = [{"condition": "trigger", "id": rid}]
+                if not is_thing:
+                    triggers.append(
+                        {"trigger": "state", "entity_id": entity, "to": row["mode"], "id": rid}
+                    )
+                elif "source" in row:
+                    src = row["source"]
+                    triggers.append(
+                        {
+                            "trigger": "state",
+                            "entity_id": entity,
+                            "attribute": "source",
+                            "to": src,
+                            "id": rid,
+                        }
+                    )
+                    triggers.append(
+                        {"trigger": "state", "entity_id": entity, "to": "on", "id": rid}
+                    )
+                    reads = f"{{{{ state_attr('{entity}', 'source') == {src!r} }}}}"
+                    conditions.append({"condition": "template", "value_template": reads})
+                else:
+                    state = row["is"]
+                    state = {True: "on", False: "off"}.get(state, str(state))
+                    triggers.append(
+                        {"trigger": "state", "entity_id": entity, "to": state, "id": rid}
+                    )
+                if row.get("if") == "dark":
+                    conditions.append(
+                        {
+                            "condition": "state",
+                            "entity_id": f"binary_sensor.{area['id']}_dark",
+                            "state": "on",
+                        }
+                    )
+                rooms = list(row.get("rooms") or [area["id"]])
+                branches.append(
+                    {"conditions": conditions, "sequence": verbs.actions(row, rooms, is_thing)}
+                )
+            out.append(
+                {
+                    "subject": subject,
+                    "name": name,
+                    "switch": switch,
+                    "alias": alias,
+                    "automation": {
+                        "id": f"regie_{switch}",
+                        "alias": alias,
+                        "description": (
+                            f"{'the house' if not is_thing else subject}'s state picks a look — "
+                            f"rooms/{area['id']}.yml when: (La Régie, pack when)"
+                        ),
+                        "mode": "queued",
+                        "triggers": triggers,
+                        "conditions": [
+                            {
+                                "condition": "state",
+                                "entity_id": f"input_boolean.{switch}",
+                                "state": "on",
+                            }
+                        ],
+                        "actions": [{"choose": branches}],
+                    },
+                }
+            )
+        return out
+
     # --- a room that senses (0.17) -----------------------------------------
     def motion_hold(self, area: dict) -> str:
         """How long a room stays occupied after its last sensor clears: the
@@ -1520,6 +1624,49 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             hints.append(
                 f"{a['id']}: scene(s) {', '.join(waiting)} wait for their roles, no script yet"
             )
+        for n, row in enumerate(house.when_rows(a)):
+            where = f"{a['id']}: when row {n + 1}"
+            subject_is_thing = "thing" in row
+            if not subject_is_thing and "mode" not in row:
+                errors.append(f"{where}: says neither `thing:` nor `mode:` — who speaks?")
+                continue
+            try:
+                from . import verbs
+
+                verb = verbs.verb_of(row, subject_is_thing)
+            except HouseError as exc:
+                errors.append(f"{where}: {exc}")
+                continue
+            if subject_is_thing:
+                t = next((x for x in house.things if x["id"] == row["thing"]), None)
+                if t is None or t["area"] != a["id"]:
+                    errors.append(f"{where}: thing {row['thing']!r} is not one of this room's")
+                elif not house.entity(t):
+                    errors.append(f"{where}: {row['thing']} has no entity to listen to")
+                if ("is" in row) == ("source" in row):
+                    errors.append(f"{where}: a thing's row says exactly one of `is:` / `source:`")
+            else:
+                m = house.modes()
+                if not m or row["mode"] not in {x["id"] for x in m["modes"]}:
+                    errors.append(f"{where}: mode {row['mode']!r} — not in modes.yml")
+                if "is" in row or "source" in row:
+                    errors.append(f"{where}: the house's mode takes no `is:`/`source:`")
+            rooms = row.get("rooms") or [a["id"]]
+            known = {x["id"] for x in house.areas}
+            for r in rooms:
+                if r not in known:
+                    errors.append(f"{where}: rooms names {r!r} — no such room")
+            if verb == "look" and row["look"] not in ("default", "before", "off"):
+                for r in rooms:
+                    room = next((x for x in house.areas if x["id"] == r), {})
+                    if row["look"] not in (room.get("scenes") or {}):
+                        errors.append(f"{where}: look {row['look']!r} — {r} has none")
+            if verb == "story" and row["story"] not in {x["id"] for x in house.scenarios}:
+                errors.append(f"{where}: story {row['story']!r} — no such scenario")
+            if verb == "mode":
+                m = house.modes()
+                if not m or row["mode"] not in {x["id"] for x in m["modes"]}:
+                    errors.append(f"{where}: mode {row['mode']!r} — not in modes.yml")
         motions = house.kinds_in(a["id"]).get("motion", [])
         if a.get("dark_below") is not None and not motions:
             warnings.append(

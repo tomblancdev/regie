@@ -40,6 +40,11 @@ scenes:
       drift: { role: main, places: front, band: [190, 330], period: [80, 175], step: 2.5 }
 # daylight-first (H34): the sun drives; night forces the glimmer look
 defaults: { dark: evening, dim: day, bright: day, night: night }
+# the things that pick a look (0.18, pack when): the TV coming on takes the
+# room to cinema; the TV going off gives the look before back
+when:
+  - { thing: living_tv, is: on,  look: cinema }
+  - { thing: living_tv, is: off, look: before }
 # THE PLAN (0.13): the room's inside corners in the house's frame (home.yml
 # plan.size, centimetres), its doors and windows ON that outline, and where each
 # role hangs - one point per PLACE for a role with a layout (the layout's own

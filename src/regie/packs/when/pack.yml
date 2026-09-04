@@ -1,0 +1,15 @@
+# Pack `when` — a thing's state picks a look, a mode or a story (0.18, the
+# grammar's step 2): `when:` rows in a room file, one automation per thing
+# that speaks (or per the house's mode), each behind its own switch on the
+# room's settings page (H36). The verbs are the product's (verbs.py) — a hand
+# and a story step speak the same ones.
+name: when
+summary: "the things that pick a look — `when:` rows per room (a thing's state or the house's mode → look · mode · story), one automation per thing, a switch each (0.18)"
+kinds: []
+services: []
+schema: schema.json
+templates:
+  - { src: packages/when.yaml.j2, dst: "home-assistant/packages/when_{{ area.id }}.yaml", each: areas }
+cards: []
+settings:
+  - { src: settings/room.yaml.j2, each: areas }

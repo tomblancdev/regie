@@ -65,5 +65,12 @@ def test_no_modes_file_no_signals(house_with, secrets, tmp_path):
     from regie.render import render
 
     path = house_with(lambda d: d["include"].pop("modes"))
+    hall = path.parent / "rooms" / "hall.yml"  # its welcome row names the mode: no modes, no row
+    kept = [
+        line
+        for line in hall.read_text(encoding="utf-8").splitlines()
+        if "mode: home" not in line and not line.startswith("when:")
+    ]
+    hall.write_text("\n".join(kept) + "\n", encoding="utf-8")
     render(load_house(path), tmp_path, secrets)
     assert not (tmp_path / "home-assistant/packages/signals.yaml").exists()

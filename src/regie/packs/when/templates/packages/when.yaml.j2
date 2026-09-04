@@ -1,0 +1,17 @@
+{% set subjects = when_plan(area) %}
+{% if subjects %}
+# rendered by La Régie — {{ area.label }}: the things that pick a look (pack when — rooms/{{ area.id }}.yml, not the UI)
+# One automation per thing that speaks, its rows as branches; the switch is
+# the family's (H36), on the room's settings page.
+input_boolean:
+{% for s in subjects %}
+  {{ s.switch }}:
+    name: {{ s.alias | to_yaml }}
+    icon: mdi:auto-fix
+{% endfor %}
+
+automation:
+{% for s in subjects %}
+{{ [s.automation] | to_block(0) }}
+{% endfor %}
+{% endif %}

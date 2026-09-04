@@ -108,3 +108,8 @@ ui:
   sensors: Capteurs
   look_now: Ambiance en cours
   look_before: "Ambiance d'avant"
+
+  # the things that pick a look (0.18)
+  when_switch: "choisit l'ambiance"
+  mode_when: "La maison"
+  when_title: "Ce qui choisit l'ambiance"

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.18.0 — les choses choisissent l'ambiance (2026-09-04)
+
+Le pas 2 de la grammaire (« One Grammar, Written Once ») : un bloc `when:`
+dans le fichier de pièce — l'état d'une chose, ou le mode de la maison, choisit
+une ambiance, un mode ou une histoire.
+
+- **Les verbes, rendus une fois** (`verbs.py`) : `look` (un id d'ambiance,
+  `default`, `before` — la mémoire de la pièce —, `off` ; sur une pièce ou
+  plusieurs, `rooms:`), `mode`, `story`. Une ligne `when:`, une main (le pas 3)
+  et une étape d'histoire parlent les mêmes ; aucune n'épelle une action.
+- **Pack `when`** : `when:` (propriété de pièce, fragment du pack) — chaque
+  ligne nomme une chose de la pièce et l'état qu'elle prend (`is:`) ou la source
+  vers laquelle elle bascule (`source:`), ou le `mode:` de la maison ; et ce qui
+  suit. UNE automation par chose qui parle (`regie_<pièce>_<chose>_when`, ses
+  lignes en branches sur l'id du déclencheur), derrière un interrupteur
+  `input_boolean.<pièce>_<chose>_when` sur les Réglages de la pièce (H36) ; le
+  mode de la maison est un sujet comme un autre (`<pièce>_mode_when`). Une
+  `source:` s'entend deux fois — l'attribut qui y passe, et la chose qui se
+  rallume en la lisant encore (un ampli garde sa source à travers off) —, la
+  branche vérifie la source dans les deux cas. `if: dark` demande d'abord le
+  signal de la pièce (la règle de la lumière : une ligne `when:` n'est pas une
+  main).
+- **`check` refuse** : une chose d'une autre pièce ou sans entité ; ni `thing:`
+  ni `mode:` ; `is:` et `source:` ensemble ou aucun ; zéro ou deux verbes ; une
+  ambiance qu'une des pièces n'a pas ; une histoire ou un mode inconnu ; une
+  pièce inconnue dans `rooms:` ; `mode` est un verbe sur la ligne d'une chose
+  et le SUJET d'une ligne de maison (qui ne peut donc que `look` ou `story`).
+- La maison témoin : le téléviseur du salon prend le salon en cinéma et rend
+  l'ambiance d'avant ; l'entrée s'allume à la maison quand il fait sombre.
+
 ## 0.17.0 — la pièce sent (2026-09-04)
 
 Le premier pas de la grammaire des automatismes (la page « One Grammar,

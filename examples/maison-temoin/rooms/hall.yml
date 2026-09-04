@@ -4,6 +4,8 @@ scenes:
   dim: { main: { brightness: 20, ct: warm } }
 defaults: { dark: dim, dim: dim, bright: dim }   # daylight-first (H34): always its one look
 dark_below: 15      # the room needs light below 15 lux, read from its sensor (0.17); the sun otherwise
+when:
+  - { mode: home, if: dark, look: default }   # the welcome: home while dark → the hall's default (0.18)
 plan:
   outline: [[440, 20], [780, 20], [780, 200], [440, 200]]
   doors:

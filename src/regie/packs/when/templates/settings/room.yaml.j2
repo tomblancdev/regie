@@ -1,0 +1,11 @@
+{# the switches of the things that pick a look, on the room's settings page (H36) #}
+{% set subjects = when_plan(area) %}
+{% if subjects %}
+- type: entities
+  title: {{ (area.label ~ ' — ' ~ labels.ui.when_title) | to_yaml }}
+  entities:
+{% for s in subjects %}
+    - entity: input_boolean.{{ s.switch }}
+      name: {{ s.name | to_yaml }}
+{% endfor %}
+{% endif %}

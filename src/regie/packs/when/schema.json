@@ -1,0 +1,48 @@
+{
+  "area_properties": {
+    "when": {
+      "type": "array",
+      "description": "the things that pick a look (0.18): each row names a thing of the room and the state it takes (`is:`) or the source it switches to (`source:`), or the house's `mode:`; and what follows \u2014 `look:` (a look id, default, before, off; `rooms:` = several), `mode:` (on a thing's row), `story:`; `if: dark` asks the room's dark signal first",
+      "items": {
+        "type": "object",
+        "properties": {
+          "thing": {
+            "$ref": "#/$defs/id"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "is": {
+            "type": [
+              "string",
+              "boolean"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "look": {
+            "type": "string"
+          },
+          "story": {
+            "type": "string"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            },
+            "minItems": 1
+          },
+          "if": {
+            "type": "string",
+            "enum": [
+              "dark"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
