@@ -88,8 +88,14 @@ def test_a_source_is_heard_twice_and_rooms_take_the_look_together(house_with, se
             **WAS,
             "id": "r0",
         },
-        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "on", **WAS, "id": "r0"},
-    ], "the attribute moving to it, and the thing coming on while it reads it"
+        {
+            "trigger": "state",
+            "entity_id": "media_player.living_tv",
+            "from": ["off", "standby"],
+            "to": "on",
+            "id": "r0",
+        },
+    ], "the attribute moving to it, and the thing coming on FROM OFF while it reads it"
     first, second, _ = auto["actions"][0]["choose"]
     assert first["conditions"][1]["value_template"] == (
         "{{ state_attr('media_player.living_tv', 'source') == 'TV Audio' }}"

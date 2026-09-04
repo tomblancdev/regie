@@ -157,7 +157,7 @@ def gestures_of(house, area: dict, thing: dict, spec: dict, pname: str, profile:
         out[word(g)] = words(fill(verb, fields, where))
     for k, v in spec.items():
         k = word(k)
-        if k in ("behaviour", *fields):
+        if k in ("behaviour", "looks", *fields):
             continue
         if isinstance(v, dict):
             v = words(v)
@@ -223,8 +223,11 @@ def pin_lifts(gestures: dict) -> bool:
     return any("pin" in v for v in gestures.values() if isinstance(v, dict))
 
 
-def sequence(house, area: dict, verb: dict, ctx_kw: dict, lifts: bool) -> list[dict]:
-    ctx = verbs.Ctx(house, area["id"], **ctx_kw)
+def sequence(house, area: dict, verb: dict, ctx_kw: dict, lifts: bool, spec=None) -> list[dict]:
+    kw = dict(ctx_kw)
+    if spec and spec.get("looks"):
+        kw["modifiers"] = {**kw.get("modifiers", {}), "looks": list(spec["looks"])}
+    ctx = verbs.Ctx(house, area["id"], **kw)
     out = verbs.render(verb, ctx)
     if lifts and out:
         out = [
@@ -253,7 +256,7 @@ def plan_styrbar(house, area, thing, spec, pname, profile) -> dict:
     ]
     branches = []
     for word, verb in gestures.items():
-        seq = sequence(house, area, verb, {}, lifts)
+        seq = sequence(house, area, verb, {}, lifts, spec)
         if seq:
             branches.append({"conditions": [{"condition": "trigger", "id": word}], "sequence": seq})
     return {"triggers": triggers, "conditions": [], "branches": branches}
@@ -295,14 +298,14 @@ def plan_wheel(house, area, thing, spec, pname, profile) -> dict:
             )
         if "turn" in g:
             for ep, sign in ((up, 1), (down, -1)):
-                seq = sequence(house, area, g["turn"], {"k": K, "sign": sign}, lifts)
+                seq = sequence(house, area, g["turn"], {"k": K, "sign": sign}, lifts, spec)
                 if seq:
                     branches.append(
                         {"conditions": [{"condition": "trigger", "id": f"ep{ep}"}], "sequence": seq}
                     )
         for raw, word in profile["clicks"].items():
             if word in g:
-                seq = sequence(house, area, g[word], {}, lifts)
+                seq = sequence(house, area, g[word], {}, lifts, spec)
                 if seq:
                     branches.append(
                         {
@@ -314,7 +317,7 @@ def plan_wheel(house, area, thing, spec, pname, profile) -> dict:
                         }
                     )
         if "hold" in g:
-            seq = sequence(house, area, g["hold"], {}, lifts)
+            seq = sequence(house, area, g["hold"], {}, lifts, spec)
             if seq:
                 branches.append(
                     {
@@ -339,7 +342,7 @@ def plan_dual(house, area, thing, spec, pname, profile) -> dict:
         for raw, suffix in profile["clicks"].items():
             word = side + suffix
             if word in gestures:
-                seq = sequence(house, area, gestures[word], {}, lifts)
+                seq = sequence(house, area, gestures[word], {}, lifts, spec)
                 if seq:
                     branches.append(
                         {
@@ -352,7 +355,7 @@ def plan_dual(house, area, thing, spec, pname, profile) -> dict:
                     )
         word = side + "_hold"
         if word in gestures:
-            seq = sequence(house, area, gestures[word], {}, lifts)
+            seq = sequence(house, area, gestures[word], {}, lifts, spec)
             if seq:
                 branches.append(
                     {
@@ -428,6 +431,9 @@ def check_hands(house, area: dict) -> tuple[list[str], list[str]]:
             errors.append(f"{where}: no gesture profile for model {t.get('model')!r}")
             continue
         pname, profile = found
+        for lk in spec.get("looks") or []:
+            if lk not in (area.get("scenes") or {}):
+                errors.append(f"{where}: looks names {lk!r} — the room has none")
         try:
             if pname == "bilresa_wheel":
                 channels = channels_of(house, area, t, spec, pname, profile)

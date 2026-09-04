@@ -273,3 +273,43 @@ def test_a_say_and_an_unfilled_role_are_hints_not_refusals(house_with):
     h = load_house(path)
     assert any("say — no verb renders it yet" in x for x in h.hints)
     assert any("role strip filled by nothing yet — renders nothing" in x for x in h.hints)
+
+
+def test_the_arrows_walk_the_looks_the_remote_names_and_alarm_never_by_default(
+    house_with, secrets, tmp_path
+):
+    from regie.render import render
+
+    path = house_with(lambda d: None)
+    living = path.parent / "rooms" / "living.yml"
+    text = living.read_text(encoding="utf-8")
+    text = text.replace(
+        "  living_remote: { behaviour: room_remote }",
+        "  living_remote: { behaviour: room_remote, looks: [day, cinema] }",
+    ).replace(
+        "  night:   { main: off, lamp: { brightness: 5, ct: warm } }",
+        "  night:   { main: off, lamp: { brightness: 5, ct: warm } }\n"
+        "  alarm:   { main: { brightness: 100, ct: cool } }",
+    )
+    living.write_text(text, encoding="utf-8")
+    render(load_house(path), tmp_path, secrets)
+    pkg = yaml.safe_load(
+        (tmp_path / "home-assistant/packages/hands_living.yaml").read_text(encoding="utf-8")
+    )
+    b = branches(pkg["automation"][0])
+    assert "looks = ['day', 'cinema']" in b[("right",)][0]["action"], "the remote's own list"
+    living.write_text(
+        text.replace(", looks: [day, cinema]", ""),
+        encoding="utf-8",
+    )
+    render(load_house(path), tmp_path, secrets)
+    pkg = yaml.safe_load(
+        (tmp_path / "home-assistant/packages/hands_living.yaml").read_text(encoding="utf-8")
+    )
+    b = branches(pkg["automation"][0])
+    walk = b[("right",)][0]["action"]
+    assert "'alarm'" not in walk and "'party'" in walk, "every look of the file but alarm"
+    living.write_text(text.replace("looks: [day, cinema]", "looks: [day, disco]"), encoding="utf-8")
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "looks names 'disco' — the room has none" in str(exc.value)

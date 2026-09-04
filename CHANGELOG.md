@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.19.2 — une ambiance arrête la dérive en vol, les flèches parcourent les ambiances nommées (2026-09-04)
+
+Lu en direct, la flèche → pressée onze fois en trente secondes : la pièce a
+parcouru toutes les ambiances du fichier, `alarm` comprise, et Kowloon a
+peint ses teintes par-dessus Salle d'arcade — « certaines lumières ne
+suivent pas ».
+
+- **Pack scenes** : une ambiance coupe l'interrupteur d'une dérive ET arrête
+  son script (`script.turn_off`) — une itération en vol repeignait ses
+  marcheurs par-dessus l'ambiance suivante.
+- **Pack hands** : les flèches parcourent les ambiances que la ligne de la
+  télécommande nomme (`looks: [...]`, dans l'ordre), sinon celles du fichier
+  sans `alarm` (un état de la maison, pas une promenade) ; `check` refuse une
+  ambiance nommée que la pièce n'a pas.
+- **Pack when** : le déclencheur compagnon d'une `source:` (la chose qui se
+  rallume en la lisant encore) ne part que de `off`/`standby` — un lecteur
+  passe de `playing` à `on` pour une pause, ce n'est pas une main qui allume
+  le téléviseur.
+
 ## 0.19.1 — un STYRBAR se lie d'UNE seule attache, et rejoint par le coordinateur (2026-09-04)
 
 Lu en direct l'après-midi, aucune télécommande ne parlait plus depuis

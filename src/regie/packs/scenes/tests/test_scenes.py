@@ -217,11 +217,15 @@ def test_the_drift_walks_every_place_on_its_own_clock(rendered):
 def test_every_other_look_stops_the_drift(rendered):
     pkg = load(rendered, "living")
     for scene in ("living_day", "living_evening", "living_cinema", "living_night", "living_off"):
-        first = pkg["script"][scene]["sequence"][0]
+        first, second = pkg["script"][scene]["sequence"][:2]
         assert first["action"] == "input_boolean.turn_off"
         assert first["target"]["entity_id"] == ["input_boolean.living_party_drift"], (
             "a moving ceiling belongs to ONE look: leaving it must leave it"
         )
+        assert second == {
+            "action": "script.turn_off",
+            "target": {"entity_id": ["script.living_party_drift"]},
+        }, "and the loop in flight is stopped, not left to paint over the next look (0.19.2)"
     party = pkg["script"]["living_party"]["sequence"]
     assert party[-2]["action"] == "input_boolean.turn_on"
     assert party[-1]["target"]["entity_id"] == "script.living_party_drift"

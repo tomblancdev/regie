@@ -398,8 +398,17 @@ class House:
                             "id": rid,
                         }
                     )
+                    # the thing coming ON while it already reads the source — from
+                    # off or standby only: a player flips playing -> on for a
+                    # pause, and that is not a hand switching the TV on
                     triggers.append(
-                        {"trigger": "state", "entity_id": entity, "to": "on", **was, "id": rid}
+                        {
+                            "trigger": "state",
+                            "entity_id": entity,
+                            "from": ["off", "standby"],
+                            "to": "on",
+                            "id": rid,
+                        }
                     )
                     reads = f"{{{{ state_attr('{entity}', 'source') == {src!r} }}}}"
                     conditions.append({"condition": "template", "value_template": reads})

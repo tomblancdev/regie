@@ -62,7 +62,7 @@ def look_action(room: str, look, ctx: Ctx | None = None) -> dict:
             "continue_on_error": True,
         }
     if look in ("prev", "next") or isinstance(look, list):
-        looks = look if isinstance(look, list) else room_looks(ctx.house, room)
+        looks = look if isinstance(look, list) else walk_looks(ctx, room)
         step = -1 if look == "prev" else 1
         names = json.dumps(list(looks)).replace('"', "'")
         expr = (
@@ -74,9 +74,22 @@ def look_action(room: str, look, ctx: Ctx | None = None) -> dict:
     return {"action": f"script.{room}_{look}"}
 
 
+NEVER_WALKED = ("alarm",)
+
+
 def room_looks(house, room: str) -> list[str]:
     area = next(a for a in house.areas if a["id"] == room)
     return [p["id"] for p in house.scene_plan(area) if p["renders"] and not p["implicit"]]
+
+
+def walk_looks(ctx: Ctx, room: str) -> list[str]:
+    """What the arrows walk: the looks the remote's line names (`looks:`), else
+    the room's rendered looks in the file's order — `alarm` never by default
+    (a house state, not a stroll; read live 2026-09-04)."""
+    named = (ctx.modifiers or {}).get("looks")
+    if named and room == ctx.room:
+        return list(named)
+    return [lk for lk in room_looks(ctx.house, room) if lk not in NEVER_WALKED]
 
 
 def rooms_of(ctx: Ctx, verb: dict, look=None) -> list[str]:

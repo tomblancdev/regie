@@ -4,9 +4,11 @@
 # rendered by La Régie — {{ area.label }}: scenes by role (pack scenes — rooms/{{ area.id }}.yml, not the UI)
 {% set drifting = [] %}
 {% set drift_switches = [] %}
+{% set drift_scripts = [] %}
 {% for p in plans if drift_plan(area, p) %}
 {% set _ = drifting.append(p) %}
 {% set _ = drift_switches.append('input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}
+{% set _ = drift_scripts.append('script.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}
 {% endfor %}
 {% set panel = defaults and controls.panel and modes and defaults_base(area) %}
 {% set memory = ['off'] %}
@@ -88,6 +90,9 @@ script:
 {# any look the room takes stops every drift first: a moving ceiling belongs
    to ONE look, and leaving it must leave it (the loop reads the switch) #}
 {% set _ = seq.append({'action': 'input_boolean.turn_off', 'target': {'entity_id': drift_switches}}) %}
+{# and the loop itself, now: an iteration in flight would paint its walkers over
+   the look that follows (read live 2026-09-04: Kowloon's hue on Salle d'arcade) #}
+{% set _ = seq.append({'action': 'script.turn_off', 'target': {'entity_id': drift_scripts}}) %}
 {% endif %}
 {% set current = 'input_select.' ~ area.id ~ '_look' %}
 {% set _ = seq.append({'if': [{'condition': 'template', 'value_template': "{{ states('" ~ current ~ "') in " ~ (memory | tojson | replace('"', "'")) ~ " and not is_state('" ~ current ~ "', '" ~ p.id ~ "') }}"}], 'then': [{'action': 'input_select.select_option', 'target': {'entity_id': current ~ '_before'}, 'data': {'option': "{{ states('" ~ current ~ "') }}"}}]}) %}
