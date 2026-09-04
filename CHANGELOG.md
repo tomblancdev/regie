@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.1 — une ligne entend une chose qui ÉTAIT quelque part (2026-09-04)
+
+Lu en direct après 0.18.0 : la ligne `is: off` de la hotte avait couru à
+l'heure du redémarrage de Home Assistant — un déclencheur `to:` part aussi de
+`unavailable`, et la ligne `off` de l'ampli aurait rendu « l'ambiance d'avant »
+à deux pièces à chaque convergence qui redémarre le cerveau. Les déclencheurs
+du pack `when` portent `not_from: [unavailable, unknown]`. Aucun autre
+changement.
+
 ## 0.18.0 — les choses choisissent l'ambiance (2026-09-04)
 
 Le pas 2 de la grammaire (« One Grammar, Written Once ») : un bloc `when:`

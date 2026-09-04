@@ -7,6 +7,9 @@ from regie.errors import HouseError
 from regie.house import load_house
 
 
+WAS = {"not_from": ["unavailable", "unknown"]}
+
+
 def load(rendered, room):
     return yaml.safe_load(
         (rendered / f"home-assistant/packages/when_{room}.yaml").read_text(encoding="utf-8")
@@ -21,9 +24,9 @@ def test_a_thing_that_speaks_gets_one_automation_behind_its_switch(rendered):
     (auto,) = pkg["automation"]
     assert auto["id"] == "regie_living_living_tv_when" and auto["mode"] == "queued"
     assert auto["triggers"] == [
-        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "on", "id": "r0"},
-        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "off", "id": "r1"},
-    ]
+        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "on", **WAS, "id": "r0"},
+        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "off", **WAS, "id": "r1"},
+    ], "and never from unavailable: a restart of the brain is not the TV coming on"
     assert auto["conditions"] == [
         {"condition": "state", "entity_id": "input_boolean.living_living_tv_when", "state": "on"}
     ]
@@ -43,7 +46,13 @@ def test_the_houses_mode_speaks_too_and_asks_the_rooms_dark_signal(rendered):
     assert pkg["input_boolean"]["hall_mode_when"]["name"] == "Entrée — La maison choisit l'ambiance"
     (auto,) = pkg["automation"]
     assert auto["triggers"] == [
-        {"trigger": "state", "entity_id": "input_select.house_mode", "to": "home", "id": "r0"}
+        {
+            "trigger": "state",
+            "entity_id": "input_select.house_mode",
+            "to": "home",
+            **WAS,
+            "id": "r0",
+        }
     ]
     (branch,) = auto["actions"][0]["choose"]
     assert {"condition": "state", "entity_id": "binary_sensor.hall_dark", "state": "on"} in branch[
@@ -77,9 +86,10 @@ def test_a_source_is_heard_twice_and_rooms_take_the_look_together(house_with, se
             "entity_id": "media_player.living_tv",
             "attribute": "source",
             "to": "TV Audio",
+            **WAS,
             "id": "r0",
         },
-        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "on", "id": "r0"},
+        {"trigger": "state", "entity_id": "media_player.living_tv", "to": "on", **WAS, "id": "r0"},
     ], "the attribute moving to it, and the thing coming on while it reads it"
     first, second, _ = auto["actions"][0]["choose"]
     assert first["conditions"][1]["value_template"] == (

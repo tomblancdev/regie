@@ -363,12 +363,22 @@ class House:
             alias = f"{area['label']} — {name}"
             triggers: list[dict] = []
             branches: list[dict] = []
+            # a `to:` trigger also fires from `unavailable` — at every restart of
+            # the brain a thing's row would run (the hood's off row did, read
+            # live 0.18.0): a row hears a thing that WAS somewhere (0.18.1)
+            was = {"not_from": ["unavailable", "unknown"]}
             for i, row in items:
                 rid = f"r{i}"
                 conditions: list[dict] = [{"condition": "trigger", "id": rid}]
                 if not is_thing:
                     triggers.append(
-                        {"trigger": "state", "entity_id": entity, "to": row["mode"], "id": rid}
+                        {
+                            "trigger": "state",
+                            "entity_id": entity,
+                            "to": row["mode"],
+                            **was,
+                            "id": rid,
+                        }
                     )
                 elif "source" in row:
                     src = row["source"]
@@ -378,11 +388,12 @@ class House:
                             "entity_id": entity,
                             "attribute": "source",
                             "to": src,
+                            **was,
                             "id": rid,
                         }
                     )
                     triggers.append(
-                        {"trigger": "state", "entity_id": entity, "to": "on", "id": rid}
+                        {"trigger": "state", "entity_id": entity, "to": "on", **was, "id": rid}
                     )
                     reads = f"{{{{ state_attr('{entity}', 'source') == {src!r} }}}}"
                     conditions.append({"condition": "template", "value_template": reads})
@@ -390,7 +401,7 @@ class House:
                     state = row["is"]
                     state = {True: "on", False: "off"}.get(state, str(state))
                     triggers.append(
-                        {"trigger": "state", "entity_id": entity, "to": state, "id": rid}
+                        {"trigger": "state", "entity_id": entity, "to": state, **was, "id": rid}
                     )
                 if row.get("if") == "dark":
                     conditions.append(
