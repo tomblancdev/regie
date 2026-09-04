@@ -117,9 +117,13 @@ def test_lightning_glitch_neon_fire():
     shapes, ha = load_shapes(), load_backend("ha")
     storm = compile_shape("lightning", shapes, ha)
     (rep,) = storm.actions
-    assert rep["repeat"]["count"] == "{{ (range(3, 7) | random) }}"
+    # since 0.12.2 the storm is an ARC played `passes` times (one by default),
+    # and its last hold is the long calm of 1.5 to 3 s - never the old 2 to 9 s
+    # of darkness (test_lightning_keeps_the_room_alive_between_the_strikes)
+    assert storm.fields["passes"] == 1
+    assert rep["repeat"]["count"] == "{{ passes }}"
     assert rep["repeat"]["sequence"][-1]["delay"] == (
-        "{{ [((range(2000, 9001) | random) / 1000), 0.05] | max }}"
+        "{{ [((range(1500, 3001) | random) / 1000), 0.05] | max }}"
     )
     glitch = compile_shape("glitch", shapes, ha)
     flat = sets_and_delays(glitch.actions)

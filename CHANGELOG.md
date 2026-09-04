@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.16.3 — le test de l'orage rattrape la forme (2026-09-04)
+
+La porte rouverte par 0.16.2, la CI a couru jusqu'aux tests et s'est arrêtée
+sur le seul rouge qui restait : `test_lightning_glitch_neon_fire` affirmait
+encore l'orage d'AVANT 0.12.2 — trois à six répétitions tirées au sort et un
+noir de 2 à 9 s pour finir — alors que la forme est un arc joué `passes` fois
+(une par défaut) et se ferme sur un apaisement de 1,5 à 3 s ; le test de
+0.12.2 (`test_lightning_keeps_the_room_alive_between_the_strikes`) le
+verrouillait déjà, l'ancien bloc n'avait pas suivi. Le bloc affirme la forme
+d'aujourd'hui. Aucun code du produit ne change ; 0.16.2 reste publié et n'est
+simplement pas à épingler — la première version verte de la CI depuis 0.15.0
+est celle-ci.
+
 ## 0.16.2 — la porte de l'intégration continue rouvre (2026-09-04)
 
 Tom : « can we fix the CI for the fonts ? ». Le garde `no-environment` sortait
