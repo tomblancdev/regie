@@ -102,7 +102,32 @@
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
       this._render();
     }
-    set hass(hass) { this._hass = hass; if (this.shadowRoot) this._render(); }
+    set hass(hass) {
+      this._hass = hass;
+      if (!this.shadowRoot) return;
+      this._render();
+      if (this._open && !this._dragging && !this._editing()) {
+        // the house moves all day: only what the window SHOWS may redraw it
+        const sig = this._signature();
+        if (sig !== this._sig) { this._sig = sig; this._renderWindow(true); }
+      }
+    }
+    _editing() {
+      const a = this.shadowRoot.activeElement;
+      return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
+    }
+    _signature() {
+      const c = this._config, parts = [this._tab || ""];
+      for (const st of c.stores) parts.push(this.st(`input_text.${st.prefix}_name`, ""));
+      const px = this._tab && this._tab.startsWith("store:") ? this._tab.slice(6) : this._tab === "today" ? c.rules.prefix : null;
+      if (px) {
+        const keys = px === c.rules.prefix
+          ? ORDER.map((h) => `input_number.${px}_weight_${h}`).concat(["avoid_from", "avoid_to", "saturation_min", "saturation_max", "jitter_min", "jitter_max", "alive_min", "alive_max", "every_min", "every_max", "chance"].map((k) => `input_number.${px}_${k}`), PERIODS.map((p) => `input_number.${px}_curve_${p}`), [`input_boolean.${px}_alive_all`, `input_text.${px}_shapes`, "counter.house_palette_roll", "input_datetime.house_palette_turns"])
+          : NUMS.map((k) => `input_number.${px}_${k}`).concat([`input_select.${px}_white`, `input_boolean.${px}_alive_all`, `input_text.${px}_shapes`, `input_text.${px}_name`]);
+        for (const e of keys) parts.push(this.st(e, ""));
+      }
+      return parts.join("|");
+    }
     getCardSize() { return 1; }
 
     // --- the brain -----------------------------------------------------------------
@@ -163,10 +188,10 @@
         this._card = this.shadowRoot.querySelector("ha-card");
         this.shadowRoot.querySelector("button.open").addEventListener("click", () => { this._open = true; this._tab = this._tab || "today"; this._renderWindow(); });
       }
-      this._card.querySelector(".name").innerHTML = `${sw}${label}`;
+      const nameEl = this._card.querySelector(".name"), html = `${sw}${label}`;
+      if (nameEl.innerHTML !== html) nameEl.innerHTML = html;
       this._card.querySelector(".sub").textContent = L.subtitle || "";
       this._card.querySelector("button.open").textContent = L.open || "Ouvrir";
-      if (this._open) this._renderWindow();
     }
     _gradient(lo, width, sat, n) {
       const stops = [];
@@ -175,9 +200,9 @@
     }
 
     // --- the window ----------------------------------------------------------------------
-    _renderWindow() {
+    _renderWindow(refresh) {
       const host = this.shadowRoot.querySelector(".host");
-      if (!this._open) { host.innerHTML = ""; return; }
+      if (!this._open) { host.innerHTML = ""; this._sig = null; return; }
       if (this._dragging) return; // a drag redraws itself; the brain's echo must not fight it
       const c = this._config, L = c.labels || {};
       const stores = this.stores();
@@ -186,14 +211,19 @@
         .concat(stores.map((st) => ({ id: `store:${st.prefix}`, label: st.name })))
         .concat([{ id: "new", label: "+ " + (L.new || "Nouvelle") }]);
       if (!tabs.some((t) => t.id === this._tab)) this._tab = "today";
-      host.innerHTML = `<div class="overlay"><div class="win">
-        <div class="head"><h2>${L.title || "L'Atelier des palettes"}</h2><button class="close" aria-label="close">✕</button></div>
-        <div class="tabs">${tabs.map((t) => `<button class="tab${t.id === this._tab ? " on" : ""}${t.ro ? " ro" : ""}" data-tab="${t.id}">${t.label}</button>`).join("")}</div>
-        <div class="body"></div>
-      </div></div>`;
-      host.querySelector(".close").addEventListener("click", () => { this._open = false; this._renderWindow(); });
-      host.querySelector(".overlay").addEventListener("click", (e) => { if (e.target === e.currentTarget) { this._open = false; this._renderWindow(); } });
-      host.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
+      if (!host.querySelector(".win")) {
+        // the shell, once: the overlay keeps its scroll across refreshes
+        host.innerHTML = `<div class="overlay"><div class="win">
+          <div class="head"><h2>${L.title || "L'Atelier des palettes"}</h2><button class="close" aria-label="close">✕</button></div>
+          <div class="tabs"></div>
+          <div class="body"></div>
+        </div></div>`;
+        host.querySelector(".close").addEventListener("click", () => { this._open = false; this._renderWindow(); });
+        host.querySelector(".overlay").addEventListener("click", (e) => { if (e.target === e.currentTarget) { this._open = false; this._renderWindow(); } });
+      }
+      const tabsEl = host.querySelector(".tabs");
+      tabsEl.innerHTML = tabs.map((t) => `<button class="tab${t.id === this._tab ? " on" : ""}${t.ro ? " ro" : ""}" data-tab="${t.id}">${t.label}</button>`).join("");
+      tabsEl.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.tab;
         if (id === "new") { this.press("input_button.house_palette_new"); return; }
         this._tab = id; this._renderWindow();
@@ -202,6 +232,7 @@
       if (this._tab === "today") this._renderRules(body);
       else if (this._tab.startsWith("named:")) this._renderNamed(body, c.named.find((n) => `named:${n.id}` === this._tab));
       else if (this._tab.startsWith("store:")) this._renderStore(body, stores.find((st) => `store:${st.prefix}` === this._tab));
+      this._sig = this._signature();
     }
 
     // a store: every part of a palette, edited in place
@@ -253,7 +284,7 @@
       body.querySelector(".saveas").addEventListener("click", () => this._saveAs(v));
       const del = body.querySelector(".delete");
       del.addEventListener("click", () => {
-        if (del.dataset.armed) { this.press(`input_button.${px}_delete`); this._tab = "today"; }
+        if (del.dataset.armed) { this.press(`input_button.${px}_delete`).then(() => { this._tab = "today"; this._renderWindow(); }); }
         else { del.dataset.armed = "1"; del.textContent = (L.confirm || "Confirmer") + " ?"; setTimeout(() => { delete del.dataset.armed; del.textContent = L.delete || "Supprimer"; }, 4000); }
       });
     }
@@ -340,17 +371,34 @@
     }
 
     _saveAs(v, suggested) {
+      const L = this._config.labels || {}, body = this.shadowRoot.querySelector(".body");
+      let ask = body.querySelector(".ask");
+      if (!ask) {
+        // the name asked inline: a webview may swallow prompt()
+        ask = document.createElement("div"); ask.className = "field ask";
+        ask.innerHTML = `<div class="lab"><span>${L.saveas_prompt || "Le nom de la nouvelle palette"}</span></div><div class="pair"><input type="text" maxlength="40" value="${this._esc(suggested || "")}"><button class="btn solid ok">OK</button></div>`;
+        body.appendChild(ask);
+        ask.querySelector("input").focus();
+        ask.querySelector(".ok").addEventListener("click", () => { const name = ask.querySelector("input").value.trim(); ask.remove(); if (name) this._keepAs(v, name); });
+        return;
+      }
+    }
+    _keepAs(v, name) {
       const L = this._config.labels || {};
-      const name = window.prompt(L.saveas_prompt || "Le nom de la nouvelle palette", suggested || "");
-      if (!name || !name.trim()) return;
       const free = this.freeStore();
-      if (!free) { window.alert(L.full || "Toutes les cases sont prises : passez une palette dans le fichier (palette-pull), ou supprimez-en une."); return; }
+      if (!free) { this._note(L.full || "Toutes les cases sont prises : passez une palette dans le fichier (palette-pull), ou supprimez-en une."); return; }
       const px = free.prefix, calls = [];
       for (const k of NUMS) if (k in v) calls.push(this.call("input_number", "set_value", { entity_id: `input_number.${px}_${k}`, value: Math.round(v[k]) }));
       calls.push(this.setSelect(`input_select.${px}_white`, v.white || "warm"));
       calls.push(this.setBool(`input_boolean.${px}_alive_all`, !!v.alive_all));
       calls.push(this.setText(`input_text.${px}_shapes`, (v.shapes || []).join(", ")));
-      Promise.all(calls).then(() => this.setText(`input_text.${px}_name`, name.trim())).then(() => { this._tab = `store:${px}`; });
+      Promise.all(calls).then(() => this.setText(`input_text.${px}_name`, name)).then(() => { this._tab = `store:${px}`; this._renderWindow(); });
+    }
+    _note(text) {
+      const body = this.shadowRoot.querySelector(".body");
+      let n = body.querySelector(".note.said");
+      if (!n) { n = document.createElement("div"); n.className = "note said"; body.appendChild(n); }
+      n.textContent = text;
     }
 
     // --- controls -------------------------------------------------------------------------

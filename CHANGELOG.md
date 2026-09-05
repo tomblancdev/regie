@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.25.1 — la fenêtre se dessine une fois (2026-09-05)
+
+Tom, sur le téléphone : « sliders and scroll on phone and many buttons seems
+not working as if a state is reloading everytime ». C'était exactement ça :
+Home Assistant tend à chaque carte un nouvel objet `hass` à chaque état qui
+bouge dans la maison, et la carte redessinait toute la fenêtre à chaque fois —
+une pression perdue entre le doigt posé et le doigt levé, le défilement remis
+à zéro, un curseur arraché.
+
+- **La fenêtre se dessine une fois** (la coquille, l'overlay qui garde son
+  défilement) et ne se rafraîchit que quand ce qu'elle MONTRE a changé (une
+  signature des aides de l'onglet et des noms gardés), jamais sous un doigt
+  (un glisser, un curseur, un champ en cours de frappe). La ligne de la carte
+  est retouchée, pas reconstruite.
+- **« Enregistrer sous… » demande le nom en ligne** (un champ et OK) : la
+  webview de l'application compagnon peut avaler `prompt()`. Un « Supprimer »
+  ou une nouvelle palette ramène l'onglet qu'il faut. La version dans l'URL de
+  la ressource fait recharger le fichier au téléphone.
+
 ## 0.25.0 — L'Atelier des palettes, le pas 2 : la fenêtre (2026-09-05)
 
 Tom : « go for le réglage button cause here it is kind of really annoying with
