@@ -25,12 +25,12 @@ def test_a_scene_renders_for_its_filled_roles_and_waits_for_the_rest(rendered):
     assert main["target"] == {"entity_id": ["light.living_main"]}
     # the witness's evening FOLLOWS the palette (0.21): its warm white stays a
     # number, its level goes through the palette's curve at recall, and the
-    # lamp (the role group) takes the day's accent
+    # lamp (the role group) takes the palette's white
     assert main["data"]["color_temp_kelvin"] == 2700
     assert "pal.curve" in main["data"]["brightness_pct"]
     assert "(60 *" in main["data"]["brightness_pct"]
     assert steps["light.living_lamp"]["action"] == "light.turn_on"  # the role group
-    assert "pal.accent" in steps["light.living_lamp"]["data"]["hs_color"]
+    assert steps["light.living_lamp"]["data"]["color_temp_kelvin"] == "{{ pal.white_kelvin }}"
     cinema = pkg["script"]["living_cinema"]
     ids = [s["target"]["entity_id"][0] for s in looks(cinema)]
     assert "light.living_strip" not in ids, "the strip role is filled by nothing yet"

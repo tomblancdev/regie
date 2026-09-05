@@ -432,11 +432,21 @@ class FakeHA(HomeAssistant):
             entity = path.rsplit("/", 1)[1]
             if entity in self.states:
                 return 200, {"entity_id": entity, "state": self.states[entity]}
-            if entity.split(".")[0] not in ("input_datetime", "input_select", "input_boolean"):
+            if entity.split(".")[0] not in (
+                "input_datetime",
+                "input_select",
+                "input_boolean",
+                "input_number",
+                "input_text",
+            ):
                 return 404, {"message": "Entity not found."}
-            fresh = {"input_datetime": "00:00:00", "input_select": "home", "input_boolean": "off"}[
-                entity.split(".")[0]
-            ]
+            fresh = {
+                "input_datetime": "00:00:00",
+                "input_select": "home",
+                "input_boolean": "off",
+                "input_number": "0.0",  # a fresh number helper reads its minimum
+                "input_text": "",
+            }[entity.split(".")[0]]
             return 200, {"entity_id": entity, "state": self.states.get(entity, fresh)}
         if path.startswith("/api/config/config_entries/entry?domain="):
             return 200, [
@@ -489,7 +499,10 @@ class FakeHA(HomeAssistant):
             elif path.endswith("/turn_off") and body["entity_id"].startswith("input_boolean."):
                 self.states[body["entity_id"]] = "off"
             else:
-                self.states[body["entity_id"]] = body.get("time") or body.get("option")
+                value = body.get("time") or body.get("option")
+                if "value" in body:
+                    value = str(body["value"])
+                self.states[body["entity_id"]] = value
             return 200, []
         if path == FLOWS:
             self.n += 1

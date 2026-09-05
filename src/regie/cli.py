@@ -312,10 +312,21 @@ def cmd_palette(args) -> int:
     secrets = load_secrets(args.secrets)
     ha = HomeAssistant(args.url)
     Conductor(house, secrets, Path(args.root), ha).session_token()
-    if args.keep:
-        # the slots the family filled, as a block for fx.yml: the file is the
-        # design; a slot whose name the file carries is freed at the next converge
-        print(P.keep_block(house, lambda e: ha.get(f"/api/states/{e}")[1]), end="")
+    if args.pull:
+        # the stores and the day's rules, as the brain holds them, into fx.yml:
+        # the file is the design; a store the file now carries is freed at the
+        # next converge (0.24)
+        fx_path = Path(args.fx) if args.fx else (house.included.get("fx") or [None])[0]
+        if fx_path is None:
+            print("no fx file to write — the house includes none (include.fx)")
+            return 1
+        palettes = P.pull_palettes(house, lambda e: ha.get(f"/api/states/{e}")[1])
+        changed = P.rewrite_palettes(Path(fx_path), palettes)
+        kept = [k for k in palettes if k != P.AUTO and k not in house.palettes()["named"]]
+        print(
+            f"{fx_path}: palettes: {'rewritten' if changed else 'unchanged'} — "
+            f"the day's rules, {len(kept)} kept palette(s) added ({', '.join(kept) or 'none'})"
+        )
         return 0
     status, state = ha.get("/api/states/sensor.house_palette")
     if status != 200 or not isinstance(state, dict):
@@ -769,11 +780,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--name", help="print a named palette instead of the day's")
     s.add_argument("--plain", action="store_true", help="no colour bars")
     s.add_argument(
-        "--keep",
+        "--pull",
         action="store_true",
-        help="print the Perso slots the family filled as a palettes: block for fx.yml "
-        "(needs --root)",
+        help="write the palettes the family kept on the phone, and the day's rules as the "
+        "phone holds them, into the fx file's palettes: block (needs --root)",
     )
+    s.add_argument("--fx", type=Path, help="the fx file to rewrite (default: the house's include)")
     _secrets_arg(s)
     s.add_argument(
         "--root",

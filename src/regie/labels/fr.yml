@@ -88,6 +88,45 @@ ui:
   alive_all: toutes
   life_none: aucune
   life_like: comme
+  palette_rules: Les règles du jour
+  palette_kept: Palette
+  palette_new: Nouvelle
+  palette_new_name: Nouvelle
+  palette_random: Au hasard
+  palette_delete: Supprimer
+  palette_names: les noms
+  rule_weight_degrade: Poids du dégradé
+  rule_weight_duo: Poids du duo
+  rule_weight_uni: Poids de l'uni
+  rule_weight_libre: Poids du libre
+  rule_avoid_from: Quart évité, de
+  rule_avoid_to: Quart évité, à
+  rule_saturation_min: Saturation min
+  rule_saturation_max: Saturation max
+  rule_jitter_min: Éparpillement min
+  rule_jitter_max: Éparpillement max
+  rule_curve_morning: Niveau le matin
+  rule_curve_day: Niveau en journée
+  rule_curve_evening: Niveau le soir
+  rule_curve_night: Niveau la nuit
+  rule_alive_min: Vives min
+  rule_alive_max: Vives max
+  rule_every_min: Vie, toutes les (min)
+  rule_every_max: Vie, toutes les (max)
+  rule_chance: Vie, part des jours
+  store_start: Début de l'arc
+  store_width: Largeur de l'arc
+  store_accent: Accent
+  store_saturation: Saturation
+  store_jitter: Éparpillement
+  store_curve_morning: Niveau le matin
+  store_curve_day: Niveau en journée
+  store_curve_evening: Niveau le soir
+  store_curve_night: Niveau la nuit
+  store_alive: Vives
+  store_every_min: Vie, toutes les (min)
+  store_every_max: Vie, toutes les (max)
+  store_shapes: Formes de vie
   mode: Mode
   period: Période
   period_begins: Début

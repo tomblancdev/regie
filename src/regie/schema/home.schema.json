@@ -337,17 +337,23 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
+                "keep": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 20,
+                  "default": 8
+                },
                 "slots": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 9,
-                  "default": 3
+                  "maximum": 20,
+                  "description": "0.23's word for keep"
                 }
               }
             }
           ],
           "default": false,
-          "description": "the palette (0.20): the house card's chip and row, the Réglages rows (the select, the hour it turns, « Une autre », « Repeint les pièces ») and, since 0.23, the Atelier with its Perso slots (`{ slots: 3 }`; `true` = 3) — the pack renders the sensor and the helpers regardless"
+          "description": "the palette (0.20): the house card's chip and row, the Réglages rows (the select, the hour it turns, « Une autre », « Repeint les pièces »), the day's rules as helpers and, since 0.24, the palettes KEPT on the phone under free names (`{ keep: 8 }` stores; `true` = 8) — the pack renders the sensor and the helpers regardless"
         }
       }
     },
@@ -865,12 +871,11 @@
                 {
                   "enum": [
                     "band",
-                    "roam",
-                    "accent"
+                    "roam"
                   ]
                 }
               ],
-              "description": "#rrggbb — or a palette word (0.21, a look with `palette:`): `band` spreads the places along the arc and makes them candidates for roaming, `roam` always roams, `accent` is the one lamp"
+              "description": "#rrggbb — or a palette word (0.21, a look with `palette:`): `band` spreads the places along the arc and makes them candidates for roaming, `roam` always roams. `accent` left in 0.24: the palette's accent is one of the walk's colours"
             },
             "transition": {
               "type": "number",
@@ -1465,12 +1470,11 @@
                 {
                   "enum": [
                     "band",
-                    "roam",
-                    "accent"
+                    "roam"
                   ]
                 }
               ],
-              "description": "#rrggbb — or a palette word (0.21, a look with `palette:`): `band` spreads the places along the arc and makes them candidates for roaming, `roam` always roams, `accent` is the one lamp"
+              "description": "#rrggbb — or a palette word (0.21, a look with `palette:`): `band` spreads the places along the arc and makes them candidates for roaming, `roam` always roams. `accent` left in 0.24: the palette's accent is one of the walk's colours"
             },
             "transition": {
               "type": "number",

@@ -281,8 +281,8 @@ def test_the_knobs_carry_the_panel_and_the_presence_switch(witness):
     assert knobs["input_boolean.hall_mode_when"] == "on"
     # 4 rooms with a base × (3 daylights + 4 periods) + 4 times + mode + presence
     # + the one room that senses (0.17) + the two that pick a look (0.18)
-    # + the palette's hour and select (0.20), + « Repeint » (0.23)
-    assert len(knobs) == 4 * 7 + 6 + 1 + 2 + 2 + 1
+    # + the palette's hour and select (0.20), + « Repeint » (0.23), + the day's 21 rules (0.24)
+    assert len(knobs) == 4 * 7 + 6 + 1 + 2 + 2 + 1 + 21
 
 
 def test_the_panel_needs_a_daylight_base(house_with):

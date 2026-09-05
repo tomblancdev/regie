@@ -1,10 +1,12 @@
-# rendered by La Régie — the palette (pack palette, 0.20 → 0.23): ONE value every look
+# rendered by La Régie — the palette (pack palette, 0.20 → 0.24): ONE value every look
 # may read, sensor.house_palette. The select says which source fills it: Auto =
-# the day's draw (a pure function of the day, the roll and the house's name —
-# the same arithmetic as `regie palette`), a palette named in fx.yml, the
-# Atelier (five sliders on the phone) or a Perso slot it was kept into. The
-# hour it turns and the roll are the family's helpers; the file seeds them once.
+# the day's draw within the rules the family edits on the phone (seeded from
+# fx.yml, following the file until the phone touches them), a palette named in
+# fx.yml, or a palette KEPT on the phone under a free name (a store; its number
+# is plumbing, its name is the face). `regie palette pull` brings the stores and
+# the rules into the file; a store the file carries is freed at the converge.
 {% set h = palette.house %}
+{% set px = h.rules_prefix %}
 input_select:
   house_palette:
     name: {{ labels.ui.palette | to_yaml }}
@@ -13,31 +15,15 @@ input_select:
 {% for opt in palette.options %}
       - {{ opt.label | to_yaml }}
 {% endfor %}
-{% if h.atelier %}
-{% for src in [h.atelier] + h.slots %}
-  {{ src.prefix }}_white:
-    name: {{ (labels.ui.palette_atelier ~ ' — ' ~ labels.ui.atelier_white) | to_yaml }}
+{% for st in h.stores %}
+  {{ st.prefix }}_white:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.atelier_white) | to_yaml }}
     icon: mdi:white-balance-sunny
     options:
 {% for w in h.whites %}
       - {{ w }}
 {% endfor %}
-  {{ src.prefix }}_alive:
-    name: {{ (labels.ui.palette_atelier ~ ' — ' ~ labels.ui.atelier_alive) | to_yaml }}
-    icon: mdi:motion
-    options:
-{% for a in h.alive_options %}
-      - {{ a | to_yaml }}
 {% endfor %}
-  {{ src.prefix }}_life:
-    name: {{ (labels.ui.palette_atelier ~ ' — ' ~ labels.ui.atelier_life) | to_yaml }}
-    icon: mdi:flash-alert-outline
-    options:
-{% for l in h.lives %}
-      - {{ l.label | to_yaml }}
-{% endfor %}
-{% endfor %}
-{% endif %}
 input_datetime:
   house_palette_turns:
     name: {{ labels.ui.palette_turns | to_yaml }}
@@ -50,6 +36,14 @@ input_boolean:
   house_palette_repaint:
     name: {{ labels.ui.palette_repaint | to_yaml }}
     icon: mdi:format-paint
+  {{ px }}_alive_all:
+    name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
+    icon: mdi:motion
+{% for st in h.stores %}
+  {{ st.prefix }}_alive_all:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
+    icon: mdi:motion
+{% endfor %}
 counter:
   house_palette_roll:
     name: {{ labels.ui.palette_roll | to_yaml }}
@@ -61,38 +55,56 @@ input_button:
   house_palette_another:
     name: {{ labels.ui.palette_another | to_yaml }}
     icon: mdi:dice-multiple
-{% if h.atelier %}
-  house_palette_try:
-    name: {{ labels.ui.palette_try | to_yaml }}
-    icon: mdi:eye-outline
-  house_palette_add:
-    name: {{ labels.ui.palette_add | to_yaml }}
-    icon: mdi:content-save-outline
+{% if h.stores %}
+  house_palette_new:
+    name: {{ labels.ui.palette_new | to_yaml }}
+    icon: mdi:plus-circle-outline
+{% for st in h.stores %}
+  {{ st.prefix }}_random:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_random) | to_yaml }}
+    icon: mdi:dice-5-outline
+  {{ st.prefix }}_delete:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_delete) | to_yaml }}
+    icon: mdi:delete-outline
+{% endfor %}
+{% endif %}
 input_number:
-{% for src in [h.atelier] + h.slots %}
-{% for key, spec in h.numbers.items() %}
-  {{ src.prefix }}_{{ key }}:
-    name: {{ (labels.ui.palette_atelier ~ ' — ' ~ labels.ui['atelier_' ~ key]) | to_yaml }}
+{% for key, spec in h.rule_numbers.items() %}
+  {{ px }}_{{ key }}:
+    name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui['rule_' ~ key]) | to_yaml }}
+    min: {{ spec[0] }}
+    max: {{ spec[1] }}
+    step: {{ spec[2] }}
+    mode: box
+    icon: mdi:tune-variant
+{% endfor %}
+{% for st in h.stores %}
+{% for key, spec in h.store_numbers.items() %}
+  {{ st.prefix }}_{{ key }}:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui['store_' ~ key]) | to_yaml }}
     min: {{ spec[0] }}
     max: {{ spec[1] }}
     step: {{ spec[2] }}
     initial: {{ spec[3] }}
-    mode: slider
-    icon: mdi:{{ {'start': 'rotate-left', 'width': 'arrow-expand-horizontal', 'accent': 'lightbulb-on-outline', 'saturation': 'invert-colors'}[key] }}
+    mode: box
+    icon: mdi:tune-variant
 {% endfor %}
 {% endfor %}
 input_text:
-  house_palette_atelier_name:
-    name: {{ labels.ui.palette_name | to_yaml }}
+  {{ px }}_shapes:
+    name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.store_shapes) | to_yaml }}
+    icon: mdi:flash-alert-outline
+    max: 120
+{% for st in h.stores %}
+  {{ st.prefix }}_name:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_name) | to_yaml }}
     icon: mdi:tag-outline
     max: 40
-{% for slot in h.slots %}
-  {{ slot.prefix }}_name:
-    name: {{ (labels.ui.palette_slot ~ ' ' ~ slot.n ~ ' — ' ~ labels.ui.palette_name) | to_yaml }}
-    icon: mdi:tag-outline
-    max: 40
+  {{ st.prefix }}_shapes:
+    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.store_shapes) | to_yaml }}
+    icon: mdi:flash-alert-outline
+    max: 120
 {% endfor %}
-{% endif %}
 {% if h.chip %}
 script:
   # the chip « Palette du jour » (0.23): every room that has the look takes it
@@ -118,13 +130,142 @@ automation:
     triggers:
       - trigger: state
         entity_id: input_button.house_palette_another
-        # a button's FIRST press ever comes from `unknown` (0.20.1, read live: the
-        # counter stayed at 0) — only a restart's `unavailable` is not a press
         not_from: [unavailable]
     actions:
       - action: counter.increment
         target:
           entity_id: counter.house_palette_roll
+{% if h.stores %}
+  # THE NAMES ARE THE FACE (0.24): the select lists the day, the file's palettes
+  # and every kept name — kept in step here whenever a name moves, and at start
+  - id: regie_house_palette_names
+    alias: {{ (labels.ui.palette ~ ' — ' ~ labels.ui.palette_names) | to_yaml }}
+    description: the select « La palette » offers the kept palettes by name (La Régie, pack palette)
+    mode: queued
+    triggers:
+      - trigger: homeassistant
+        event: start
+{% for st in h.stores %}
+      - trigger: state
+        entity_id: input_text.{{ st.prefix }}_name
+{% endfor %}
+    actions:
+      - variables:
+          names: >-
+            {{ '{%' }} set ns = namespace(o={{ palette.options | map(attribute='label') | list | tojson | replace('"', "'") }}) {{ '%}' }}
+{% for st in h.stores %}
+            {{ '{%' }} set n = states('input_text.{{ st.prefix }}_name') {{ '%}' }}{{ '{%' }} if n not in ['', 'unknown', 'unavailable'] and n not in ns.o {{ '%}' }}{{ '{%' }} set ns.o = ns.o + [n] {{ '%}' }}{{ '{%' }} endif {{ '%}' }}
+{% endfor %}
+            {{ '{{' }} ns.o {{ '}}' }}
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.house_palette
+        data:
+          options: "{{ '{{' }} names {{ '}}' }}"
+  # « Nouvelle » (0.24): the first free store takes a copy of the palette in force,
+  # under a name to change; the select takes it
+  - id: regie_house_palette_new
+    alias: {{ (labels.ui.palette ~ ' — ' ~ labels.ui.palette_new) | to_yaml }}
+    description: keep a copy of the palette in force in the first free store, to edit (La Régie, pack palette)
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.house_palette_new
+        not_from: [unavailable]
+    actions:
+      - variables:
+          p: "{{ '{{' }} state_attr('sensor.house_palette', 'palette') {{ '}}' }}"
+      - choose:
+{% for st in h.stores %}
+          - conditions:
+              - condition: template
+                value_template: "{{ '{{' }} states('input_text.{{ st.prefix }}_name') in ['', 'unknown', 'unavailable'] {{ '}}' }}"
+            sequence:
+{% for key, expr in {'start': 'p.lo', 'width': 'p.width', 'accent': '(p.accent if p.accent is not none else p.lo)', 'saturation': 'p.saturation', 'jitter': '(p.jitter | int(0))', 'curve_morning': "(p.curve.morning if p.curve else 100)", 'curve_day': "(p.curve.day if p.curve else 100)", 'curve_evening': "(p.curve.evening if p.curve else 100)", 'curve_night': "(p.curve.night if p.curve else 100)", 'alive': "(p.alive if p.alive is number else (p.alive[1] if p.alive is sequence and p.alive[1] is number else 0))", 'every_min': "(p.life.every[0] if p.life else 120)", 'every_max': "(p.life.every[1] if p.life else 600)"}.items() %}
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.{{ st.prefix }}_{{ key }}
+                data:
+                  value: "{{ '{{' }} {{ expr }} {{ '}}' }}"
+{% endfor %}
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.{{ st.prefix }}_white
+                data:
+                  option: "{{ '{{' }} p.white if p.white in {{ h.whites | tojson | replace('"', "'") }} else 'warm' {{ '}}' }}"
+              - action: "input_boolean.turn_{{ '{{' }} 'on' if p.alive == 'all' else 'off' {{ '}}' }}"
+                target:
+                  entity_id: input_boolean.{{ st.prefix }}_alive_all
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.{{ st.prefix }}_shapes
+                data:
+                  value: "{{ '{{' }} (p.life.shapes | join(', ')) if p.life else '' {{ '}}' }}"
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.{{ st.prefix }}_name
+                data:
+                  value: {{ (labels.ui.palette_new_name ~ ' ' ~ st.n) | to_yaml }}
+              - delay:
+                  seconds: 1
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.house_palette
+                data:
+                  option: {{ (labels.ui.palette_new_name ~ ' ' ~ st.n) | to_yaml }}
+{% endfor %}
+{% for st in h.stores %}
+  # « Au hasard » on a store: the day's draw from a random seed, with the day's rules
+  - id: regie_{{ st.prefix }}_random
+    alias: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_random) | to_yaml }}
+    description: draw this kept palette again at random, within the day's rules (La Régie, pack palette)
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.{{ st.prefix }}_random
+        not_from: [unavailable]
+    actions:
+      - variables:
+          p: >-
+{{ palette.random | indent(12, first=True) }}
+{% for key, expr in {'start': 'p.lo', 'width': 'p.width', 'accent': 'p.accent', 'saturation': 'p.saturation', 'jitter': 'p.jitter'}.items() %}
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.{{ st.prefix }}_{{ key }}
+        data:
+          value: "{{ '{{' }} {{ expr }} {{ '}}' }}"
+{% endfor %}
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.{{ st.prefix }}_white
+        data:
+          option: "{{ '{{' }} p.white {{ '}}' }}"
+  # « Supprimer » on a store: its name goes, the select forgets it
+  - id: regie_{{ st.prefix }}_delete
+    alias: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_delete) | to_yaml }}
+    description: forget this kept palette (La Régie, pack palette)
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.{{ st.prefix }}_delete
+        not_from: [unavailable]
+    actions:
+      - if:
+          - condition: template
+            value_template: "{{ '{{' }} is_state('input_select.house_palette', states('input_text.{{ st.prefix }}_name')) {{ '}}' }}"
+        then:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.house_palette
+            data:
+              option: {{ palette.options[0].label | to_yaml }}
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.{{ st.prefix }}_name
+        data:
+          value: ""
+{% endfor %}
+{% endif %}
 {% if h.repaint %}
   # « Repeint les pièces » (0.23): when the palette changes — the hour, the roll,
   # the select — every room LIT in a look that reads it takes it again; a dark
@@ -135,8 +276,7 @@ automation:
     mode: queued
     triggers:
       # the attribute is a dict: a `not_from` on it made the listener throw on
-      # every change and the repaint never ran (read live, 0.23.0) — the
-      # attribute's absence at a restart is not a change of palette anyway
+      # every change and the repaint never ran (read live, 0.23.0)
       - trigger: state
         entity_id: sensor.house_palette
         attribute: palette
@@ -155,69 +295,9 @@ automation:
                 continue_on_error: true
 {% endfor %}
 {% endif %}
-{% if h.atelier %}
-  # « Essayer » (0.23): the select takes the Atelier — the repaint does the rest
-  - id: regie_house_palette_try
-    alias: {{ (labels.ui.palette_atelier ~ ' — ' ~ labels.ui.palette_try) | to_yaml }}
-    description: the Atelier's numbers on every room lit in a palette look, now (La Régie, pack palette)
-    mode: single
-    triggers:
-      - trigger: state
-        entity_id: input_button.house_palette_try
-        not_from: [unavailable]
-    actions:
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.house_palette
-        data:
-          option: {{ labels.ui.palette_atelier | to_yaml }}
-  # « Ajouter » (0.23): the Atelier's numbers kept into the first free slot under
-  # the name typed beside; the select takes the slot. `regie palette --keep`
-  # prints the slots for the file, and a slot the file carries is freed by apply
-  - id: regie_house_palette_add
-    alias: {{ (labels.ui.palette_atelier ~ ' — ' ~ labels.ui.palette_add) | to_yaml }}
-    description: keep the Atelier's palette in the first free Perso slot, under its name (La Régie, pack palette)
-    mode: single
-    triggers:
-      - trigger: state
-        entity_id: input_button.house_palette_add
-        not_from: [unavailable]
-    actions:
-      - choose:
-{% for slot in h.slots %}
-          - conditions:
-              - condition: template
-                value_template: "{{ '{{' }} states('input_text.{{ slot.prefix }}_name') in ['', 'unknown', 'unavailable'] {{ '}}' }}"
-            sequence:
-{% for key in h.numbers %}
-              - action: input_number.set_value
-                target:
-                  entity_id: input_number.{{ slot.prefix }}_{{ key }}
-                data:
-                  value: "{{ '{{' }} states('input_number.{{ h.atelier.prefix }}_{{ key }}') | float {{ '}}' }}"
-{% endfor %}
-{% for key in ['white', 'alive', 'life'] %}
-              - action: input_select.select_option
-                target:
-                  entity_id: input_select.{{ slot.prefix }}_{{ key }}
-                data:
-                  option: "{{ '{{' }} states('input_select.{{ h.atelier.prefix }}_{{ key }}') {{ '}}' }}"
-{% endfor %}
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.{{ slot.prefix }}_name
-                data:
-                  value: "{{ '{{' }} states('input_text.house_palette_atelier_name') if states('input_text.house_palette_atelier_name') not in ['', 'unknown', 'unavailable'] else '{{ labels.ui.palette_slot }} {{ slot.n }}' {{ '}}' }}"
-              - action: input_select.select_option
-                target:
-                  entity_id: input_select.house_palette
-                data:
-                  option: {{ (labels.ui.palette_slot ~ ' ' ~ slot.n) | to_yaml }}
-{% endfor %}
-{% endif %}
 template:
   # the palette: re-read every minute (the hour it turns), at start, and when
-  # the select, the hour, the roll or the Atelier's helpers move
+  # the select, the hour, the roll, the rules or a store's helpers move
   - triggers:
       - trigger: time_pattern
         minutes: "/1"
@@ -228,16 +308,20 @@ template:
           - input_select.house_palette
           - input_datetime.house_palette_turns
           - counter.house_palette_roll
-{% if h.atelier %}
-{% for src in [h.atelier] + h.slots %}
-{% for key in h.numbers %}
-          - input_number.{{ src.prefix }}_{{ key }}
+          - input_text.{{ px }}_shapes
+          - input_boolean.{{ px }}_alive_all
+{% for key in h.rule_numbers %}
+          - input_number.{{ px }}_{{ key }}
 {% endfor %}
-{% for key in ['white', 'alive', 'life'] %}
-          - input_select.{{ src.prefix }}_{{ key }}
+{% for st in h.stores %}
+{% for key in h.store_numbers %}
+          - input_number.{{ st.prefix }}_{{ key }}
 {% endfor %}
+          - input_select.{{ st.prefix }}_white
+          - input_boolean.{{ st.prefix }}_alive_all
+          - input_text.{{ st.prefix }}_name
+          - input_text.{{ st.prefix }}_shapes
 {% endfor %}
-{% endif %}
     sensor:
       - name: house_palette
         unique_id: regie_house_palette

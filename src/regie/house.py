@@ -150,7 +150,12 @@ def normalise_look(look, kelvin: dict | None = None) -> dict:
     if "color" in look:
         c = look["color"]
         if c in palette_mod.PALETTE_COLOURS:
-            out["palette"] = c  # band · roam · accent — read at recall (0.21)
+            out["palette"] = c  # band · roam — read at recall (0.21)
+        elif c == "accent":
+            raise HouseError(
+                "color: accent left the grammar (0.24) — a palette's accent is one of the "
+                "walk's colours now, as random as the others; write band"
+            )
         else:
             out["rgb_color"] = [int(c[i : i + 2], 16) for i in (1, 3, 5)]
     if "transition" in look:
@@ -158,21 +163,28 @@ def normalise_look(look, kelvin: dict | None = None) -> dict:
     return out
 
 
-def hue_template(period: float, phase: float, lo: str, width: str, prefix: str = "") -> str:
+def hue_template(
+    period: float, phase: float, lo: str, width: str, prefix: str = "", accent: str | None = None
+) -> str:
     """One walker's hue, as a Home Assistant template: a triangle wave of the
     CLOCK. No stored position, no accumulated drift — the brain may restart
     mid-walk and the ceiling picks up exactly where the time says it should.
     `lo` and `width` are expressions: numbers for a look's own band, the
-    palette's fields (0.21) for a look that reads one — `prefix` sets them."""
+    palette's fields (0.21) for a look that reads one — `prefix` sets them.
+    With `accent` (0.24) the walk dwells on it for a part of each cycle: the
+    accent is one more colour of the palette, as random as the others."""
+    clock = "{% set x = ((as_timestamp(now()) / " + f"{period}" + ") + " + f"{phase}" + ") % 1 %}"
+    if accent is None:
+        return (
+            prefix + clock + "{% set t = 2 * x if x < 0.5 else 2 * (1 - x) %}"
+            "{{ (" + f"{lo}" + " + " + f"{width}" + " * t) % 360 }}"
+        )
+    keep = 1 - palette_mod.ACCENT_DWELL
     return (
-        prefix
-        + "{% set x = ((as_timestamp(now()) / "
-        + f"{period}"
-        + ") + "
-        + f"{phase}"
-        + ") % 1 %}"
-        "{% set t = 2 * x if x < 0.5 else 2 * (1 - x) %}"
-        "{{ (" + f"{lo}" + " + " + f"{width}" + " * t) % 360 }}"
+        prefix + clock + f"{{% if x >= {keep} %}}{{{{ ({accent}) % 360 }}}}{{% else %}}"
+        f"{{% set y = x / {keep} %}}"
+        "{% set t = 2 * y if y < 0.5 else 2 * (1 - y) %}"
+        "{{ (" + f"{lo}" + " + " + f"{width}" + " * t) % 360 }}{% endif %}"
     )
 
 
@@ -1077,6 +1089,7 @@ class House:
             lo_expr, width_expr = "pal.lo", "pal.width"
             sat = f"{{{{ ({pal['pal']}).saturation }}}}"
             prefix = f"{{% set pal = {pal['pal']} %}}"
+            accent_expr = "(pal.accent if pal.accent is not none else pal.lo)"
         else:
             if not spec:
                 return None
@@ -1090,6 +1103,7 @@ class House:
                 "",
             )
             sat = int(spec.get("saturation", DRIFT["saturation"]))
+            accent_expr = None
         period = spec.get("period") or DRIFT["period"]
         step = float(spec.get("step") or DRIFT["step"])
         floor = self.colour_floor(area, spec["role"], [p for p, _ in pairs])
@@ -1104,7 +1118,9 @@ class House:
                     # spread the periods across the band: incommensurate clocks
                     "period": per,
                     "phase": round(i / n, 4),
-                    "hue": hue_template(per, round(i / n, 4), lo_expr, width_expr, prefix),
+                    "hue": hue_template(
+                        per, round(i / n, 4), lo_expr, width_expr, prefix, accent_expr
+                    ),
                     "gate": gates.get(entity),
                 }
             )
@@ -1360,6 +1376,35 @@ class House:
                     "reads": lambda state: state,
                 }
             )
+            # the day's rules as helpers (0.24): seeded from fx.yml and FOLLOWING
+            # the file — a rule the phone never touched takes the file's new value
+            # at the next converge; one the phone edited is kept (`hand` when both moved)
+            for entity, value in palette_mod.rule_seeds(pal["today"], self.kelvin()).items():
+                domain = entity.split(".", 1)[0]
+                if domain == "input_number":
+                    knob = {
+                        "action": "input_number/set_value",
+                        "data": {"value": value},
+                        "value": str(value),
+                        "reads": lambda state: (
+                            str(float(state)) if state not in ("unknown", "unavailable") else state
+                        ),
+                    }
+                elif domain == "input_boolean":
+                    knob = {
+                        "action": f"input_boolean/turn_{value}",
+                        "data": {},
+                        "value": value,
+                        "reads": lambda state: state,
+                    }
+                else:
+                    knob = {
+                        "action": "input_text/set_value",
+                        "data": {"value": value},
+                        "value": value,
+                        "reads": lambda state: state,
+                    }
+                out.append({"entity": entity, "follow": True, **knob})
         m = self.modes()
         if not m:
             return out

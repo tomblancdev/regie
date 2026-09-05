@@ -19,12 +19,12 @@ roles:
 scenes:
   day:     { main: on, lamp: off }
   # an existing look FOLLOWING the palette for one part (0.21) and refusing its
-  # life (0.22): the lamp takes the day's accent, nothing flickers here
+  # life (0.22): the lamp takes the palette's white, nothing flickers here
   evening:
     palette: today
     life: false
     main: { brightness: 60, ct: warm }
-    lamp: { color: accent, brightness: 30 }
+    lamp: { ct: white, brightness: 30 }   # the palette's white: a part that follows without moving
   cinema:  { main: off, lamp: { brightness: 10, ct: warm }, strip: { color: "#200000" } }
   night:   { main: off, lamp: { brightness: 5, ct: warm } }   # a LOOK (H34): the night-light glimmer, never all-off
   # a look that names the PLACES inside a role: the role's own `layout:` words
@@ -55,7 +55,7 @@ scenes:
     palette: today
     main:
       front: { color: band, brightness: 40 }
-      back_center: { color: accent, brightness: 30 }
+      back_center: { color: band, brightness: 30 }
     lamp: { ct: white, brightness: 50 }
 # daylight-first (H34): the sun drives; night forces the glimmer look
 defaults: { dark: evening, dim: day, bright: day, night: night }

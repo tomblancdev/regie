@@ -84,6 +84,45 @@ ui:
   alive_all: all
   life_none: none
   life_like: like
+  palette_rules: The day's rules
+  palette_kept: Palette
+  palette_new: New
+  palette_new_name: New
+  palette_random: Random
+  palette_delete: Delete
+  palette_names: the names
+  rule_weight_degrade: Gradient weight
+  rule_weight_duo: Duo weight
+  rule_weight_uni: Mono weight
+  rule_weight_libre: Free weight
+  rule_avoid_from: Avoided arc, from
+  rule_avoid_to: Avoided arc, to
+  rule_saturation_min: Saturation min
+  rule_saturation_max: Saturation max
+  rule_jitter_min: Scatter min
+  rule_jitter_max: Scatter max
+  rule_curve_morning: Level, morning
+  rule_curve_day: Level, day
+  rule_curve_evening: Level, evening
+  rule_curve_night: Level, night
+  rule_alive_min: Alive min
+  rule_alive_max: Alive max
+  rule_every_min: Life, every (min)
+  rule_every_max: Life, every (max)
+  rule_chance: Life, share of days
+  store_start: Arc start
+  store_width: Arc width
+  store_accent: Accent
+  store_saturation: Saturation
+  store_jitter: Scatter
+  store_curve_morning: Level, morning
+  store_curve_day: Level, day
+  store_curve_evening: Level, evening
+  store_curve_night: Level, night
+  store_alive: Alive
+  store_every_min: Life, every (min)
+  store_every_max: Life, every (max)
+  store_shapes: Life shapes
   mode: Mode
   period: Period
   period_begins: Begins

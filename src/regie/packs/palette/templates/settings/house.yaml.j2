@@ -1,5 +1,6 @@
 {% if controls.palette %}
 {% set h = palette.house %}
+{% set px = h.rules_prefix %}
 - type: entities
   title: {{ labels.ui.palette | to_yaml }}
   entities:
@@ -11,29 +12,47 @@
       name: {{ labels.ui.palette_another | to_yaml }}
     - entity: input_boolean.house_palette_repaint
       name: {{ labels.ui.palette_repaint | to_yaml }}
-{% if h.atelier %}
-- type: entities
-  title: {{ labels.ui.palette_atelier | to_yaml }}
-  entities:
-{% for key in h.numbers %}
-    - entity: input_number.{{ h.atelier.prefix }}_{{ key }}
-      name: {{ labels.ui['atelier_' ~ key] | to_yaml }}
-{% endfor %}
-    - entity: input_select.{{ h.atelier.prefix }}_white
-      name: {{ labels.ui.atelier_white | to_yaml }}
-    - entity: input_select.{{ h.atelier.prefix }}_alive
-      name: {{ labels.ui.atelier_alive | to_yaml }}
-    - entity: input_select.{{ h.atelier.prefix }}_life
-      name: {{ labels.ui.atelier_life | to_yaml }}
-    - entity: input_button.house_palette_try
-      name: {{ labels.ui.palette_try | to_yaml }}
-    - entity: input_text.house_palette_atelier_name
-      name: {{ labels.ui.palette_name | to_yaml }}
-    - entity: input_button.house_palette_add
-      name: {{ labels.ui.palette_add | to_yaml }}
-{% for slot in h.slots %}
-    - entity: input_text.{{ slot.prefix }}_name
-      name: {{ (labels.ui.palette_slot ~ ' ' ~ slot.n) | to_yaml }}
-{% endfor %}
+{% if h.stores %}
+    - entity: input_button.house_palette_new
+      name: {{ labels.ui.palette_new | to_yaml }}
 {% endif %}
+- type: entities
+  title: {{ labels.ui.palette_rules | to_yaml }}
+  entities:
+{% for key in h.rule_numbers %}
+    - entity: input_number.{{ px }}_{{ key }}
+      name: {{ labels.ui['rule_' ~ key] | to_yaml }}
+{% endfor %}
+    - entity: input_boolean.{{ px }}_alive_all
+      name: {{ (labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
+    - entity: input_text.{{ px }}_shapes
+      name: {{ labels.ui.store_shapes | to_yaml }}
+{% for st in h.stores %}
+{# a kept palette shows its rows only while it holds a name (0.24) #}
+- type: conditional
+  conditions:
+    - condition: state
+      entity: input_text.{{ st.prefix }}_name
+      state_not: ""
+  card:
+    type: entities
+    title: {{ (labels.ui.palette_kept ~ ' ' ~ st.n) | to_yaml }}
+    entities:
+      - entity: input_text.{{ st.prefix }}_name
+        name: {{ labels.ui.palette_name | to_yaml }}
+{% for key in h.store_numbers %}
+      - entity: input_number.{{ st.prefix }}_{{ key }}
+        name: {{ labels.ui['store_' ~ key] | to_yaml }}
+{% endfor %}
+      - entity: input_select.{{ st.prefix }}_white
+        name: {{ labels.ui.atelier_white | to_yaml }}
+      - entity: input_boolean.{{ st.prefix }}_alive_all
+        name: {{ (labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
+      - entity: input_text.{{ st.prefix }}_shapes
+        name: {{ labels.ui.store_shapes | to_yaml }}
+      - entity: input_button.{{ st.prefix }}_random
+        name: {{ labels.ui.palette_random | to_yaml }}
+      - entity: input_button.{{ st.prefix }}_delete
+        name: {{ labels.ui.palette_delete | to_yaml }}
+{% endfor %}
 {% endif %}

@@ -510,9 +510,11 @@ class Conductor:
             if status != 200:
                 raise HouseError(f"{entity}: {status} {state}")
             current = state.get("state", "unknown")
-            shown = current[:5] if entity.startswith("input_datetime.") else current
-            if entity not in marks:
-                self.step(name, "changed", f"seed {k['value']} (was {shown})")
+            shown = k["reads"](current) if k.get("follow") else current
+            shown = shown[:5] if entity.startswith("input_datetime.") else shown
+
+            def seed(reason: str, k=k, entity=entity, name=name) -> None:
+                self.step(name, "changed", reason)
                 if not self.check:
                     domain, service = k["action"].split("/")
                     st, body = self.ha.post(
@@ -521,9 +523,23 @@ class Conductor:
                     if st != 200:
                         raise HouseError(f"{entity}: {st} {body}")
                     marks[entity] = k["value"]
+
+            if entity not in marks:
+                seed(f"seed {k['value']} (was {shown})")
                 continue
             if shown == k["value"]:
                 self.step(name, "ok", shown)
+            elif k.get("follow") and shown == marks[entity]:
+                # the brain still reads what the file seeded last time, and the
+                # file moved: the file leads (0.24, the day's rules)
+                seed(f"{marks[entity]} → {k['value']} (the file moved, the UI had not)")
+            elif k.get("follow") and marks[entity] != k["value"]:
+                self.step(
+                    name,
+                    "hand",
+                    f"{shown} on the brain, {k['value']} in the file, both moved since the seed "
+                    f"{marks[entity]} — `regie palette pull` keeps the brain's, or edit the file",
+                )
             else:
                 self.step(
                     name, "ok", f"{shown} — set from the UI (the file says {k['value']}), kept"
@@ -1381,10 +1397,10 @@ class Conductor:
                 ws.call("config/entity_registry/update", entity_id=e["entity_id"], hidden_by="user")
 
     def palette_slots(self) -> None:
-        """A Perso slot whose name the file now carries is freed (0.23): the
-        family kept a palette on the phone, `regie palette --keep` printed it,
-        the file has it — the slot's name is emptied, the select still offers
-        the named one."""
+        """A store whose name the file now carries is freed (0.23 → 0.24): the
+        family kept a palette on the phone, `regie palette pull` wrote it, the
+        file has it — the store's name is emptied, the select still offers the
+        named one (the file's)."""
         from . import palette as palette_mod
 
         if not self.house.has_pack("palette"):
@@ -1394,8 +1410,8 @@ class Conductor:
             status, state = self.ha.get(f"/api/states/{e}")
             return state if status == 200 else None
 
-        for prefix in palette_mod.freed_slots(self.house, read):
-            self.step("palette", "changed", f"slot {prefix} freed — the file carries it now")
+        for prefix in palette_mod.freed_stores(self.house, read):
+            self.step("palette", "changed", f"store {prefix} freed — the file carries it now")
             if not self.check:
                 self.ha.post(
                     "/api/services/input_text/set_value",

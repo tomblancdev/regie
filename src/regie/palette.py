@@ -430,85 +430,11 @@ def colour_terminal() -> bool:
 
 
 # --- what the render needs --------------------------------------------------------
-def auto_label(palettes: dict, ui) -> str:
-    """The select's word for the day's draw: the rules' own label, else the
-    house's language."""
-    return palettes["today"].get("label") or getattr(ui, "palette_auto", "Auto")
-
-
-def options(palettes: dict, ui, slots: int = 0) -> list[dict]:
-    """The select's options, in order: the day's draw first, then the named
-    ones, then the Atelier and its Perso slots (0.23) when the house keeps any."""
-    out = [{"id": AUTO, "label": auto_label(palettes, ui)}]
-    out += [{"id": pid, "label": p["label"]} for pid, p in palettes["named"].items()]
-    if slots:
-        out.append({"id": ATELIER, "label": getattr(ui, "palette_atelier", "Atelier")})
-        perso = getattr(ui, "palette_slot", "Perso")
-        out += [{"id": f"{SLOT}{i + 1}", "label": f"{perso} {i + 1}"} for i in range(slots)]
-    return out
-
-
-def render_context(house) -> dict:
-    """The select's options and the sensor's three templates (state, label,
-    palette) — built here, tested here; the pack's template only places them.
-    Since 0.23 the house's plan too: the chip, the repaint, the Atelier."""
-    palettes = house.palettes()
-    ui = house.labels.ui
-    slots = slots_of(house)
-    opts = options(palettes, ui, slots)
-    by_label = {o["label"]: o["id"] for o in opts}
-    by_id = {o["id"]: o["label"] for o in opts}
-    auto = auto_label(palettes, ui)
-    turns = palettes["today"]["turns"]
-    head = [
-        "{% set sel = states('input_select.house_palette') %}",
-        f"{{% set source = {_j(by_label)}.get(sel, '{AUTO}') %}}",
-    ]
-    state = "\n".join(head + ["{{ source }}"])
-    # a slot's label is the name its keeper typed, when it holds one
-    slot_labels = ""
-    for i in range(slots):
-        name = f"input_text.{helper_prefix(f'{SLOT}{i + 1}')}_name"
-        slot_labels += (
-            f"{{% if source == '{SLOT}{i + 1}' and states('{name}') not in "
-            f"['', 'unknown', 'unavailable'] %}}{{{{ states('{name}') }}}}{{% else %}}"
-        )
-    label = "\n".join(
-        head
-        + [slot_labels + f"{{{{ {_j(by_id)}.get(source, {_j(auto)}) }}}}" + "{% endif %}" * slots]
-    )
-    lines = list(head)
-    lines.append(
-        jinja_day("input_datetime.house_palette_turns", "counter.house_palette_roll", turns)
-    )
-    first = True
-    for pid, p in palettes["named"].items():
-        lines.append(f"{{% {'if' if first else 'elif'} source == {_j(pid)} %}}")
-        lines.append(
-            f"{{% set palette = dict({_j(named_value(p, house.kelvin()))}, day=day, roll=roll) %}}"
-        )
-        first = False
-    if slots:
-        lives = life_options(palettes, ui)
-        for src in [ATELIER] + [f"{SLOT}{i + 1}" for i in range(slots)]:
-            lines.append(f"{{% {'if' if first else 'elif'} source == {_j(src)} %}}")
-            lines.append(helper_palette_jinja(helper_prefix(src), lives, house.kelvin()))
-            first = False
-    lines.append("{% else %}" if not first else "{% if true %}")
-    lines.append(jinja_body(palettes["today"], house.palette_salt(), house.kelvin()))
-    lines.append("{% endif %}")
-    lines.append("{{ palette }}")
-    return {
-        "options": opts,
-        "state": state,
-        "label": label,
-        "attr": "\n".join(lines),
-        "house": house_plan(house),
-    }
 
 
 # --- step 2: the room reads the palette ------------------------------------------
-PALETTE_COLOURS = ("band", "roam", "accent")  # `color:` words a look with a palette may use
+# `color:` words a look with a palette may use (accent left the grammar in 0.24)
+PALETTE_COLOURS = ("band", "roam")
 WHITE_WORD = "white"  # `ct: white` — the palette's white
 SENSOR = "sensor.house_palette"
 PAL_EXPR = f"state_attr('{SENSOR}', 'palette')"
@@ -612,11 +538,6 @@ def colour_expr(word: str, f: float | None) -> dict:
     """The colour of a palette leaf, as the light service's templated data."""
     if word == WHITE_WORD:
         return {"color_temp_kelvin": "{{ pal.white_kelvin }}"}
-    if word == "accent":
-        return {
-            "hs_color": "{{ [(pal.accent if pal.accent is not none "
-            "else (pal.lo + pal.width) % 360), pal.saturation] }}"
-        }
     return {
         "hs_color": f"{{{{ [((pal.lo + pal.width * {f}) % 360) | round(1), pal.saturation] }}}}"
     }
@@ -651,13 +572,16 @@ def scene_palette(house, area: dict, plan: dict) -> dict | None:
     for r in plan["roles"]:
         word = r["look"].get("palette")
         if word in ("band", "roam") and r.get("group"):
-            # a prefix spread along the arc: each of its places its own hue
+            # a prefix spread along the arc: each of its places its own hue; a
+            # role group with no places (one lamp) stays one target
             places = house.places_of(area, r["role"])
+            expanded = []
             for place in r.get("places") or [t.get("at") for t in r.get("things", [])]:
                 p = places.get(place)
                 if not p or not p["entities"]:
                     continue
-                targets.append({**r, "place": place, "entities": p["entities"], "group": False})
+                expanded.append({**r, "place": place, "entities": p["entities"], "group": False})
+            targets += expanded or [dict(r)]
         else:
             targets.append(dict(r))
     for k, t in enumerate(targets):
@@ -790,69 +714,444 @@ def life_plan(house, area: dict, plan: dict, shapes: dict) -> dict | None:
     }
 
 
-# --- step 4: the house — the chip, the repaint, the Atelier and its slots --------------
-ATELIER = "atelier"
-SLOT = "perso"
-ATELIER_NUMBERS = {
+# --- step 4 → the Atelier's step 1 (0.24): the stores with free names, the day's rules ---
+STORE = "k"  # a kept palette lives in a store; its NAME is the face, the number is plumbing
+ACCENT_DWELL = 0.2  # the part of a roaming bulb's cycle spent on the accent (the walk's constant)
+STORE_NUMBERS = {  # key: (min, max, step, default)
     "start": (0, 360, 1, 200),
     "width": (10, 220, 1, 120),
     "accent": (0, 360, 1, 30),
     "saturation": (0, 100, 1, 90),
+    "jitter": (0, JITTER_MAX, 1, 0),
+    "curve_morning": (0, 200, 5, 100),
+    "curve_day": (0, 200, 5, 100),
+    "curve_evening": (0, 200, 5, 100),
+    "curve_night": (0, 200, 5, 100),
+    "alive": (0, 40, 1, 0),
+    "every_min": (LIFE_EVERY_MIN, 3600, 10, 120),
+    "every_max": (LIFE_EVERY_MIN, 3600, 10, 600),
 }
-ALIVE_OPTIONS = ["0", "1", "2", "3", "all"]
+RULE_NUMBERS = {  # the day's rules as helpers (seeded from fx.yml, the family owns them after)
+    "weight_degrade": (0, 20, 1, 5),
+    "weight_duo": (0, 20, 1, 3),
+    "weight_uni": (0, 20, 1, 2),
+    "weight_libre": (0, 20, 1, 0),
+    "avoid_from": (0, 360, 1, 45),
+    "avoid_to": (0, 360, 1, 105),
+    "saturation_min": (0, 100, 1, 85),
+    "saturation_max": (0, 100, 1, 100),
+    "jitter_min": (0, JITTER_MAX, 1, 0),
+    "jitter_max": (0, JITTER_MAX, 1, 0),
+    "curve_morning": (0, 200, 5, 100),
+    "curve_day": (0, 200, 5, 100),
+    "curve_evening": (0, 200, 5, 100),
+    "curve_night": (0, 200, 5, 100),
+    "alive_min": (0, 40, 1, 0),
+    "alive_max": (0, 40, 1, 0),
+    "every_min": (LIFE_EVERY_MIN, 3600, 10, 120),
+    "every_max": (LIFE_EVERY_MIN, 3600, 10, 600),
+    "chance": (0, 100, 5, 0),
+}
+PERIODS = ("morning", "day", "evening", "night")
 
 
-def slots_of(house) -> int:
-    """How many Perso slots the house keeps (controls.palette: { slots: N })."""
+def keep_of(house) -> int:
+    """How many stores the house keeps (controls.palette: { keep: N }; true = 8)."""
     c = (house.data.get("controls") or {}).get("palette")
     if isinstance(c, dict):
-        return int(c.get("slots", 3))
-    return 3 if c else 0
+        return int(c.get("keep", c.get("slots", 8)))
+    return 8 if c else 0
 
 
-def helper_prefix(source: str) -> str:
-    """`house_palette_atelier` or `house_palette_perso<n>`."""
-    return f"house_palette_{source}"
+def store_prefix(i: int) -> str:
+    return f"house_palette_{STORE}{i}"
 
 
-def life_options(palettes: dict, ui) -> list[dict]:
-    """What the Atelier's life select offers: none, or a named palette's life."""
-    none = getattr(ui, "life_none", "none")
-    out = [{"id": "", "label": none, "life": None}]
-    like = getattr(ui, "life_like", "like")
-    for pid, p in palettes["named"].items():
-        if p.get("life") and p["life"].get("shapes"):
-            out.append({"id": pid, "label": f"{like} {p['label']}", "life": p["life"]})
+RULES_PREFIX = "house_palette_today"
+
+
+def rule_seeds(rules: dict, kelvin: dict | None = None) -> dict:
+    """The day's rules as the helpers' values — what the conductor seeds."""
+    w = rules["harmonies"]
+    level = rules.get("level") or {}
+    jit = level.get("jitter", 0)
+    jit = jit if isinstance(jit, list) else [jit, jit]
+    alive = rules.get("alive")
+    if alive is None:
+        a_min, a_max, a_all = 0, 0, False
+    elif alive == "all":
+        a_min, a_max, a_all = 0, 0, True
+    elif isinstance(alive, list):
+        a_min = int(alive[0])
+        a_all = alive[1] == "all"
+        a_max = 0 if a_all else int(alive[1])
+    else:
+        a_min, a_max, a_all = int(alive), int(alive), False
+    life = rules.get("life") or {}
+    curve = level.get("curve") or {}
+    out = {f"input_number.{RULES_PREFIX}_weight_{n}": float(w.get(n, 0)) for n in ORDER}
+    out.update(
+        {
+            f"input_number.{RULES_PREFIX}_avoid_from": float(rules["avoid"][0]),
+            f"input_number.{RULES_PREFIX}_avoid_to": float(rules["avoid"][1]),
+            f"input_number.{RULES_PREFIX}_saturation_min": float(rules["saturation"][0]),
+            f"input_number.{RULES_PREFIX}_saturation_max": float(rules["saturation"][1]),
+            f"input_number.{RULES_PREFIX}_jitter_min": float(jit[0]),
+            f"input_number.{RULES_PREFIX}_jitter_max": float(jit[1]),
+            f"input_number.{RULES_PREFIX}_alive_min": float(a_min),
+            f"input_number.{RULES_PREFIX}_alive_max": float(a_max),
+            f"input_boolean.{RULES_PREFIX}_alive_all": "on" if a_all else "off",
+            f"input_text.{RULES_PREFIX}_shapes": ", ".join(life.get("shapes") or []),
+            f"input_number.{RULES_PREFIX}_every_min": float((life.get("every") or [120, 600])[0]),
+            f"input_number.{RULES_PREFIX}_every_max": float((life.get("every") or [120, 600])[1]),
+            f"input_number.{RULES_PREFIX}_chance": float(life.get("chance", 100) if life else 0),
+        }
+    )
+    for period in PERIODS:
+        out[f"input_number.{RULES_PREFIX}_curve_{period}"] = float(curve.get(period, 100))
     return out
 
 
-def helper_palette_jinja(prefix: str, lives: list[dict], kelvin: dict) -> str:
-    """A palette read from a set of helpers (the Atelier, a Perso slot), as the
-    sensor's `palette` dict — the same keys as a draw."""
-    life_map = {o["label"]: o["life"] for o in lives}
+def _num(read, entity: str, default: float) -> float:
+    s = read(entity)
+    try:
+        return float(s["state"]) if isinstance(s, dict) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _txt(read, entity: str) -> str:
+    s = read(entity)
+    v = (s or {}).get("state") if isinstance(s, dict) else None
+    return "" if v in (None, "unknown", "unavailable") else str(v)
+
+
+def _shapes(text: str) -> list[str]:
+    return [w.strip() for w in text.replace(";", ",").split(",") if w.strip()]
+
+
+def rules_from_helpers(read, file_rules: dict) -> dict:
+    """The day's rules as the brain holds them (the family's edits), in the
+    shape `draw` takes; the file's rules fill what a helper cannot say."""
+    px = RULES_PREFIX
+    weights = {
+        n: int(_num(read, f"input_number.{px}_weight_{n}", file_rules["harmonies"].get(n, 0)))
+        for n in ORDER
+    }
+    curve = {p: int(_num(read, f"input_number.{px}_curve_{p}", 100)) for p in PERIODS}
+    a_min = int(_num(read, f"input_number.{px}_alive_min", 0))
+    a_max = int(_num(read, f"input_number.{px}_alive_max", 0))
+    a_all = _txt(read, f"input_boolean.{px}_alive_all") == "on"
+    alive = (
+        [a_min, "all"]
+        if a_all
+        else ([a_min, a_max] if a_max > 0 else (None if a_min == 0 else a_min))
+    )
+    shapes = _shapes(_txt(read, f"input_text.{px}_shapes"))
+    chance = int(_num(read, f"input_number.{px}_chance", 0))
+    life = (
+        {
+            "shapes": shapes,
+            "every": [
+                int(_num(read, f"input_number.{px}_every_min", 120)),
+                int(_num(read, f"input_number.{px}_every_max", 600)),
+            ],
+            "chance": chance,
+        }
+        if shapes and chance > 0
+        else None
+    )
+    turns = _txt(read, "input_datetime.house_palette_turns")[:5] or file_rules["turns"]
+    return {
+        "harmonies": weights,
+        "avoid": [
+            int(_num(read, f"input_number.{px}_avoid_from", 45)),
+            int(_num(read, f"input_number.{px}_avoid_to", 105)),
+        ],
+        "saturation": [
+            int(_num(read, f"input_number.{px}_saturation_min", 85)),
+            int(_num(read, f"input_number.{px}_saturation_max", 100)),
+        ],
+        "level": {
+            "curve": curve,
+            "jitter": [
+                int(_num(read, f"input_number.{px}_jitter_min", 0)),
+                int(_num(read, f"input_number.{px}_jitter_max", 0)),
+            ],
+        },
+        "alive": alive,
+        "life": life,
+        "turns": turns,
+        "label": file_rules.get("label"),
+    }
+
+
+def store_from_helpers(prefix: str, read) -> dict | None:
+    """A kept palette as the file would spell it — None when the store is free."""
+    name = _txt(read, f"input_text.{prefix}_name")
+    if not name:
+        return None
+    lo = int(_num(read, f"input_number.{prefix}_start", 0))
+    width = int(_num(read, f"input_number.{prefix}_width", 120))
+    out: dict = {
+        "label": name,
+        "band": [lo % 360, (lo + width) % 360],
+        "accent": int(_num(read, f"input_number.{prefix}_accent", 30)),
+        "saturation": int(_num(read, f"input_number.{prefix}_saturation", 100)),
+        "white": _txt(read, f"input_select.{prefix}_white") or "warm",
+    }
+    curve = {p: int(_num(read, f"input_number.{prefix}_curve_{p}", 100)) for p in PERIODS}
+    jitter = int(_num(read, f"input_number.{prefix}_jitter", 0))
+    if any(v != 100 for v in curve.values()) or jitter:
+        out["level"] = {}
+        if any(v != 100 for v in curve.values()):
+            out["level"]["curve"] = curve
+        if jitter:
+            out["level"]["jitter"] = jitter
+    if _txt(read, f"input_boolean.{prefix}_alive_all") == "on":
+        out["alive"] = "all"
+    else:
+        alive = int(_num(read, f"input_number.{prefix}_alive", 0))
+        if alive:
+            out["alive"] = alive
+    shapes = _shapes(_txt(read, f"input_text.{prefix}_shapes"))
+    if shapes:
+        out["life"] = {
+            "shapes": shapes,
+            "every": [
+                int(_num(read, f"input_number.{prefix}_every_min", 120)),
+                int(_num(read, f"input_number.{prefix}_every_max", 600)),
+            ],
+        }
+    return out
+
+
+def slug(name: str) -> str:
+    out = "".join(c.lower() if c.isalnum() else "_" for c in name.strip())
+    while "__" in out:
+        out = out.replace("__", "_")
+    out = out.strip("_") or "palette"
+    return out if out[0].isalpha() else "p_" + out
+
+
+def stores_from_helpers(house, read) -> dict[str, dict]:
+    """Every kept store by its slug, in store order."""
+    out = {}
+    for i in range(1, keep_of(house) + 1):
+        p = store_from_helpers(store_prefix(i), read)
+        if p:
+            out[slug(p["label"])] = p
+    return out
+
+
+def freed_stores(house, read) -> list[str]:
+    """The stores whose name the file now carries: the conductor empties them
+    at the converge — the file is the design."""
+    named = house.palettes()["named"]
+    known = {p["label"] for p in named.values()} | set(named)
+    out = []
+    for i in range(1, keep_of(house) + 1):
+        prefix = store_prefix(i)
+        p = store_from_helpers(prefix, read)
+        if p and (p["label"] in known or slug(p["label"]) in named):
+            out.append(prefix)
+    return out
+
+
+def pull_palettes(house, read) -> dict:
+    """The `palettes:` mapping `regie palette pull` writes: the file's own
+    named palettes kept as written, the kept stores added by their slug, the
+    day's rules as the brain holds them."""
+    raw = dict((house.data.get("fx") or {}).get("palettes") or {})
+    today = dict(raw.pop(AUTO, None) or {})
+    rules = rules_from_helpers(read, house.palettes()["today"])
+    new_today: dict = {
+        "harmonies": rules["harmonies"],
+        "avoid": rules["avoid"],
+        "saturation": rules["saturation"],
+        "level": rules["level"],
+        "turns": rules["turns"],
+    }
+    if rules["alive"] is not None:
+        new_today["alive"] = rules["alive"]
+    if rules["life"]:
+        new_today["life"] = rules["life"]
+    if today.get("label"):
+        new_today["label"] = today["label"]
+    out = dict(raw)
+    for pid, p in stores_from_helpers(house, read).items():
+        out[pid] = {k: v for k, v in p.items()}
+    out[AUTO] = new_today
+    return out
+
+
+def _flow(v) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        return f'"{v}"' if any(c in v for c in ":#{}[],&*?|<>=!%@`'\"") or v != v.strip() else v
+    if isinstance(v, list):
+        return "[" + ", ".join(_flow(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{ " + ", ".join(f"{k}: {_flow(x)}" for k, x in v.items()) + " }"
+    return str(v)
+
+
+def palettes_block(palettes: dict) -> str:
+    """The `palettes:` block as the house writes it: one palette per key, its
+    parts one under the other, leaves in flow style."""
+    lines = ["palettes:"]
+    for pid, p in palettes.items():
+        lines.append(f"  {pid}:")
+        for k, v in p.items():
+            lines.append(f"    {k}: {_flow(v)}")
+    return "\n".join(lines) + "\n"
+
+
+PALETTES_BLOCK = None  # compiled lazily (re is imported below)
+
+
+def rewrite_palettes(path, palettes: dict) -> bool:
+    """Replace the file's top-level `palettes:` block (append one if it has
+    none); every other byte of the file is kept. Returns whether it changed."""
+    import re
+
+    block = re.compile(r"^palettes:\n(?:(?:[ \t]+.*|\s*)\n?)*", re.M)
+    text = path.read_text(encoding="utf-8")
+    new = palettes_block(palettes)
+    m = block.search(text)
+    out = (
+        text[: m.start()] + new + text[m.end() :]
+        if m
+        else text + ("" if text.endswith("\n") else "\n") + new
+    )
+    if out == text:
+        return False
+    path.write_text(out, encoding="utf-8")
+    return True
+
+
+def helper_palette_jinja(prefix: str, kelvin: dict) -> str:
+    """A kept palette read from its store's helpers, as the sensor's `palette`
+    dict — the same keys as a draw."""
     return (
         f"{{% set lo = states('input_number.{prefix}_start') | int(0) %}}"
         f"{{% set width = states('input_number.{prefix}_width') | int(120) %}}"
         f"{{% set white = states('input_select.{prefix}_white') %}}"
-        f"{{% set alive = states('input_select.{prefix}_alive') %}}"
+        f"{{% set shapes = states('input_text.{prefix}_shapes') "
+        "| replace(';', ',') | replace(' ', '') %}"
+        "{% set shapes = shapes.split(',') | reject('eq', '') | list "
+        "if shapes not in ['unknown', 'unavailable'] else [] %}"
+        f"{{% set curve = {{"
+        + ", ".join(f"'{p}': states('input_number.{prefix}_curve_{p}') | int(100)" for p in PERIODS)
+        + "} %}"
         f"{{% set palette = {{'harmony': none, 'lo': lo % 360, 'hi': (lo + width) % 360, "
-        f"'width': width, 'accent': states('input_number.{prefix}_accent') | int(0), "
+        f"'width': width, 'accent': states('input_number.{prefix}_accent') | int(30), "
         f"'saturation': states('input_number.{prefix}_saturation') | int(100), "
         f"'white': white if white in {_j(list(kelvin))} else 'warm', "
         f"'white_kelvin': {_j(kelvin)}.get(white, {kelvin['warm']}), "
-        f"'curve': none, 'jitter': 0, "
-        f"'alive': (none if alive == '0' else ('all' if alive == 'all' else alive | int(1))), "
-        f"'life': {_j(life_map)}.get(states('input_select.{prefix}_life')), "
+        f"'curve': curve, 'jitter': states('input_number.{prefix}_jitter') | int(0), "
+        f"'alive': ('all' if is_state('input_boolean.{prefix}_alive_all', 'on') else "
+        f"(none if (states('input_number.{prefix}_alive') | int(0)) == 0 "
+        f"else states('input_number.{prefix}_alive') | int(0))), "
+        "'life': ({'shapes': shapes, 'every': "
+        f"[states('input_number.{prefix}_every_min') | int(120), "
+        f"states('input_number.{prefix}_every_max') | int(600)]}} if shapes else none), "
         f"'day': day, 'roll': roll}} %}}"
     )
 
 
+def jinja_rules(kelvin: dict) -> str:
+    """The day's rules read from the helpers, as the variables `jinja_body`
+    reads when it runs LIVE: the family's edits shape the draw."""
+    px = RULES_PREFIX
+    return "\n".join(
+        [
+            "{% set weights = ["
+            + ", ".join(f"states('input_number.{px}_weight_{n}') | int(0)" for n in ORDER)
+            + "] %}",
+            f"{{% set av0 = states('input_number.{px}_avoid_from') | int(45) %}}",
+            f"{{% set av1 = states('input_number.{px}_avoid_to') | int(105) %}}",
+            f"{{% set s0 = states('input_number.{px}_saturation_min') | int(85) %}}",
+            f"{{% set s1 = states('input_number.{px}_saturation_max') | int(100) %}}",
+            f"{{% set j0 = states('input_number.{px}_jitter_min') | int(0) %}}",
+            f"{{% set j1 = states('input_number.{px}_jitter_max') | int(0) %}}",
+            "{% set curve = {"
+            + ", ".join(f"'{p}': states('input_number.{px}_curve_{p}') | int(100)" for p in PERIODS)
+            + "} %}",
+            f"{{% set a_min = states('input_number.{px}_alive_min') | int(0) %}}",
+            f"{{% set a_max = states('input_number.{px}_alive_max') | int(0) %}}",
+            f"{{% set alive = ([a_min, 'all'] if is_state('input_boolean.{px}_alive_all', 'on') "
+            "else ([a_min, a_max] if a_max > 0 else (none if a_min == 0 else a_min))) %}",
+            f"{{% set shapes = states('input_text.{px}_shapes') "
+            "| replace(';', ',') | replace(' ', '') %}",
+            "{% set shapes = shapes.split(',') | reject('eq', '') | list "
+            "if shapes not in ['unknown', 'unavailable'] else [] %}",
+            f"{{% set chance = states('input_number.{px}_chance') | int(0) %}}",
+            f"{{% set every = [states('input_number.{px}_every_min') | int(120), "
+            f"states('input_number.{px}_every_max') | int(600)] %}}",
+        ]
+    )
+
+
+def jinja_body_live(salt: int, kelvin: dict) -> str:
+    """The draw as Jinja, the rules read from the helpers (`jinja_rules` first)
+    — the same steps as `draw` and `jinja_body`, in the same order."""
+    k = kelvin
+    lines = [
+        f"{{% set ns = namespace(x=((day * 7919 + roll * 104729 + {salt}) % {M}), "
+        "r=[], h='degrade', acc=0, done=false) %}",
+        "{% if ns.x <= 0 %}{% set ns.x = 1 %}{% endif %}",
+        f"{{% for i in range({DRAWS}) %}}{{% set ns.x = (ns.x * {A}) % {M} %}}"
+        f"{{% set ns.r = ns.r + [ns.x / {M}] %}}{{% endfor %}}",
+        "{% set h, w, s, a, sat, j, lf = ns.r %}",
+        "{% set total = weights | sum %}",
+        f"{{% for name in {_j(list(ORDER))} %}}{{% if not ns.done %}}"
+        "{% set ns.acc = ns.acc + weights[loop.index0] %}"
+        "{% if h * total < ns.acc %}{% set ns.h = name %}{% set ns.done = true %}"
+        "{% endif %}{% endif %}{% endfor %}",
+        f"{{% set wr = {_j({n: list(HARMONIES[n]) for n in ORDER})}[ns.h] %}}",
+        "{% set width = wr[0] + w * (wr[1] - wr[0]) %}",
+        "{% set start = av1 + s * (360 + av0 - av1 - width) %}",
+        "{% set mid = (start + width / 2) % 360 %}",
+        f"{{% set cold = {COLD[0]} <= mid and mid <= {COLD[1]} %}}",
+        f"{{% set accent = ((({WARM_ACCENT[0]} + a * {WARM_ACCENT[1]}) % 360) if cold "
+        f"else ({COLD_ACCENT[0]} + a * {COLD_ACCENT[1]})) %}}",
+        "{% set saturation = (s0 + sat * (s1 - s0) + 0.5) | int %}",
+        "{% set jitter = (j0 + j * (j1 - j0) + 0.5) | int %}",
+        "{% set life = ({'shapes': shapes, 'every': every} "
+        "if (shapes and lf * 100 < chance) else none) %}",
+        "{% set white = 'neutral' if cold else 'warm' %}",
+        "{% set palette = {'harmony': ns.h, 'lo': ((start % 360 + 0.5) | int) % 360, "
+        "'hi': (((start + width) % 360 + 0.5) | int) % 360, 'width': (width + 0.5) | int, "
+        "'accent': ((accent + 0.5) | int) % 360, 'saturation': saturation, 'white': white, "
+        f"'white_kelvin': {k['neutral']} if cold else {k['warm']}, "
+        "'curve': curve, 'jitter': jitter, 'alive': alive, "
+        "'life': life, 'day': day, 'roll': roll} %}",
+    ]
+    return "\n".join(lines)
+
+
+def auto_label(palettes: dict, ui) -> str:
+    """The select's word for the day's draw: the rules' own label, else the
+    house's language."""
+    return palettes["today"].get("label") or getattr(ui, "palette_auto", "Auto")
+
+
+def options(palettes: dict, ui) -> list[dict]:
+    """The select's RENDERED options: the day's draw first, then the file's
+    named palettes. The kept stores' names join at runtime (the automation
+    « les noms » keeps the select in step with them)."""
+    out = [{"id": AUTO, "label": auto_label(palettes, ui)}]
+    out += [{"id": pid, "label": p["label"]} for pid, p in palettes["named"].items()]
+    return out
+
+
 def house_plan(house) -> dict:
-    """What the pack renders for the house (0.23): the chip's rooms (every room
-    with a look `today`), the repaint's rooms (every room with a look reading
-    a palette, and those looks), the Atelier and the slots."""
-    palettes = house.palettes()
-    ui = house.labels.ui
+    """What the pack renders for the house: the chip's rooms, the repaint's
+    rooms, the stores and the rules' helpers."""
     chip, repaint = [], []
     for a in house.areas:
         if house.parking(a):
@@ -863,97 +1162,85 @@ def house_plan(house) -> dict:
             repaint.append({"room": a["id"], "looks": looks})
         if any(p["id"] == "today" and p["renders"] for p in plans):
             chip.append(a["id"])
-    n = slots_of(house)
-    lives = life_options(palettes, ui)
     return {
         "chip": chip,
         "repaint": repaint,
-        "slots": [
-            {"n": i + 1, "id": f"{SLOT}{i + 1}", "prefix": helper_prefix(f"{SLOT}{i + 1}")}
-            for i in range(n)
-        ],
-        "atelier": {"prefix": helper_prefix(ATELIER)} if n else None,
-        "numbers": ATELIER_NUMBERS,
-        "alive_options": ALIVE_OPTIONS,
-        "lives": lives,
+        "stores": [{"n": i, "prefix": store_prefix(i)} for i in range(1, keep_of(house) + 1)],
+        "store_numbers": STORE_NUMBERS,
+        "rules_prefix": RULES_PREFIX,
+        "rule_numbers": RULE_NUMBERS,
+        "periods": PERIODS,
         "whites": list(house.kelvin()),
+        "keep": keep_of(house),
     }
 
 
-def slug(name: str) -> str:
-    out = "".join(c.lower() if c.isalnum() else "_" for c in name.strip())
-    while "__" in out:
-        out = out.replace("__", "_")
-    out = out.strip("_") or "perso"
-    return out if out[0].isalpha() else "p_" + out
-
-
-def read_slot(prefix: str, read) -> dict | None:
-    """A Perso slot as the file would spell it, from the brain's helpers —
-    None when the slot holds no name."""
-
-    def st(e):
-        s = read(e)
-        return (s or {}).get("state") if isinstance(s, dict) else None
-
-    name = st(f"input_text.{prefix}_name")
-    if not name or name in ("unknown", "unavailable"):
-        return None
-    lo = int(float(st(f"input_number.{prefix}_start") or 0))
-    width = int(float(st(f"input_number.{prefix}_width") or 120))
-    out: dict = {
-        "label": name,
-        "band": [lo % 360, (lo + width) % 360],
-        "accent": int(float(st(f"input_number.{prefix}_accent") or 0)),
-        "saturation": int(float(st(f"input_number.{prefix}_saturation") or 100)),
-        "white": st(f"input_select.{prefix}_white") or "warm",
+def render_context(house) -> dict:
+    """The select's options and the sensor's three templates (state, label,
+    palette) — built here, tested here; the pack's template only places them."""
+    palettes = house.palettes()
+    ui = house.labels.ui
+    keep = keep_of(house)
+    opts = options(palettes, ui)
+    by_label = {o["label"]: o["id"] for o in opts}
+    by_id = {o["id"]: o["label"] for o in opts}
+    auto = auto_label(palettes, ui)
+    turns = palettes["today"]["turns"]
+    # the source: a rendered name, else a store whose name matches the select
+    head = [
+        "{% set sel = states('input_select.house_palette') %}",
+        f"{{% set ns_src = namespace(source={_j(by_label)}.get(sel, none)) %}}",
+    ]
+    for i in range(1, keep + 1):
+        head.append(
+            f"{{% if ns_src.source is none and sel != '' "
+            f"and states('input_text.{store_prefix(i)}_name') == sel %}}"
+            f"{{% set ns_src.source = '{STORE}{i}' %}}{{% endif %}}"
+        )
+    head.append(f"{{% set source = ns_src.source if ns_src.source is not none else '{AUTO}' %}}")
+    state = "\n".join(head + ["{{ source }}"])
+    label = "\n".join(
+        head
+        + [
+            f"{{{{ {_j(by_id)}.get(source, "
+            f"sel if source.startswith('{STORE}') else {_j(auto)}) }}}}"
+        ]
+    )
+    lines = list(head)
+    lines.append(
+        jinja_day("input_datetime.house_palette_turns", "counter.house_palette_roll", turns)
+    )
+    first = True
+    for pid, p in palettes["named"].items():
+        lines.append(f"{{% {'if' if first else 'elif'} source == {_j(pid)} %}}")
+        lines.append(
+            f"{{% set palette = dict({_j(named_value(p, house.kelvin()))}, day=day, roll=roll) %}}"
+        )
+        first = False
+    for i in range(1, keep + 1):
+        lines.append(f"{{% {'if' if first else 'elif'} source == '{STORE}{i}' %}}")
+        lines.append(helper_palette_jinja(store_prefix(i), house.kelvin()))
+        first = False
+    lines.append("{% else %}" if not first else "{% if true %}")
+    lines.append(jinja_rules(house.kelvin()))
+    lines.append(jinja_body_live(house.palette_salt(), house.kelvin()))
+    lines.append("{% endif %}")
+    lines.append("{{ palette }}")
+    # « Au hasard » on a store: the day's draw from a random seed, into the store
+    random_draw = "\n".join(
+        [
+            f"{{% set day = range(1, {M}) | random %}}",
+            "{% set roll = 0 %}",
+            jinja_rules(house.kelvin()),
+            jinja_body_live(house.palette_salt(), house.kelvin()),
+            "{{ palette }}",
+        ]
+    )
+    return {
+        "options": opts,
+        "state": state,
+        "label": label,
+        "attr": "\n".join(lines),
+        "random": random_draw,
+        "house": house_plan(house),
     }
-    alive = st(f"input_select.{prefix}_alive")
-    if alive and alive != "0":
-        out["alive"] = "all" if alive == "all" else int(alive)
-    return out
-
-
-def keep_block(house, read) -> str:
-    """`regie palette --keep`: every filled slot as a `palettes:` entry."""
-    lines = ["palettes:"]
-    lives = {o["label"]: o["id"] for o in life_options(house.palettes(), house.labels.ui)}
-    for i in range(slots_of(house)):
-        prefix = helper_prefix(f"{SLOT}{i + 1}")
-        slot = read_slot(prefix, read)
-        if not slot:
-            continue
-        pid = slug(slot["label"])
-        life_of = read(f"input_select.{prefix}_life")
-        life_src = lives.get((life_of or {}).get("state") if isinstance(life_of, dict) else None)
-        lines.append(f"  {pid}:")
-        lines.append(f"    label: {slot['label']}")
-        lines.append(f"    band: [{slot['band'][0]}, {slot['band'][1]}]")
-        lines.append(f"    accent: {slot['accent']}")
-        lines.append(f"    saturation: {slot['saturation']}")
-        lines.append(f"    white: {slot['white']}")
-        if "alive" in slot:
-            lines.append(f"    alive: {slot['alive']}")
-        if life_src:
-            life = house.palettes()["named"][life_src]["life"]
-            lines.append(
-                f"    life: {{ shapes: [{', '.join(life['shapes'])}], "
-                f"every: [{life['every'][0]}, {life['every'][1]}] }}"
-            )
-    if len(lines) == 1:
-        return "# no Perso slot holds a palette\n"
-    return "\n".join(lines) + "\n"
-
-
-def freed_slots(house, read) -> list[str]:
-    """The slots whose name the file now carries (a named palette's label or
-    id): the conductor empties them at the converge — the file is the design."""
-    named = house.palettes()["named"]
-    known = {p["label"] for p in named.values()} | set(named)
-    out = []
-    for i in range(slots_of(house)):
-        prefix = helper_prefix(f"{SLOT}{i + 1}")
-        slot = read_slot(prefix, read)
-        if slot and (slot["label"] in known or slug(slot["label"]) in named):
-            out.append(prefix)
-    return out
