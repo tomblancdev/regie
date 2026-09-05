@@ -24,6 +24,9 @@ templates:
   # (base/www/VENDOR.md), and the house's own drawing under the walls - both
   # copied as they are, only when the house declares a plan
   - { copy: www/easy-floorplan-card.js, dst: home-assistant/www/easy-floorplan-card.js, when: plan }
+  # L'Atelier des palettes (0.25): the product's own card, a window on the
+  # palettes' helpers — a Lovelace resource, like the plan's card
+  - { copy: www/regie-atelier.js, dst: home-assistant/www/regie-atelier.js, when: "pack:palette" }
   - { house_file: plan.image, dst: "home-assistant/www/{{ plan_image }}", when: plan_image }
   - { src: mosquitto/mosquitto.conf.j2, dst: mosquitto/config/mosquitto.conf, owner: mosquitto }
   - { src: mosquitto/acl.j2, dst: mosquitto/config/acl, owner: mosquitto }

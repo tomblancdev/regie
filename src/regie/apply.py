@@ -1505,15 +1505,29 @@ class Conductor:
             raise HouseError(f"theme {name}: {status} {body}")
 
     def resources(self, ws) -> None:
-        """The plan's card as a LOVELACE RESOURCE (0.13.2): what the frontend
-        loads after its own bootstrap - after the scoped-registry polyfill that
-        makes an element defined too early invisible. One resource, keyed on the
-        file's path; its version rides the URL, so a bump is a new URL and the
-        old one is rewritten. A house without a plan owns no such resource."""
+        """The cards as LOVELACE RESOURCES (0.13.2): what the frontend loads
+        after its own bootstrap - after the scoped-registry polyfill that makes
+        an element defined too early invisible. One resource per card, keyed on
+        the file's path; its version rides the URL, so a bump is a new URL and
+        the old one is rewritten. A house without the plan (or the palette)
+        owns no such resource. The plan's card (0.13) and, since 0.25, the
+        product's own « L'Atelier des palettes »."""
+        from . import __version__
         from .floorplan import CARD_URL
 
-        want = self.house.plan() is not None
-        base = CARD_URL.split("?")[0]
+        self._resource(
+            ws, "plan", CARD_URL, self.house.plan() is not None, "the house draws no plan"
+        )
+        self._resource(
+            ws,
+            "atelier",
+            f"/local/regie-atelier.js?v={__version__}",
+            self.house.has_pack("palette") and self.house.controls()["palette"],
+            "the house keeps no palette",
+        )
+
+    def _resource(self, ws, name: str, url: str, want: bool, why_not: str) -> None:
+        base = url.split("?")[0]
         have = [
             r
             for r in (ws.call("lovelace/resources") or [])
@@ -1521,28 +1535,26 @@ class Conductor:
         ]
         if not want:
             for r in have:
-                self.step(
-                    "resource plan", "changed", f"{r['url']} removed — the house draws no plan"
-                )
+                self.step(f"resource {name}", "changed", f"{r['url']} removed — {why_not}")
                 if not self.check:
                     ws.call("lovelace/resources/delete", resource_id=r["id"])
             return
-        if have and have[0].get("url") == CARD_URL and have[0].get("type") == "module":
-            self.step("resource plan", "ok", CARD_URL)
+        if have and have[0].get("url") == url and have[0].get("type") == "module":
+            self.step(f"resource {name}", "ok", url)
             return
         if have:
-            self.step("resource plan", "changed", f"{have[0]['url']} → {CARD_URL}")
+            self.step(f"resource {name}", "changed", f"{have[0]['url']} → {url}")
             if not self.check:
                 ws.call(
                     "lovelace/resources/update",
                     resource_id=have[0]["id"],
                     res_type="module",
-                    url=CARD_URL,
+                    url=url,
                 )
             return
-        self.step("resource plan", "changed", f"{CARD_URL} (a page reload picks it up)")
+        self.step(f"resource {name}", "changed", f"{url} (a page reload picks it up)")
         if not self.check:
-            ws.call("lovelace/resources/create", res_type="module", url=CARD_URL)
+            ws.call("lovelace/resources/create", res_type="module", url=url)
 
     def workbench(self, ws) -> None:
         """THE PLAN'S WORKBENCH (0.14): a storage dashboard, admins only - the

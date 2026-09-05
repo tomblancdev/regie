@@ -22,6 +22,7 @@ EXPECTED = {
     "home-assistant/themes/temoin.yaml",
     "home-assistant/www/regie-skin.js",
     "home-assistant/www/easy-floorplan-card.js",
+    "home-assistant/www/regie-atelier.js",
     "home-assistant/www/plan.png",
     "home-assistant/packages/lighting_hall.yaml",
     "home-assistant/packages/lighting_living.yaml",

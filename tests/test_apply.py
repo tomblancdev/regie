@@ -1759,13 +1759,20 @@ def test_the_plan_card_is_a_lovelace_resource_registered_once(witness, secrets, 
     from regie.floorplan import CARD_URL
 
     ha = FakeHA()
+    from regie import __version__
+
     steps = apply(witness, secrets, tmp_path, ha, check=False)
     assert states(steps)["resource plan"] == "changed"
-    assert [r["url"] for r in ha.resources] == [CARD_URL]
+    # the plan's card, and the product's own window on the palettes (0.25)
+    assert [r["url"] for r in ha.resources] == [
+        CARD_URL,
+        f"/local/regie-atelier.js?v={__version__}",
+    ]
     assert ha.resources[0]["type"] == "module"
+    assert states(steps)["resource atelier"] == "changed"
     steps = apply(witness, secrets, tmp_path, ha, check=False)
-    assert states(steps)["resource plan"] == "ok"
-    assert len(ha.resources) == 1, "a second run adds nothing"
+    assert states(steps)["resource plan"] == "ok" and states(steps)["resource atelier"] == "ok"
+    assert len(ha.resources) == 2, "a second run adds nothing"
     # an older version of the card on the brain: the one resource is rewritten
     ha.resources[0]["url"] = "/local/easy-floorplan-card.js?v=0.0.1"
     steps = apply(witness, secrets, tmp_path, ha, check=True)
@@ -1791,7 +1798,9 @@ def test_a_house_without_a_plan_owns_no_card_resource(house_with, secrets, tmp_p
     )
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert states(steps)["resource plan"] == "changed"
-    assert ha.resources == [], "a resource for a plan the house does not draw is removed"
+    assert [r["url"].split("?")[0] for r in ha.resources] == ["/local/regie-atelier.js"], (
+        "a resource for a plan the house does not draw is removed; the palette's stays"
+    )
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert "resource plan" not in states(steps)
 

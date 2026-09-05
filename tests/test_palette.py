@@ -705,3 +705,27 @@ def test_slug_and_a_look_saying_accent_is_told(house_with):
     )
     with pytest.raises(HouseError, match="accent"):  # the schema refuses it first
         load_house(path)
+
+
+# --- the Atelier's step 2 (0.25): the window ------------------------------------------------
+def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
+    dash = yaml.safe_load((rendered / "home-assistant/dashboards/phone.yaml").read_text())
+    settings = next(v for v in dash["views"] if v["path"] == "settings")
+    cards = [c for sec in settings["sections"] for c in sec["cards"]]
+    card = next(c for c in cards if c.get("type") == "custom:regie-palette-atelier")
+    assert card["select"] == "input_select.house_palette" and card["auto_label"] == "Du jour"
+    assert card["salt"] == witness.palette_salt()
+    assert card["rules"] == {"prefix": "house_palette_today", "whites": ["warm", "neutral", "cool"]}
+    assert [s["prefix"] for s in card["stores"]] == [f"house_palette_k{i}" for i in (1, 2, 3, 4)]
+    assert card["named"][0]["id"] == "nuit_bleue" and card["named"][0]["palette"]["lo"] == 200
+    assert "glitch" in card["shapes"] and "lightning" in card["shapes"]
+    assert card["labels"]["title"] == "L'Atelier des palettes" and card["labels"]["all"] == "toutes"
+    # the plain rows for the stores and the rules left with the window
+    titles = [c.get("title") for c in cards]
+    assert "Les règles du jour" not in titles and not any(
+        c.get("type") == "conditional" for c in cards
+    )
+    # the card's file ships with the pack, its element named as the card's type
+    js = (rendered / "home-assistant/www/regie-atelier.js").read_text()
+    assert 'customElements.define("regie-palette-atelier"' in js
+    assert "const M = 2147483647, A = 16807;" in js  # the product's arithmetic, ported

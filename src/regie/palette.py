@@ -1162,6 +1162,48 @@ def house_plan(house) -> dict:
             repaint.append({"room": a["id"], "looks": looks})
         if any(p["id"] == "today" and p["renders"] for p in plans):
             chip.append(a["id"])
+    palettes = house.palettes()
+    fx = house.fx()
+    shapes = list(fx.get("enable") or sorted(house.shapes()))
+    ui = house.labels.ui
+    labels = {
+        k: getattr(ui, f"atelier_{k}", None) or getattr(ui, k, None)
+        for k in (
+            "title",
+            "open",
+            "subtitle",
+            "rules",
+            "new",
+            "name",
+            "saturation",
+            "jitter",
+            "white",
+            "curve",
+            "alive",
+            "all",
+            "shapes",
+            "every",
+            "try",
+            "random",
+            "saveas",
+            "delete",
+            "confirm",
+            "duplicate",
+            "arc",
+            "accent",
+            "file_note",
+            "avoid_note",
+            "weight",
+            "chance",
+            "week",
+            "try_today",
+            "another",
+            "saveas_prompt",
+            "full",
+        )
+    }
+    for h in ORDER:
+        labels[f"harmony_{h}"] = getattr(ui, f"harmony_{h}", h)
     return {
         "chip": chip,
         "repaint": repaint,
@@ -1172,6 +1214,15 @@ def house_plan(house) -> dict:
         "periods": PERIODS,
         "whites": list(house.kelvin()),
         "keep": keep_of(house),
+        # the card (0.25): the file's palettes read-only, the shapes it may chip,
+        # the salt for the week it draws, its words
+        "named": [
+            {"id": pid, "label": p["label"], "palette": named_value(p, house.kelvin())}
+            for pid, p in palettes["named"].items()
+        ],
+        "shapes": shapes,
+        "salt": house.palette_salt(),
+        "labels": {k: v for k, v in labels.items() if v},
     }
 
 

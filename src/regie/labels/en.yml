@@ -73,13 +73,8 @@ ui:
   palette_try: Try
   palette_add: Add
   palette_name: Palette name
-  atelier_start: Arc start
-  atelier_width: Arc width
-  atelier_accent: Accent
-  atelier_saturation: Saturation
   atelier_white: White
   atelier_alive: Alive
-  atelier_life: Life
   alive_none: none
   alive_all: all
   life_none: none
@@ -123,6 +118,35 @@ ui:
   store_every_min: Life, every (min)
   store_every_max: Life, every (max)
   store_shapes: Life shapes
+  atelier_title: The palette workshop
+  atelier_open: Open
+  atelier_subtitle: The palettes and the day's rules, in a window
+  atelier_rules: The day · its rules
+  atelier_new: New
+  atelier_name: Name
+  atelier_saturation: Saturation
+  atelier_jitter: Scatter ± %
+  atelier_curve: Level · the day's curve
+  atelier_all: all
+  atelier_shapes: Life · the shapes
+  atelier_every: Life · every (s)
+  atelier_try: Try
+  atelier_random: Random
+  atelier_saveas: Save as…
+  atelier_delete: Delete
+  atelier_confirm: Confirm
+  atelier_duplicate: Duplicate
+  atelier_arc: Arc
+  atelier_accent: Accent
+  atelier_file_note: Written in the file — duplicate it to edit it.
+  atelier_avoid_note: The grey quarter is never crossed — drag its two handles.
+  atelier_weight: Weight
+  atelier_chance: Life · share of days (%)
+  atelier_week: The week, with these rules
+  atelier_try_today: Try the day
+  atelier_another: Another one
+  atelier_saveas_prompt: The new palette's name
+  atelier_full: Every store is taken — bring a palette into the file (palette-pull), or delete one.
   mode: Mode
   period: Period
   period_begins: Begins

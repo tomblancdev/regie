@@ -1,6 +1,5 @@
 {% if controls.palette %}
 {% set h = palette.house %}
-{% set px = h.rules_prefix %}
 - type: entities
   title: {{ labels.ui.palette | to_yaml }}
   entities:
@@ -12,47 +11,28 @@
       name: {{ labels.ui.palette_another | to_yaml }}
     - entity: input_boolean.house_palette_repaint
       name: {{ labels.ui.palette_repaint | to_yaml }}
-{% if h.stores %}
-    - entity: input_button.house_palette_new
-      name: {{ labels.ui.palette_new | to_yaml }}
-{% endif %}
-- type: entities
-  title: {{ labels.ui.palette_rules | to_yaml }}
-  entities:
-{% for key in h.rule_numbers %}
-    - entity: input_number.{{ px }}_{{ key }}
-      name: {{ labels.ui['rule_' ~ key] | to_yaml }}
-{% endfor %}
-    - entity: input_boolean.{{ px }}_alive_all
-      name: {{ (labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
-    - entity: input_text.{{ px }}_shapes
-      name: {{ labels.ui.store_shapes | to_yaml }}
+{# L'ATELIER DES PALETTES (0.25): a window that opens from this row - every part
+   of a palette, the day's rules, the names; the plain rows left with it #}
+- type: custom:regie-palette-atelier
+  select: input_select.house_palette
+  auto_label: {{ palette.options[0].label | to_yaml }}
+  salt: {{ h.salt }}
+  rules:
+    prefix: {{ h.rules_prefix }}
+    whites: {{ h.whites | tojson }}
+  stores:
 {% for st in h.stores %}
-{# a kept palette shows its rows only while it holds a name (0.24) #}
-- type: conditional
-  conditions:
-    - condition: state
-      entity: input_text.{{ st.prefix }}_name
-      state_not: ""
-  card:
-    type: entities
-    title: {{ (labels.ui.palette_kept ~ ' ' ~ st.n) | to_yaml }}
-    entities:
-      - entity: input_text.{{ st.prefix }}_name
-        name: {{ labels.ui.palette_name | to_yaml }}
-{% for key in h.store_numbers %}
-      - entity: input_number.{{ st.prefix }}_{{ key }}
-        name: {{ labels.ui['store_' ~ key] | to_yaml }}
+    - { n: {{ st.n }}, prefix: {{ st.prefix }} }
 {% endfor %}
-      - entity: input_select.{{ st.prefix }}_white
-        name: {{ labels.ui.atelier_white | to_yaml }}
-      - entity: input_boolean.{{ st.prefix }}_alive_all
-        name: {{ (labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
-      - entity: input_text.{{ st.prefix }}_shapes
-        name: {{ labels.ui.store_shapes | to_yaml }}
-      - entity: input_button.{{ st.prefix }}_random
-        name: {{ labels.ui.palette_random | to_yaml }}
-      - entity: input_button.{{ st.prefix }}_delete
-        name: {{ labels.ui.palette_delete | to_yaml }}
+  named:
+{% for n in h.named %}
+    - id: {{ n.id }}
+      label: {{ n.label | to_yaml }}
+      palette: {{ n.palette | tojson }}
+{% endfor %}
+  shapes: {{ h.shapes | tojson }}
+  labels:
+{% for k, v in h.labels.items() %}
+    {{ k }}: {{ v | to_yaml }}
 {% endfor %}
 {% endif %}
