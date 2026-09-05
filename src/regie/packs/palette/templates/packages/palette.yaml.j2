@@ -151,6 +151,7 @@ automation:
 {% endfor %}
     actions:
       - variables:
+          was: "{{ '{{' }} states('input_select.house_palette') {{ '}}' }}"
           names: >-
             {{ '{%' }} set ns = namespace(o={{ palette.options | map(attribute='label') | list | tojson | replace('"', "'") }}) {{ '%}' }}
 {% for st in h.stores %}
@@ -162,6 +163,17 @@ automation:
           entity_id: input_select.house_palette
         data:
           options: "{{ '{{' }} names {{ '}}' }}"
+      # a kept palette RENAMED while selected stays selected under its new name
+      # (set_options falls back to the first option otherwise — read live)
+      - if:
+          - condition: template
+            value_template: "{{ '{{' }} trigger.platform == 'state' and trigger.from_state is not none and trigger.from_state.state == was and trigger.to_state.state in names {{ '}}' }}"
+        then:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.house_palette
+            data:
+              option: "{{ '{{' }} trigger.to_state.state {{ '}}' }}"
   # « Nouvelle » (0.24): the first free store takes a copy of the palette in force,
   # under a name to change; the select takes it
   - id: regie_house_palette_new

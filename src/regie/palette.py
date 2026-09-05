@@ -1229,8 +1229,10 @@ def render_context(house) -> dict:
     # « Au hasard » on a store: the day's draw from a random seed, into the store
     random_draw = "\n".join(
         [
-            f"{{% set day = range(1, {M}) | random %}}",
-            "{% set roll = 0 %}",
+            # the sandbox refuses a range over 100 000 (read live): the seed is
+            # the clock's millisecond, and a small random on top
+            f"{{% set day = ((as_timestamp(now()) * 1000) | int) % {M} %}}",
+            "{% set roll = range(0, 99999) | random %}",
             jinja_rules(house.kelvin()),
             jinja_body_live(house.palette_salt(), house.kelvin()),
             "{{ palette }}",

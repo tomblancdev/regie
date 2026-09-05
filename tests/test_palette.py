@@ -517,7 +517,9 @@ def test_the_witness_house_gets_the_chip_the_repaint_and_the_stores(rendered, wi
     )
     # the names are the face: the select follows the kept names
     names = autos["regie_house_palette_names"]
-    assert names["actions"][-1]["action"] == "input_select.set_options"
+    assert names["actions"][-2]["action"] == "input_select.set_options"
+    # a kept palette renamed while selected stays selected under its new name
+    assert names["actions"][-1]["then"][0]["data"]["option"] == "{{ trigger.to_state.state }}"
     assert "states('input_text.house_palette_k3_name')" in names["actions"][0]["variables"]["names"]
     # « Nouvelle », « Au hasard », « Supprimer »
     assert (
@@ -527,10 +529,10 @@ def test_the_witness_house_gets_the_chip_the_repaint_and_the_stores(rendered, wi
         == "Nouvelle 1"
     )
     rnd = autos["regie_house_palette_k2_random"]
-    assert (
-        "namespace(" in rnd["actions"][0]["variables"]["p"]
-        and "| random" in rnd["actions"][0]["variables"]["p"]
-    )
+    assert "namespace(" in rnd["actions"][0]["variables"]["p"]
+    # the sandbox refuses a range over 100 000: the seed is the clock's millisecond
+    assert "range(1, 2147483647)" not in rnd["actions"][0]["variables"]["p"]
+    assert "as_timestamp(now()) * 1000" in rnd["actions"][0]["variables"]["p"]
     assert autos["regie_house_palette_k4_delete"]["actions"][-1]["data"]["value"] == ""
     knobs = {k["entity"]: k for k in witness.knobs()}
     assert knobs["input_boolean.house_palette_repaint"]["value"] == "on"
