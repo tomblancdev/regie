@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.25.4 — le quart évité peut passer par zéro (2026-09-05)
+
+Tom, sur l'anneau du jour : « still impossible to have 300 - 180 » — c'était
+le quart ÉVITÉ, écrit `[de, à]` avec de < à, qui ne pouvait pas passer par
+0°. Il le peut : l'arc libre est la distance horaire de « à » vers « de »
+(`free_arc`), le tirage, le gabarit du capteur, `check` et les poignées de
+l'anneau le lisent ainsi ; un arc tiré peut finir là où l'évité commence (les
+bouts sont du côté libre). Avec `avoid: [45, 105]` rien ne change.
+
+`v0.25.3` porte ce code sans son numéro de version (une chaîne de release
+qui n'a pas attendu son script) : publié, pas à épingler — 0.25.4 est le même
+code avec le numéro, donc l'URL de la ressource qui fait recharger la carte.
+
 ## 0.25.2 — l'arc d'une palette gardée fait le tour (2026-09-05)
 
 Tom, sur l'anneau : « from 300 to 180 for example, but the selector being
