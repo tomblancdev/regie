@@ -51,6 +51,10 @@ ENTRIES = "/api/config/config_entries/entry"
 MARKS = {"ok": "=", "changed": "+", "would": "?", "hand": "!", "waiting": "~"}
 
 
+# a unique id in a rendered package: `unique_id: regie_x` (bare or quoted)
+UNIQUE_ID_RE = re.compile(r"unique_id:\s*['\"]?(regie_[A-Za-z0-9_]+)")
+
+
 def probe(url: str, via: str | None = None) -> int:
     """The status a URL answers (0 = unreachable) - how the conductor proves a
     door before promoting the config that opens it. `via` = the proxy's
@@ -1424,10 +1428,15 @@ class Conductor:
         lights of 0.16's shape after 0.17, a parking room's occupancy. Every
         id the house mints carries the `regie_` unique id, so its ghosts are
         told from a person's: one of ours that reads unavailable (or has no
-        state at all) is removed (0.17, home.md 13.34 g)."""
+        state at all) AND that no rendered package names any more is removed
+        (0.17, home.md 13.34 g). The second half is 0.26.1's: a role group
+        whose only bulb is unplugged reads unavailable too — the office's
+        night group went with the ghosts and its hands aimed at nothing."""
         entities = ws.call("config/entity_registry/list") or []
+        rendered = self.rendered_unique_ids()
         for e in entities:
-            if not str(e.get("unique_id") or "").startswith("regie_"):
+            uid = str(e.get("unique_id") or "")
+            if not uid.startswith("regie_") or uid in rendered:
                 continue
             status, state = self.ha.get(f"/api/states/{e['entity_id']}")
             if status == 200 and (state or {}).get("state") != "unavailable":
@@ -1435,6 +1444,19 @@ class Conductor:
             self.step("orphan", "changed", f"{e['entity_id']} removed (nothing renders it now)")
             if not self.check:
                 ws.call("config/entity_registry/remove", entity_id=e["entity_id"])
+
+    def rendered_unique_ids(self) -> set[str]:
+        """Every `regie_` unique id the rendered packages carry: what the house
+        renders NOW — an entity of ours that reads unavailable but is still in
+        a package is not a ghost, it is waiting for its thing."""
+        out: set[str] = set()
+        packages = self.root / "home-assistant" / "packages"
+        if not packages.is_dir():
+            return out
+        for f in sorted(packages.glob("*.yaml")):
+            for m in UNIQUE_ID_RE.finditer(f.read_text()):
+                out.add(m.group(1))
+        return out
 
     def backup(self, ws) -> None:
         want = self.house.backup()

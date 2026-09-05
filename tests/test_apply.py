@@ -883,15 +883,29 @@ def test_the_sensors_switch_is_born_on_and_then_the_familys(witness, secrets, tm
     )
 
 
-def test_a_ghost_of_ours_is_removed_and_a_live_one_or_a_persons_kept(witness, secrets, tmp_path):
+def test_a_ghost_of_ours_is_removed_and_a_live_one_or_a_persons_kept(
+    witness, secrets, rendered_fresh
+):
     """0.17 (13.34 g): an entity the house minted (unique id regie_*) that reads
     unavailable — a package rendered once and gone — is removed from the
-    registry; one that lives, and a person's ghost, are not ours to touch."""
+    registry; one that lives, and a person's ghost, are not ours to touch.
+    0.26.1: nor one that reads unavailable while a rendered package still
+    names it — a role group whose only bulb is unplugged (the office's night
+    group went with the ghosts on the brain, and its hands aimed at nothing)."""
+    tmp_path = rendered_fresh
+    packages = rendered_fresh / "home-assistant" / "packages"
+    still = next(
+        m.group(1)
+        for f in sorted(packages.glob("*.yaml"))
+        for m in [re.search(r"unique_id: (regie_\w+)", f.read_text())]
+        if m
+    )
     ha = FakeHA()
     for entity_id, uid, state in (
         ("automation.hall_motion_light_old", "regie_hall_hall_motion_motion_light", "unavailable"),
         ("automation.hall_motion", "regie_hall_motion", "on"),
         ("automation.mine", "a_persons_own", "unavailable"),
+        ("light.waiting_for_its_bulb", still, "unavailable"),
     ):
         ha.entities.append(
             {
@@ -923,7 +937,7 @@ def test_a_ghost_of_ours_is_removed_and_a_live_one_or_a_persons_kept(witness, se
     ids = {e["entity_id"] for e in ha.entities}
     assert "automation.hall_motion_light_old" not in ids
     assert "binary_sensor.spare_occupied" not in ids
-    assert {"automation.hall_motion", "automation.mine"} <= ids
+    assert {"automation.hall_motion", "automation.mine", "light.waiting_for_its_bulb"} <= ids
 
 
 def test_a_knob_the_family_moved_is_read_and_kept(witness, secrets, tmp_path):

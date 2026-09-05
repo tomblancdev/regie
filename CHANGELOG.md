@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.26.1 — un fantôme est ce que rien ne rend plus (2026-09-05)
+
+Lu à la convergence de 0.26.0 : « orphan: light.office_night removed (nothing
+renders it now) » — et le paquet `lighting_office.yaml` le rend toujours. La
+règle des fantômes (0.17) retirait toute entité à `unique_id` `regie_` qui lit
+`unavailable` ; un groupe de rôle dont la seule ampoule est débranchée (la
+veilleuse de L'Atelier, le projecteur à l'essai) lit `unavailable` aussi, et
+ses mains visaient le vide (`light.unassigned_lights` de même). Le chef
+d'orchestre lit désormais les `unique_id` des paquets rendus et ne retire que
+ce qu'aucun paquet ne nomme plus ET qui lit `unavailable`. `group.reload` a
+rendu les deux groupes au cerveau.
+
 ## 0.26.0 — « Palette du jour » est un état (2026-09-05)
 
 Tom : « palette du jour is a state but should not light up the entire house,
