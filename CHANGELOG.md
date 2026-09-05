@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.24.0 — L'Atelier des palettes, le pas 1 : les mains (2026-09-05)
+
+La page « L'Atelier des palettes » (Tom : une fenêtre, pas un onglet ; des noms
+libres, pas « Perso 1 » ; un bouton « Au hasard » ; l'accent, une couleur comme
+les autres ; les parts des pièces restent au fichier). Ce pas pose LES MAINS :
+tout se règle déjà sur le téléphone, en lignes ; la fenêtre vient au pas 2.
+
+- **Les palettes gardées sous un nom libre** : `controls.palette: { keep: N }`
+  (huit par défaut) déclare N cases (`house_palette_k<n>_*`) — chaque part
+  d'une palette en aides : l'arc (début, largeur), l'accent, la saturation,
+  le blanc, la courbe de niveau par période, l'éparpillement, les vives (un
+  nombre ou « toutes »), les formes de vie (un texte « glitch, lightning »),
+  leur cadence. **Le nom est la façade** : le sélecteur « La palette » liste
+  le jour, les palettes du fichier et chaque nom gardé — une automation le
+  tient à jour à chaque nom qui bouge (`input_select.set_options`) et garde la
+  palette choisie sous son nouveau nom quand on la renomme ; le capteur
+  résout un nom vers sa case. « Nouvelle » copie la palette en cours dans la
+  première case libre ; « Au hasard » retire une case au sort dans les règles
+  du jour (la graine vient de l'horloge : le bac à sable refuse une plage
+  au-delà de 100 000, lu en direct) ; « Supprimer » vide le nom. Sur les
+  Réglages, une case n'affiche ses lignes que tant qu'elle porte un nom.
+- **Les règles du jour en aides** (`house_palette_today_*` : les poids des
+  harmonies, l'arc évité, les plages de saturation, d'éparpillement, de
+  vives, la courbe, les formes et la cadence de vie, la part des jours) : le
+  capteur lit LES AIDES pour tirer le jour, `regie palette --root` les relit
+  pour comparer. **Semées du fichier et le suivant** : le chef d'orchestre se
+  souvient de ce qu'il a semé ; une règle que le téléphone n'a pas touchée
+  prend la nouvelle valeur du fichier (`le fichier a bougé, l'UI non`), une
+  règle éditée sur le téléphone est gardée, une règle bougée des deux côtés
+  est dite `hand` (`regie palette --pull` garde celle du cerveau, ou l'on édite
+  le fichier). Prouvé en direct sur trois poids.
+- **`regie palette --pull [--fx]`** réécrit le bloc `palettes:` du fichier —
+  les palettes nommées du fichier telles quelles, les cases gardées ajoutées
+  par leur slug, les règles du jour telles que le cerveau les tient ; chaque
+  autre octet du fichier est gardé. `scripts/palette-pull` côté flotte
+  (comme `plan-pull`). Une case dont le fichier porte le nom est libérée à la
+  convergence. `--keep` disparaît.
+- **L'accent est une couleur de la marche** : une ampoule vagabonde s'attarde
+  sur l'accent un cinquième de son cycle (`ACCENT_DWELL`), chacune sur son
+  horloge — à tout instant aucune, une, deux, quatre le portent, et on y
+  glisse en rampe. `color: accent` quitte la grammaire (dit clairement) : la
+  lampe qui se détachait est une candidate sur l'arc. Prouvé sur hall_4 :
+  l'arc du jour parcouru, puis 212° tenu vingt secondes, deux fois en 150 s.
+- La maison témoin : quatre cases, Soirée suit la palette pour son blanc.
+  322 tests.
+
 ## 0.23.0 — La Palette du jour, le pas 4 : la maison (2026-09-04)
 
 La maison applique la palette avec les verbes qui existent, et la famille la
