@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.25.6 — une release qui pointe sur elle-même (2026-09-05)
+
+`v0.25.5` embarque `regie_version: v0.25.4` dans le rôle engine (et galaxy.yml
+en 0.25.4) : la flotte a reconstruit la boîte à outils, convergé `changed=0`,
+et le cerveau servait encore la ressource en 0.25.4 — le défaut de 0.12.1,
+revenu par la même porte. 0.25.6 est le même code avec les trois numéros
+alignés, et un test (`tests/test_release.py`) refuse désormais un paquet, une
+collection et un rôle qui ne disent pas la même chose. `v0.25.5` reste
+publié, pas à épingler.
+
 ## 0.25.5 — une main qui éteint met fin à la marche (2026-09-05)
 
 Tom, sur toutes les ambiances vivantes : « the flow make them comes up when
