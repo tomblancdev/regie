@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.25.0 — L'Atelier des palettes, le pas 2 : la fenêtre (2026-09-05)
+
+Tom : « go for le réglage button cause here it is kind of really annoying with
+this interface ». La fenêtre remplace les lignes.
+
+- **`regie-atelier.js`, la carte du produit** (`base/www`, copiée avec le pack
+  `palette`, enregistrée par apply comme ressource Lovelace à côté de celle du
+  plan — `resource atelier`, la version dans l'URL) : sur les Réglages une
+  ligne (le nom de la palette en force, un échantillon de son arc, « Ouvrir »)
+  ; le bouton ouvre la fenêtre par-dessus la page. Les onglets sont les
+  palettes par nom : « Du jour · les règles », celles du fichier (en lecture,
+  « Dupliquer » en fait une copie éditable), celles gardées, « + Nouvelle ».
+  Une palette gardée s'édite en place : le nom, **l'anneau** (les deux poignées
+  de l'arc, le point d'accent, le quart évité en gris — tirés au doigt), la
+  saturation, l'éparpillement, le blanc, **la courbe** (quatre points sur les
+  périodes, tirés), les vives (un nombre ou « toutes »), **les puces** des
+  formes que fx.yml active, la cadence, puis « Essayer », « Au hasard »,
+  « Enregistrer sous… », « Supprimer » (confirmé d'une seconde pression). Les
+  règles du jour : les poids, les deux poignées du quart évité sur l'anneau,
+  les plages, la courbe, les formes, la cadence, la part des jours, et **la
+  semaine** tirée avec ces règles (l'arithmétique du produit portée en JS,
+  les sept tirages dans l'ordre, le sel de la maison). Tout passe par les
+  aides du cerveau (`hass.callService`) — le capteur, le repeint et `--pull`
+  n'ont rien à apprendre ; un curseur n'envoie que sa dernière valeur (120 ms).
+- La carte ne parle à personne d'autre que Home Assistant, n'ouvre ni fetch ni
+  socket, se définit sous `regie-palette-atelier` et se déclare dans
+  `window.customCards`. Les lignes des cases et des règles quittent les
+  Réglages ; les quatre lignes de base restent. 323 tests.
+
 ## 0.24.0 — L'Atelier des palettes, le pas 1 : les mains (2026-09-05)
 
 La page « L'Atelier des palettes » (Tom : une fenêtre, pas un onglet ; des noms
