@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.26.0 — « Palette du jour » est un état (2026-09-05)
+
+Tom : « palette du jour is a state but should not light up the entire house,
+it should simply set the state but the lights up and down stays manual or via
+automations ». La pastille de la carte de la maison allumait chaque pièce
+(`look: today, rooms: all`). Elle devient un interrupteur :
+`input_boolean.house_palette` « Palette du jour », né éteint. Tant qu'il est
+allumé, « allumer » veut dire la palette dans chaque pièce qui a sa part : le
+capteur `sensor.<pièce>_default` (ce que « on » veut dire maintenant) répond
+`today` — la lumière au mouvement, le on d'une télécommande, le retour du
+courant, tout ce qui allume une pièce le lit déjà. À la bascule, une pièce
+ALLUMÉE dans une de ses ambiances par défaut prend ce que « on » veut dire
+maintenant (la palette quand l'interrupteur s'allume, l'ambiance de l'heure
+quand il s'éteint) ; une pièce dans une ambiance nommée (Cinéma, Omega) n'est
+pas touchée ; rien n'est allumé ni éteint (la clause de H32). Le script
+`script.house_palette_today` n'existe plus — il reste un fantôme sur un
+cerveau qui l'a connu, à retirer à la main (l'écart connu des scripts
+retirés). « Repeint les pièces » ne change pas : un changement de palette
+repeint les pièces allumées dans une ambiance à palette.
+
 ## 0.25.6 — une release qui pointe sur elle-même (2026-09-05)
 
 `v0.25.5` embarque `regie_version: v0.25.4` dans le rôle engine (et galaxy.yml

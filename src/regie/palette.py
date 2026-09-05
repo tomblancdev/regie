@@ -1167,9 +1167,10 @@ def options(palettes: dict, ui) -> list[dict]:
 
 
 def house_plan(house) -> dict:
-    """What the pack renders for the house: the chip's rooms, the repaint's
-    rooms, the stores and the rules' helpers."""
-    chip, repaint = [], []
+    """What the pack renders for the house: the rooms with a part (the switch
+    « Palette du jour » and its flip), the repaint's rooms, the stores and the
+    rules' helpers."""
+    chip, repaint, flip = [], [], []
     for a in house.areas:
         if house.parking(a):
             continue
@@ -1179,6 +1180,12 @@ def house_plan(house) -> dict:
             repaint.append({"room": a["id"], "looks": looks})
         if any(p["id"] == "today" and p["renders"] for p in plans):
             chip.append(a["id"])
+            # the flip (0.26): a room lit in one of its default looks, or in the
+            # palette, takes what "on" means now when the switch moves
+            defaults = {
+                look for row in house.defaults_of(a).values() for look in row.values() if look
+            }
+            flip.append({"room": a["id"], "looks": sorted(defaults | {"today"})})
     palettes = house.palettes()
     fx = house.fx()
     shapes = list(fx.get("enable") or sorted(house.shapes()))
@@ -1224,6 +1231,7 @@ def house_plan(house) -> dict:
     return {
         "chip": chip,
         "repaint": repaint,
+        "flip": flip,
         "stores": [{"n": i, "prefix": store_prefix(i)} for i in range(1, keep_of(house) + 1)],
         "store_numbers": STORE_NUMBERS,
         "rules_prefix": RULES_PREFIX,

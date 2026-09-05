@@ -36,6 +36,15 @@ input_boolean:
   house_palette_repaint:
     name: {{ labels.ui.palette_repaint | to_yaml }}
     icon: mdi:format-paint
+{% if h.chip %}
+  # « Palette du jour » is a STATE (0.26, Tom: "it should simply set the state
+  # but the lights up and down stay manual or via automations"): while on,
+  # "on" means the palette in every room that has its part — the room's
+  # default sensor says `today` (pack scenes); never a light turned on or off
+  house_palette:
+    name: {{ labels.ui.palette_today | to_yaml }}
+    icon: mdi:palette-swatch
+{% endif %}
   {{ px }}_alive_all:
     name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
     icon: mdi:motion
@@ -105,22 +114,6 @@ input_text:
     icon: mdi:flash-alert-outline
     max: 120
 {% endfor %}
-{% if h.chip %}
-script:
-  # the chip « Palette du jour » (0.23): every room that has the look takes it
-  house_palette_today:
-    alias: {{ labels.ui.palette_today | to_yaml }}
-    description: "the palette of the day on every room that declares its part — look: today, rooms: all (La Régie, pack palette)"
-    icon: mdi:palette
-    mode: restart
-    sequence:
-      - parallel:
-{% for room in h.chip %}
-          - action: script.turn_on
-            target:
-              entity_id: script.{{ room }}_today
-{% endfor %}
-{% endif %}
 automation:
   # « Une autre »: the roll moves, the day's draw changes — for the day (La Régie, pack palette)
   - id: regie_house_palette_another
@@ -304,6 +297,31 @@ automation:
                 value_template: "{{ '{{' }} states('input_select.{{ r.room }}_look') in {{ r.looks | tojson | replace('"', "'") }} and is_state('light.{{ r.room }}_lights', 'on') {{ '}}' }}"
             then:
               - action: "script.{{ r.room }}_{{ '{{' }} states('input_select.{{ r.room }}_look') {{ '}}' }}"
+                continue_on_error: true
+{% endfor %}
+{% endif %}
+{% if h.flip %}
+  # « Palette du jour » flips (0.26): a room LIT in a default look takes its
+  # new default — the palette when the switch comes on, the period's look when
+  # it goes off; a room in a named look is untouched, nothing is turned on or
+  # off (H32's clause). The rooms with a part, their defaults and `today`.
+  - id: regie_house_palette_flip
+    alias: {{ (labels.ui.palette ~ ' — ' ~ labels.ui.palette_today) | to_yaml }}
+    description: the switch « Palette du jour » flips — every room lit in one of its default looks (or the palette) takes what "on" means now; nothing is turned on or off (La Régie, pack palette)
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.house_palette
+        to: ["on", "off"]
+        not_from: [unavailable, unknown]
+    actions:
+      - parallel:
+{% for r in h.flip %}
+          - if:
+              - condition: template
+                value_template: "{{ '{{' }} is_state('light.{{ r.room }}_lights', 'on') and states('input_select.{{ r.room }}_look') in {{ r.looks | tojson | replace('"', "'") }} {{ '}}' }}"
+            then:
+              - action: script.{{ r.room }}_default
                 continue_on_error: true
 {% endfor %}
 {% endif %}

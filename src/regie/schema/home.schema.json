@@ -353,7 +353,7 @@
             }
           ],
           "default": false,
-          "description": "the palette (0.20): the house card's chip and row, the Réglages rows (the select, the hour it turns, « Une autre », « Repeint les pièces »), the day's rules as helpers and, since 0.24, the palettes KEPT on the phone under free names (`{ keep: 8 }` stores; `true` = 8) — the pack renders the sensor and the helpers regardless"
+          "description": "the palette (0.20): the house card's row and switch « Palette du jour » (a state, 0.26), the Réglages rows (the select, the hour it turns, « Une autre », « Repeint les pièces »), the day's rules as helpers and, since 0.24, the palettes KEPT on the phone under free names (`{ keep: 8 }` stores; `true` = 8) — the pack renders the sensor and the helpers regardless"
         }
       }
     },

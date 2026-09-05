@@ -487,13 +487,35 @@ def test_a_today_look_gets_life_when_only_a_named_palette_has_it(house_with):
 
 
 # --- step 4 (0.23) → the Atelier's step 1 (0.24): the house, the stores, the rules ------
-def test_the_witness_house_gets_the_chip_the_repaint_and_the_stores(rendered, witness):
+def test_the_witness_house_gets_the_switch_the_flip_the_repaint_and_the_stores(rendered, witness):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/palette.yaml").read_text())
     # the rendered options: the day and the file's names; the kept names join at runtime
     assert pkg["input_select"]["house_palette"]["options"] == ["Du jour", "Nuit bleue"]
-    chip = pkg["script"]["house_palette_today"]["sequence"][0]["parallel"]
-    assert [s["target"]["entity_id"] for s in chip] == ["script.living_today"]
+    # « Palette du jour » is a STATE (0.26): a switch, no script that lights the house
+    assert "house_palette_today" not in pkg.get("script", {})
+    assert pkg["input_boolean"]["house_palette"]["name"] == "Palette du jour"
     autos = {a["id"]: a for a in pkg["automation"]}
+    flip = autos["regie_house_palette_flip"]
+    assert flip["triggers"] == [
+        {
+            "trigger": "state",
+            "entity_id": "input_boolean.house_palette",
+            "to": ["on", "off"],
+            "not_from": ["unavailable", "unknown"],
+        }
+    ]
+    living = next(a for a in witness.areas if a["id"] == "living")
+    defaults = {
+        look for row in witness.defaults_of(living).values() for look in row.values() if look
+    }
+    looks = json.dumps(sorted(defaults | {"today"})).replace('"', "'")
+    (branch,) = flip["actions"][0]["parallel"]
+    assert branch["if"][0]["value_template"] == (
+        "{{ is_state('light.living_lights', 'on') and states('input_select.living_look') in "
+        + looks
+        + " }}"
+    )
+    assert branch["then"][0]["action"] == "script.living_default"
     rep = autos["regie_house_palette_repaint"]
     assert rep["triggers"][0]["attribute"] == "palette"
     assert "not_from" not in rep["triggers"][0]
@@ -776,3 +798,60 @@ def test_the_avoided_arc_may_wrap_through_zero():
         p = P.draw(day, 0, SALT, rules)
         assert not any(P.in_arc(h, 300, 180) for h in _arc(p)), (day, p)
         assert json.loads(tpl.render(D=day, R=0)) == p
+
+
+# --- « Palette du jour » is a state (0.26) ---------------------------------------
+def test_the_default_sensor_says_today_while_the_switch_is_on(rendered):
+    """Every path that lights a room reads sensor.<room>_default: while the
+    house switch is on it names the palette look, off it names the period's."""
+    pkg = yaml.safe_load((rendered / "home-assistant/packages/scenes_living.yaml").read_text())
+    state = pkg["template"][0]["sensor"][0]["state"]
+    assert "input_boolean.house_palette" in state
+    env = jinja2.Environment()
+    vals = {
+        "sensor.house_period": "evening",
+        "sensor.daylight": "dark",
+        "input_select.living_look_evening": "evening",
+        "input_select.living_look_dark": "evening",
+    }
+    env.globals["states"] = lambda e: vals.get(e, "unknown")
+    env.globals["is_state"] = lambda e, v: e == "input_boolean.house_palette" and v == "on"
+    assert env.from_string(state).render().strip() == "today"
+    env.globals["is_state"] = lambda e, v: e == "input_boolean.house_palette" and v == "off"
+    off = env.from_string(state).render().strip()
+    assert off and off != "today"
+
+
+def test_a_room_without_a_part_keeps_its_plain_default_sensor(rendered):
+    for f in (rendered / "home-assistant/packages").glob("scenes_*.yaml"):
+        pkg = yaml.safe_load(f.read_text())
+        if f.name == "scenes_living.yaml" or "template" not in pkg:
+            continue
+        assert "house_palette" not in pkg["template"][0]["sensor"][0]["state"], f.name
+
+
+def test_the_house_card_carries_the_switch_not_a_button(rendered):
+    dash = yaml.safe_load((rendered / "home-assistant/dashboards/phone.yaml").read_text())
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("title") == "La palette":
+                yield node
+            for v in node.values():
+                yield from walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                yield from walk(v)
+
+    row = {
+        "entity": "input_boolean.house_palette",
+        "name": "Palette du jour",
+        "icon": "mdi:palette-swatch",
+    }
+    cards = [c for c in walk(dash) if row in c.get("entities", [])]
+    assert len(cards) == 1  # the house card; Réglages carries the select and the hour
+    assert not any(r.get("type") == "button" for r in cards[0]["entities"])
+    assert (
+        "script.house_palette_today"
+        not in (rendered / "home-assistant/dashboards/phone.yaml").read_text()
+    )

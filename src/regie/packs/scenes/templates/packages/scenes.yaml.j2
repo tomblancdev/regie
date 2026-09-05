@@ -243,6 +243,11 @@ automation:
 {% endif %}
 {% if defaults %}
 {% set first = (area.scenes | default({}) | list | first) | default('off') %}
+{# « Palette du jour » is a state (0.26): while the house switch is on, "on"
+   means the palette in a room that has its part — every path that lights a
+   room reads this sensor (the motion light, a remote's on, the power return) #}
+{% set part = controls.palette and (plans | selectattr('id', 'eq', 'today') | list) %}
+{% set today_prefix = "{% if is_state('input_boolean.house_palette', 'on') %}today{% else %}" %}
 {% if panel %}
 
 template:
@@ -251,8 +256,11 @@ template:
         unique_id: regie_{{ area.id }}_default
         icon: mdi:palette-swatch-outline
         state: >-
-          {{ '{%' }} set p = states('input_select.{{ area.id }}_look_' ~ states('sensor.house_period')) {{ '%}' }}
+{% if part %}          {{ today_prefix }}
+{% endif %}          {{ '{%' }} set p = states('input_select.{{ area.id }}_look_' ~ states('sensor.house_period')) {{ '%}' }}
           {{ '{%' }} if p not in ('sun', 'unknown', 'unavailable') {{ '%}' }}{{ '{{' }} p {{ '}}' }}{{ '{%' }} else {{ '%}' }}{{ '{{' }} states('input_select.{{ area.id }}_look_' ~ states('sensor.daylight')) {{ '}}' }}{{ '{%' }} endif {{ '%}' }}
+{% if part %}          {{ '{%' }} endif {{ '%}' }}
+{% endif %}
 {% else %}
 
 template:
@@ -261,8 +269,11 @@ template:
         unique_id: regie_{{ area.id }}_default
         icon: mdi:palette-swatch-outline
         state: >-
-          {{ '{%' }} set table = {{ defaults | tojson | replace('"', "'") }} {{ '%}' }}
+{% if part %}          {{ today_prefix }}
+{% endif %}          {{ '{%' }} set table = {{ defaults | tojson | replace('"', "'") }} {{ '%}' }}
           {{ '{{' }} table.get(states('sensor.house_period'), {}).get(states('sensor.daylight'), '{{ first }}') {{ '}}' }}
+{% if part %}          {{ '{%' }} endif {{ '%}' }}
+{% endif %}
 {% endif %}
 {% endif %}
 {% endif %}
