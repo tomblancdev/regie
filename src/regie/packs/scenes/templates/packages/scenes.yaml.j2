@@ -139,14 +139,20 @@ script:
 {% for p in drifting if drift_plan(area, p) %}
 {% set d = drift_plan(area, p) %}
 {% set walk = [] %}
+{# A HAND'S OFF ENDS THE WALK (0.25.5, read live: "the flow makes them come up
+   when put off"): a colour command turns a bulb on, so a walker is painted only
+   while it is ON — a remote, a tile or the motion's timeout that switched it
+   off is obeyed —, and when every walker is off the look's switch goes off #}
+{% set walker_ids = d.walkers | map(attribute='entity') | list %}
+{% set _ = walk.append({'if': [{'condition': 'template', 'value_template': '{{ ' ~ (walker_ids | tojson | replace('"', "'")) ~ " | map('states') | select('eq', 'on') | list | count == 0 }}"}], 'then': [{'action': 'input_boolean.turn_off', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}, {'stop': 'every bulb of the look is off — a hand ended the walk'}]}) %}
 {% for w in d.walkers %}
 {% set act = {'action': 'light.turn_on', 'target': {'entity_id': w.entity}, 'data': {'hs_color': [w.hue, d.saturation], 'transition': d.step}} %}
+{% set conds = [{'condition': 'state', 'entity_id': w.entity, 'state': 'on'}] %}
 {% if w.gate is not none %}
 {# a candidate of a palette look (0.21): it walks only on a day that picked it #}
-{% set _ = walk.append({'if': [{'condition': 'template', 'value_template': '{{ room.alive[' ~ w.gate ~ '] }}'}], 'then': [act]}) %}
-{% else %}
-{% set _ = walk.append(act) %}
+{% set _ = conds.append({'condition': 'template', 'value_template': '{{ room.alive[' ~ w.gate ~ '] }}'}) %}
 {% endif %}
+{% set _ = walk.append({'if': conds, 'then': [act]}) %}
 {% set _ = walk.append({'delay': {'milliseconds': ((d.step * 1000) / (d.walkers | length)) | round | int}}) %}
 {% endfor %}
 {% set dseq = [] %}
@@ -172,11 +178,12 @@ script:
 {% set every_expr = "pal.life.every" if l.live else (l.every | tojson) %}
 {# a `set` inside a `for` is the loop's own (0.22.3): the still pool grows on a namespace #}
 {% set pick = "{% set shape = " ~ shapes_expr ~ " | random %}"
-  ~ "{% set ns = namespace(still=" ~ (l.still | tojson | replace('"', "'")) ~ ") %}"
+  ~ "{% set ns = namespace(still=" ~ (l.still | tojson | replace('"', "'")) ~ ", on=[]) %}"
   ~ "{% for e, k in " ~ (l.gated | map('list') | list | tojson | replace('"', "'")) ~ " %}{% if not room.alive[k] %}{% set ns.still = ns.still + [e] %}{% endif %}{% endfor %}"
   ~ "{% set pool = ns.still if shape in " ~ (l.colour_shapes | tojson | replace('"', "'")) ~ " else " ~ (l.any | tojson | replace('"', "'")) ~ " %}"
-  ~ "{% set pool = pool | reject('eq', last) | list or pool %}"
-  ~ "{{ {'shape': shape, 'bulb': pool | random} }}" %}
+  ~ "{% set ns.on = [] %}{% for e in pool %}{% if is_state(e, 'on') %}{% set ns.on = ns.on + [e] %}{% endif %}{% endfor %}"
+  ~ "{% set pool = ns.on | reject('eq', last) | list or ns.on %}"
+  ~ "{{ {'shape': shape, 'bulb': (pool | random) if pool else ''} }}" %}
 {% set lseq = [{'variables': l.variables}] %}
 {% if l.live %}
 {% set _ = lseq.append({'condition': 'template', 'value_template': '{{ pal.life is not none }}'}) %}
@@ -185,9 +192,12 @@ script:
 {% set _ = lseq.append({'repeat': {'while': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}], 'sequence': [
   {'delay': {'seconds': '{{ range(' ~ every_expr ~ '[0] | int, ' ~ every_expr ~ '[1] | int + 1) | random }}'}},
   {'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'},
+  {'if': [{'condition': 'template', 'value_template': '{{ ' ~ (l.any | tojson | replace('"', "'")) ~ " | map('states') | select('eq', 'on') | list | count == 0 }}"}], 'then': [{'action': 'input_boolean.turn_off', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}, {'stop': 'every bulb of the look is off — a hand ended the look'}]},
   {'variables': {'sign': pick}},
-  {'action': 'script.fx_{{ sign.shape }}', 'data': {'target': ['{{ sign.bulb }}']}},
-  {'variables': {'last': '{{ sign.bulb }}'}},
+  {'if': [{'condition': 'template', 'value_template': "{{ sign.bulb != '' }}"}], 'then': [
+    {'action': 'script.fx_{{ sign.shape }}', 'data': {'target': ['{{ sign.bulb }}']}},
+    {'variables': {'last': '{{ sign.bulb }}'}},
+  ]},
 ]}}) %}
 {{ {area.id ~ '_' ~ p.id ~ '_life': {
   'alias': area.label ~ ' — ' ~ p.label ~ ' ✦',

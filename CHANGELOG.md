@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.25.5 — une main qui éteint met fin à la marche (2026-09-05)
+
+Tom, sur toutes les ambiances vivantes : « the flow make them comes up when
+put off ». Une ampoule éteinte à la main (télécommande, appli, interrupteur)
+était rallumée au pas suivant de la dérive — `light.turn_on` sur une ampoule
+éteinte l'allume. Désormais la marche ne peint qu'une ampoule ALLUMÉE : chaque
+pas est sous un `if` sur l'état de l'ampoule (plus sa garde `room.alive[k]`
+pour les candidates), et quand toutes les ampoules de l'ambiance sont
+éteintes, le premier pas coupe l'interrupteur ↻ et arrête le script — une
+main a fini la marche. La vie fait de même : un signe ne tombe que sur une
+ampoule allumée (le vivier est filtré par `is_state`), un vivier vide ne
+lance pas de fx, et toutes éteintes = la boucle finit avec son interrupteur.
+
+Ce que ça change dans la journée : on éteint une ampoule (ou la pièce) et
+elle reste éteinte ; on la rallume à la main et, si la dérive court encore,
+elle reprend sa couleur au pas suivant.
+
 ## 0.25.4 — le quart évité peut passer par zéro (2026-09-05)
 
 Tom, sur l'anneau du jour : « still impossible to have 300 - 180 » — c'était

@@ -207,7 +207,11 @@ def test_the_drift_walks_every_place_on_its_own_clock(rendered):
     assert rep["repeat"]["while"][0]["entity_id"] == "input_boolean.living_party_drift", (
         "the kill-switch IS the loop's condition — turning it off ends the walk"
     )
-    calls = [s for s in rep["repeat"]["sequence"] if "action" in s]
+    # 0.25.5: a walker is painted only while it is on — the call sits under its `if`
+    walk = rep["repeat"]["sequence"]
+    calls = [
+        s["then"][0] for s in walk if "if" in s and s["then"][0].get("action") == "light.turn_on"
+    ]
     delays = [s for s in rep["repeat"]["sequence"] if "delay" in s]
     assert [c["target"]["entity_id"] for c in calls] == [
         "light.living_ceiling",

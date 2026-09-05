@@ -285,9 +285,20 @@ def test_the_witness_look_that_reads_the_palette_renders_as_templates(rendered, 
     drift = pkg["script"]["living_today_drift"]["sequence"]
     assert "variables" in drift[0]
     walk = drift[1]["repeat"]["sequence"]
-    gated = [s for s in walk if "if" in s]
+    # a hand's off ends the walk (0.25.5): the first step stops when every walker
+    # is off, and every walker is painted only while it is on
+    assert walk[0]["then"][-1]["stop"] == "every bulb of the look is off — a hand ended the walk"
+    assert (
+        "| map('states') | select('eq', 'on') | list | count == 0"
+        in walk[0]["if"][0]["value_template"]
+    )
+    walkers = [s for s in walk if "if" in s and s["then"][0].get("action") == "light.turn_on"]
+    for s_ in walkers:
+        bulb = s_["then"][0]["target"]["entity_id"]
+        assert s_["if"][0] == {"condition": "state", "entity_id": bulb, "state": "on"}
+    gated = [s for s in walkers if len(s["if"]) == 2]
     assert len(gated) == 3  # the front's two paired places, and the third bulb
-    assert gated[0]["if"][0]["value_template"] == "{{ room.alive[0] }}"
+    assert gated[0]["if"][1]["value_template"] == "{{ room.alive[0] }}"
     hue = gated[0]["then"][0]["data"]["hs_color"][0]
     assert hue.startswith("{% set pal = state_attr('sensor.house_palette', 'palette') %}")
     assert "(pal.lo + pal.width * t) % 360" in hue
@@ -386,13 +397,18 @@ def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness
         "entity_id": "input_boolean.living_today_drift",
         "state": "on",
     }
-    pick = steps[2]["variables"]["sign"]
+    # every bulb of the look off: the switch off, the loop ends (0.25.5)
+    assert steps[2]["then"][-1] == {"stop": "every bulb of the look is off — a hand ended the look"}
+    pick = steps[3]["variables"]["sign"]
     assert "pal.life.shapes" in pick and "reject('eq', last)" in pick
     assert "room.alive[" in pick  # a candidate is still only on a day that left it so
     assert "namespace(still=" in pick  # the still pool grows on a namespace
-    assert steps[3]["action"] == "script.fx_{{ sign.shape }}"
-    assert steps[3]["data"]["target"] == ["{{ sign.bulb }}"]
-    assert steps[4]["variables"]["last"] == "{{ sign.bulb }}"
+    assert "is_state(e, 'on')" in pick  # a sign lands on a bulb that is on
+    sign = steps[4]
+    assert sign["if"][0]["value_template"] == "{{ sign.bulb != '' }}"
+    assert sign["then"][0]["action"] == "script.fx_{{ sign.shape }}"
+    assert sign["then"][0]["data"]["target"] == ["{{ sign.bulb }}"]
+    assert sign["then"][1]["variables"]["last"] == "{{ sign.bulb }}"
     # the look starts it beside the drift, every other look stops it
     today = pkg["script"]["living_today"]["sequence"]
     assert today[-1]["target"]["entity_id"] == "script.living_today_life"
@@ -413,21 +429,22 @@ def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness
 def test_life_evaluates_a_pick_from_the_pools(rendered):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/scenes_living.yaml").read_text())
     steps = pkg["script"]["living_today_life"]["sequence"][3]["repeat"]["sequence"]
-    pick = steps[2]["variables"]["sign"]
+    pick = steps[3]["variables"]["sign"]
+    tpl = pick.replace("{{ {", "{{ ({").replace("} }}", "}) | tojson }}")
     env = jinja2.Environment()
+    env.globals["is_state"] = lambda e, v: e != "light.living_ceiling_3"  # one bulb is off
     ctx = {
         "pal": {"life": {"shapes": ["glitch"], "every": [120, 600]}},
         "room": {"alive": [True, False]},
         "last": "light.living_ceiling_2",
     }
     for _ in range(20):
-        got = json.loads(
-            env.from_string(pick.replace("{{ {", "{{ ({").replace("} }}", "}) | tojson }}")).render(
-                **ctx
-            )
-        )
+        got = json.loads(env.from_string(tpl).render(**ctx))
         assert got["shape"] == "glitch"
-        assert got["bulb"] != "light.living_ceiling_2"
+        # never the last one, never a bulb that is off
+        assert got["bulb"] not in ("light.living_ceiling_2", "light.living_ceiling_3")
+    env.globals["is_state"] = lambda e, v: False  # every bulb off: no sign
+    assert json.loads(env.from_string(tpl).render(**ctx))["bulb"] == ""
     delay = env.from_string(steps[0]["delay"]["seconds"]).render(**ctx)
     assert 120 <= int(delay) <= 600
 
