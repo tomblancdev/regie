@@ -250,8 +250,14 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
 
     manifest_path = out / MANIFEST
     previous: set[str] = set()
+    scripts_before: set[str] = set()
     if manifest_path.is_file():
-        previous = set(json.loads(manifest_path.read_text(encoding="utf-8")).get("files", []))
+        seen = json.loads(manifest_path.read_text(encoding="utf-8"))
+        previous = set(seen.get("files", []))
+        # every script the house ever rendered and renders no more (0.26.2): a
+        # YAML script's registry row is its object id, not a `regie_` unique id,
+        # so the conductor tells our ghosts from a person's by this memory
+        scripts_before = set(seen.get("scripts", [])) | set(seen.get("scripts_gone", []))
 
     result = Rendered()
     current: set[str] = set()
@@ -315,9 +321,36 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
             stale.unlink()
             result.removed.append(stale)
 
+    scripts = rendered_scripts(out, current)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
-        json.dumps({"engine": __version__, "files": sorted(current)}, indent=2) + "\n",
+        json.dumps(
+            {
+                "engine": __version__,
+                "files": sorted(current),
+                "scripts": sorted(scripts),
+                "scripts_gone": sorted(scripts_before - scripts),
+            },
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return result
+
+
+def rendered_scripts(out: Path, files: set[str]) -> set[str]:
+    """The object ids of every script the rendered packages declare —
+    `script.<id>` on the brain, its registry row keyed on that id."""
+    ids: set[str] = set()
+    for rel in files:
+        if not rel.startswith("home-assistant/packages/") or not rel.endswith(".yaml"):
+            continue
+        try:
+            pkg = yaml.safe_load((out / rel).read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue  # a package the brain will refuse says so in its own test
+        block = pkg.get("script") if isinstance(pkg, dict) else None
+        if isinstance(block, dict):
+            ids.update(str(k) for k in block)
+    return ids

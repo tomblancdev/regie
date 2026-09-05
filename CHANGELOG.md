@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.26.2 — une ambiance retirée n'a plus de fantôme (2026-09-05)
+
+Tom : « let's fix the ghost script prune in the product ». L'écart connu
+depuis les quatre ambiances retirées du Passage : la ligne d'un script YAML
+dans le registre est son identifiant d'objet (`corridor_cinema`), jamais un
+`unique_id` `regie_`, et la règle des orphelins ne le voyait pas — le script
+restait `unavailable · restored: true` à travers les convergences et les
+redémarrages (le script de la pastille à 0.26.0, pareil). Le rendu s'en
+souvient désormais : le manifeste porte `scripts` (les identifiants de tous
+les scripts des paquets rendus) et `scripts_gone` (tout ce que la maison a
+rendu un jour et ne rend plus, gardé jusqu'au retour de l'ambiance) ; le chef
+d'orchestre retire du registre un script de cette liste qui lit `unavailable`.
+Un script d'une personne, ou un des nôtres encore rendu, n'est pas touché.
+Un cerveau qui a connu un fantôme avant ce numéro ne le voit pas dans sa
+mémoire : à retirer une fois à la main, comme avant.
+
 ## 0.26.1 — un fantôme est ce que rien ne rend plus (2026-09-05)
 
 Lu à la convergence de 0.26.0 : « orphan: light.office_night removed (nothing

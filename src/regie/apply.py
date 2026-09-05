@@ -42,6 +42,7 @@ from .ha import HomeAssistant
 from .host import STATE
 from .house import House
 from .otbr import Otbr
+from .render import MANIFEST
 from .z2m import Z2M
 
 CLIENT_NAME = "regie"
@@ -1434,16 +1435,37 @@ class Conductor:
         night group went with the ghosts and its hands aimed at nothing."""
         entities = ws.call("config/entity_registry/list") or []
         rendered = self.rendered_unique_ids()
+        gone = self.scripts_gone()
         for e in entities:
             uid = str(e.get("unique_id") or "")
-            if not uid.startswith("regie_") or uid in rendered:
+            if e.get("platform") == "script":
+                # a YAML script's registry row is keyed on its object id, never
+                # a `regie_` unique id (0.26.2): ours are the ones the manifest
+                # remembers rendering and renders no more — a look a room lost
+                if uid not in gone:
+                    continue
+                why = "a look the house no longer has"
+            elif not uid.startswith("regie_") or uid in rendered:
                 continue
+            else:
+                why = "nothing renders it now"
             status, state = self.ha.get(f"/api/states/{e['entity_id']}")
             if status == 200 and (state or {}).get("state") != "unavailable":
                 continue
-            self.step("orphan", "changed", f"{e['entity_id']} removed (nothing renders it now)")
+            self.step("orphan", "changed", f"{e['entity_id']} removed ({why})")
             if not self.check:
                 ws.call("config/entity_registry/remove", entity_id=e["entity_id"])
+
+    def scripts_gone(self) -> set[str]:
+        """The scripts the manifest remembers rendering and renders no more —
+        the render keeps that memory (0.26.2), the conductor acts on it."""
+        path = self.root / MANIFEST
+        if not path.is_file():
+            return set()
+        try:
+            return set(json.loads(path.read_text(encoding="utf-8")).get("scripts_gone", []))
+        except (OSError, ValueError):
+            return set()
 
     def rendered_unique_ids(self) -> set[str]:
         """Every `regie_` unique id the rendered packages carry: what the house

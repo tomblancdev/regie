@@ -363,3 +363,33 @@ def test_the_release_carries_its_own_pin():
         f"the engine role installs {pinned}, the package is {declared} — "
         "a release that does not carry its own pin ships the previous engine"
     )
+
+
+# --- 0.26.2: the manifest remembers the scripts it rendered, and the ones gone ---
+def test_the_manifest_remembers_the_scripts_and_the_ones_gone(witness, secrets, rendered_fresh):
+    """A YAML script's registry row is its object id, never a `regie_` unique
+    id: the conductor tells a look a room lost from a person's script by this
+    memory alone — kept until the look comes back."""
+    import json
+
+    from regie.render import MANIFEST, render
+
+    path = rendered_fresh / MANIFEST
+    m = json.loads(path.read_text())
+    assert {"living_today", "living_default"} <= set(m["scripts"])
+    assert m["scripts_gone"] == []
+    # a script rendered once (the memory says so) and not any more
+    m["scripts"] = sorted(set(m["scripts"]) | {"living_fantome"})
+    path.write_text(json.dumps(m))
+    render(witness, rendered_fresh, secrets)
+    m = json.loads(path.read_text())
+    assert m["scripts_gone"] == ["living_fantome"] and "living_fantome" not in m["scripts"]
+    # the memory holds through a render that changes nothing
+    render(witness, rendered_fresh, secrets)
+    assert json.loads(path.read_text())["scripts_gone"] == ["living_fantome"]
+    # a look that comes back leaves the gone list
+    m = json.loads(path.read_text())
+    m["scripts_gone"] = ["living_fantome", "living_today"]
+    path.write_text(json.dumps(m))
+    render(witness, rendered_fresh, secrets)
+    assert json.loads(path.read_text())["scripts_gone"] == ["living_fantome"]

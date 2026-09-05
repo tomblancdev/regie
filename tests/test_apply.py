@@ -1931,3 +1931,42 @@ def test_the_draft_follows_the_files_unless_it_holds_edits(witness, secrets, tmp
     steps = apply(h5, secrets, tmp_path, ha, check=False)
     assert states(steps)["workbench"] == "hand" and "no memory" in detail(steps)
     assert ceiling()["x"] == 180, "kept"
+
+
+def test_a_look_the_house_lost_leaves_no_ghost_script(witness, secrets, rendered_fresh):
+    """0.26.2: a YAML script's registry row is keyed on its object id, so the
+    `regie_` rule never saw the four looks Le Passage lost (nor the chip's
+    script at 0.26.0). The manifest remembers what it rendered: a script gone
+    from the render that reads unavailable is removed; one still rendered, or
+    a person's, is not ours to touch."""
+    import json
+
+    from regie.render import MANIFEST
+
+    path = rendered_fresh / MANIFEST
+    m = json.loads(path.read_text())
+    m["scripts_gone"] = ["living_fantome"]
+    path.write_text(json.dumps(m))
+    ha = FakeHA()
+    for entity_id, uid, state in (
+        ("script.living_fantome", "living_fantome", "unavailable"),
+        ("script.living_today", "living_today", "unavailable"),  # mid-restart, still rendered
+        ("script.mine", "mine", "unavailable"),  # a person's
+    ):
+        ha.entities.append(
+            {
+                "entity_id": entity_id,
+                "device_id": None,
+                "platform": "script",
+                "entity_category": None,
+                "disabled_by": None,
+                "unique_id": uid,
+            }
+        )
+        ha.states[entity_id] = state
+    steps = apply(witness, secrets, rendered_fresh, ha, check=False)
+    orphans = sorted(s.detail for s in steps if s.name == "orphan")
+    assert orphans == ["script.living_fantome removed (a look the house no longer has)"]
+    ids = {e["entity_id"] for e in ha.entities}
+    assert "script.living_fantome" not in ids
+    assert {"script.living_today", "script.mine"} <= ids
