@@ -44,7 +44,7 @@ def test_the_arc_never_crosses_the_avoided_quarter_over_ten_years():
         for roll in (0, 1):
             p = P.draw(day, roll, SALT, RULES)
             seen.add(p["harmony"])
-            assert not any(av0 < h < av1 for h in _arc(p)), (day, roll, p)
+            assert not any(P.in_arc(h, av0, av1) for h in _arc(p)), (day, roll, p)
             lo, hi = P.HARMONIES[p["harmony"]]
             assert lo <= p["width"] <= hi
             assert 85 <= p["saturation"] <= 100
@@ -729,3 +729,33 @@ def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
     js = (rendered / "home-assistant/www/regie-atelier.js").read_text()
     assert 'customElements.define("regie-palette-atelier"' in js
     assert "const M = 2147483647, A = 16807;" in js  # the product's arithmetic, ported
+
+
+def test_the_avoided_arc_may_wrap_through_zero():
+    """Tom, on the ring: avoid 300° through 0° to 180° — the free arc is then
+    180° → 300°, and every draw sits inside it, in Python and in the template."""
+    rules = P.normalise({"today": {"avoid": [300, 180]}})["today"]
+    assert P.free_arc(300, 180) == 120 and P.free_arc(45, 105) == 300 and P.free_arc(10, 10) == 360
+    assert P.in_arc(350, 300, 180) and P.in_arc(20, 300, 180) and not P.in_arc(200, 300, 180)
+    errors, _ = P.check(
+        P.normalise(
+            {"today": {"avoid": [300, 180], "harmonies": {"degrade": 0, "duo": 0, "uni": 1}}}
+        ),
+        {"glitch"},
+        None,
+        None,
+    )
+    assert errors == []
+    errors, _ = P.check(P.normalise({"today": {"avoid": [300, 180]}}), {"glitch"}, None, None)
+    assert any(
+        "the widest harmony wants 150°" in e for e in errors
+    )  # 120° free, dégradé up to 150°
+    rules["harmonies"] = {"degrade": 0, "duo": 3, "uni": 2, "libre": 0}
+    body = P.jinja_body(rules, SALT)
+    tpl = jinja2.Environment().from_string(
+        "{% set day = D %}{% set roll = R %}" + body + "{{ palette | tojson }}"
+    )
+    for day in range(20700, 20700 + 200):
+        p = P.draw(day, 0, SALT, rules)
+        assert not any(P.in_arc(h, 300, 180) for h in _arc(p)), (day, p)
+        assert json.loads(tpl.render(D=day, R=0)) == p

@@ -31,7 +31,8 @@
     const [w0, w1] = HARMONIES[harmony];
     const width = w0 + w * (w1 - w0);
     const [av0, av1] = rules.avoid;
-    const start = av1 + s * (360 + av0 - av1 - width);
+    const free = (((av0 - av1) % 360) + 360) % 360 || 360;   // the avoided arc may wrap through 0°
+    const start = av1 + s * (free - width);
     const mid = (start + width / 2) % 360;
     const cold = COLD[0] <= mid && mid <= COLD[1];
     const accent = cold ? (WARM_ACCENT[0] + a * WARM_ACCENT[1]) % 360 : COLD_ACCENT[0] + a * COLD_ACCENT[1];
@@ -455,8 +456,8 @@
         if (drag === "lo") state.lo = ang;
         else if (drag === "hi") { state.width = ((ang - state.lo) % 360 + 360) % 360 || 360; if (state.width < 5) state.width = 5; }
         else if (drag === "accent") state.accent = ang;
-        else if (drag === "avoid0") state.avoid[0] = Math.min(ang, state.avoid[1] - 10);
-        else if (drag === "avoid1") state.avoid[1] = Math.max(ang, state.avoid[0] + 10);
+        else if (drag === "avoid0") { const span = ((state.avoid[1] - ang) % 360 + 360) % 360; if (span >= 10 && span <= 350) state.avoid[0] = ang; }
+        else if (drag === "avoid1") { const span = ((ang - state.avoid[0]) % 360 + 360) % 360; if (span >= 10 && span <= 350) state.avoid[1] = ang; }
         paint();
         if (drag === "lo" || drag === "hi") opts.onArc(Math.round(state.lo) % 360, Math.round(state.width));
         else if (drag === "accent") opts.onAccent(Math.round(state.accent) % 360);

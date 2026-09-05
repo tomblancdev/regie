@@ -73,6 +73,20 @@ def day_of(when: dt.datetime, turns: str, tz: dt.tzinfo | None = None) -> int:
     return int((local - int(h) * 3600 - int(m) * 60) // 86400)
 
 
+def free_arc(av0: float, av1: float) -> float:
+    """What the avoided arc leaves: from its end clockwise to its start — the
+    avoided arc may wrap through 0° (Tom, on the ring: 300° through 0° to
+    180°); nothing avoided when both ends meet."""
+    return (av0 - av1) % 360 or 360
+
+
+def in_arc(h: float, av0: float, av1: float) -> bool:
+    """Is a hue strictly inside the arc from av0 clockwise to av1 (wrapping)?
+    The ends belong to the free side: a drawn arc may end where the avoided
+    one starts."""
+    return 0 < (h - av0) % 360 < (av1 - av0) % 360
+
+
 def _draws(day: int, roll: int, salt: int) -> list[float]:
     x = (day * 7919 + roll * 104729 + salt) % M
     if x <= 0:
@@ -101,7 +115,7 @@ def draw(day: int, roll: int, salt: int, rules: dict) -> dict:
     w0, w1 = HARMONIES[harmony]
     width = w0 + w * (w1 - w0)
     av0, av1 = rules["avoid"]
-    start = av1 + s * (360 + av0 - av1 - width)
+    start = av1 + s * (free_arc(av0, av1) - width)
     mid = (start + width / 2) % 360
     cold = COLD[0] <= mid <= COLD[1]
     accent = (
@@ -244,7 +258,7 @@ def check(palettes: dict, shapes: set[str], enabled: list[str] | None, periods: 
             lo, hi = band
             av0, av1 = rules["avoid"]
             width = (hi - lo) % 360 or 360
-            crosses = any(av0 < (lo + d) % 360 < av1 for d in range(0, int(width) + 1))
+            crosses = any(in_arc((lo + d) % 360, av0, av1) for d in range(0, int(width) + 1))
             if crosses:
                 hints.append(
                     f"{where}: the arc {lo}→{hi} crosses the avoided quarter "
@@ -270,10 +284,10 @@ def check(palettes: dict, shapes: set[str], enabled: list[str] | None, periods: 
     if not any(weights.get(n, 0) > 0 for n in ORDER):
         errors.append(f"{where}: no harmony weighs anything — nothing to draw")
     av = rules["avoid"]
-    if len(av) != 2 or not 0 <= av[0] < av[1] <= 360:
-        errors.append(f"{where}: avoid is [from, to], from < to, on the hue circle")
+    if len(av) != 2 or not all(0 <= a <= 360 for a in av):
+        errors.append(f"{where}: avoid is [from, to] on the hue circle — it may wrap through 0°")
     else:
-        free = 360 - (av[1] - av[0])
+        free = free_arc(av[0], av[1])
         widest = max((HARMONIES[n][1] for n in ORDER if weights.get(n, 0) > 0), default=0)
         if free < widest:
             errors.append(
@@ -340,7 +354,7 @@ def jinja_body(rules: dict, salt: int, kelvin: dict | None = None) -> str:
         "{% set ns.done = true %}{% endif %}{% endif %}{% endfor %}",
         f"{{% set wr = {_j({n: list(HARMONIES[n]) for n in ORDER})}[ns.h] %}}",
         "{% set width = wr[0] + w * (wr[1] - wr[0]) %}",
-        f"{{% set start = {av1} + s * (360 + {av0} - {av1} - width) %}}",
+        f"{{% set start = {av1} + s * ({free_arc(av0, av1)} - width) %}}",
         "{% set mid = (start + width / 2) % 360 %}",
         f"{{% set cold = {COLD[0]} <= mid and mid <= {COLD[1]} %}}",
         f"{{% set accent = ((({WARM_ACCENT[0]} + a * {WARM_ACCENT[1]}) % 360) if cold "
@@ -1116,7 +1130,8 @@ def jinja_body_live(salt: int, kelvin: dict) -> str:
         "{% endif %}{% endif %}{% endfor %}",
         f"{{% set wr = {_j({n: list(HARMONIES[n]) for n in ORDER})}[ns.h] %}}",
         "{% set width = wr[0] + w * (wr[1] - wr[0]) %}",
-        "{% set start = av1 + s * (360 + av0 - av1 - width) %}",
+        "{% set free = ((av0 - av1) % 360) %}{% if free == 0 %}{% set free = 360 %}{% endif %}",
+        "{% set start = av1 + s * (free - width) %}",
         "{% set mid = (start + width / 2) % 360 %}",
         f"{{% set cold = {COLD[0]} <= mid and mid <= {COLD[1]} %}}",
         f"{{% set accent = ((({WARM_ACCENT[0]} + a * {WARM_ACCENT[1]}) % 360) if cold "
