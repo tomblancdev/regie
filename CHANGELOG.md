@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.25.2 — l'arc d'une palette gardée fait le tour (2026-09-05)
+
+Tom, sur l'anneau : « from 300 to 180 for example, but the selector being
+stopped at 0 it is impossible ». L'aide `width` d'une case plafonnait à 220°,
+la plus large harmonie que le jour puisse tirer — au-delà le cerveau refusait
+la valeur et la poignée semblait bloquée. Une palette faite à la main est
+aussi large qu'on veut : la largeur va de 5 à 360°, l'anneau suit.
+
 ## 0.25.1 — la fenêtre se dessine une fois (2026-09-05)
 
 Tom, sur le téléphone : « sliders and scroll on phone and many buttons seems

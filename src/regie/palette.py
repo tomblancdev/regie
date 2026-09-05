@@ -719,7 +719,9 @@ STORE = "k"  # a kept palette lives in a store; its NAME is the face, the number
 ACCENT_DWELL = 0.2  # the part of a roaming bulb's cycle spent on the accent (the walk's constant)
 STORE_NUMBERS = {  # key: (min, max, step, default)
     "start": (0, 360, 1, 200),
-    "width": (10, 220, 1, 120),
+    # the full circle: a palette made by hand is as wide as the hand wants — the
+    # 220° cap is the day's draw's (the libre harmony), not a kept palette's
+    "width": (5, 360, 1, 120),
     "accent": (0, 360, 1, 30),
     "saturation": (0, 100, 1, 90),
     "jitter": (0, JITTER_MAX, 1, 0),

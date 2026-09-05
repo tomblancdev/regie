@@ -453,7 +453,7 @@
         if (!drag) return;
         const ang = angleOf(e);
         if (drag === "lo") state.lo = ang;
-        else if (drag === "hi") { state.width = ((ang - state.lo) % 360 + 360) % 360 || 360; if (state.width < 10) state.width = 10; }
+        else if (drag === "hi") { state.width = ((ang - state.lo) % 360 + 360) % 360 || 360; if (state.width < 5) state.width = 5; }
         else if (drag === "accent") state.accent = ang;
         else if (drag === "avoid0") state.avoid[0] = Math.min(ang, state.avoid[1] - 10);
         else if (drag === "avoid1") state.avoid[1] = Math.max(ang, state.avoid[0] + 10);
