@@ -290,6 +290,107 @@ class House:
     def matter_only_fabric(self) -> bool:
         return bool((self.data.get("matter") or {}).get("only_fabric", False))
 
+    # --- Assist (pack assist, 0.31) --------------------------------------------
+    def assist(self) -> dict | None:
+        """Assist, wired: the LLM behind the doorman, the ceiling it lives on (a
+        watchman's word and the knock), what Assist sees, the pipeline — every
+        default filled, the lines from the labels unless the house writes its
+        own. None without the pack."""
+        if not self.has_pack("assist"):
+            return None
+        raw = self.data.get("assist") or {}
+        llm = raw.get("llm") or {}
+        ui = self.labels.ui
+        ceiling = None
+        if raw.get("ceiling"):
+            w = raw["ceiling"]["watchman"]
+            ceiling = {
+                "watchman": {
+                    "url": str(w["url"]).rstrip("/"),
+                    "target": w["target"],
+                    "token": w["token"],
+                    "every": int(w.get("every", 30)),
+                }
+            }
+        given = (raw.get("ceiling") or {}).get("replies") or {}
+        replies = {
+            k: given.get(k) or ui[f"porter_{k}"]
+            for k in ("waking", "unknown", "absent", "knock_failed", "no_agent")
+        }
+        expose = raw.get("expose") or {}
+        pipeline = raw.get("pipeline") or {}
+        return {
+            "llm": {
+                "platform": "ollama",
+                "url": str(llm.get("url", "")).rstrip("/"),
+                "model": llm.get("model", ""),
+                "instructions": llm.get("instructions") or ui.assist_instructions,
+                "context": int(llm.get("context", 8192)),
+                "history": int(llm.get("history", 20)),
+                "think": bool(llm.get("think", False)),
+            },
+            "ceiling": ceiling,
+            "replies": replies,
+            "expose": {
+                "lights": expose.get("lights", "roles"),
+                "scenes": bool(expose.get("scenes", True)),
+                "also": list(expose.get("also") or []),
+                "never": list(expose.get("never") or []),
+            },
+            "pipeline": {
+                "name": pipeline.get("name") or self.data["house"]["label"],
+                "prefer_local": bool(pipeline.get("prefer_local", True)),
+            },
+        }
+
+    def exposure_plan(self) -> tuple[set[str], set[str]]:
+        """What Assist should see and what it should not (pack assist): each
+        room's lights and its role groups, never a single bulb nor a place
+        group (`lights: roles`), the rooms' lights alone (`rooms`), or every
+        bulb too (`all`); the looks as their scripts under their labels
+        (`scenes`), never a walk's nor the room's default; a parking room's
+        bulbs never; the house's own switches (the mode, the palette of the
+        day); the house's `also` and `never` last. Returns (expose, hide) —
+        an id that does not exist yet is the conductor's to leave for later."""
+        a = self.assist() or {}
+        policy = a.get("expose") or {"lights": "roles", "scenes": True, "also": [], "never": []}
+        expose: set[str] = set()
+        hide: set[str] = set()
+        for area in self.areas:
+            aid = area["id"]
+            lights = [t for t in self.things_in(aid) if t["kind"] == "light"]
+            bulbs = {e for e in (self.entity(t) for t in lights) if e}
+            if self.parking(area):
+                hide |= bulbs
+                continue
+            if lights:
+                expose.add(f"light.{aid}_lights")
+                # the mesh's own room group wears the room's name: a light
+                # called « Le QG » beside the area « Le QG » confuses every agent
+                hide.add(f"light.{aid}")
+            for role in self.roles_in(aid):
+                target = self.role_target(area, role)
+                if not target or not target.get("group"):
+                    continue
+                (expose if policy["lights"] == "roles" else hide).update(target["entities"])
+                hide.update(f"light.{g['id']}" for g in self.layout_groups(area, role))
+            (expose if policy["lights"] == "all" else hide).update(bulbs)
+            for p in self.scene_plan(area):
+                if not p["renders"]:
+                    continue
+                sid = f"script.{aid}_{p['id']}"
+                (expose if policy["scenes"] else hide).add(sid)
+                hide.update({f"{sid}_drift", f"{sid}_life"})
+            hide.add(f"script.{aid}_default")
+        if self.has_pack("modes"):
+            expose.add("input_select.house_mode")
+        if self.has_pack("palette"):
+            expose.add("input_boolean.house_palette")
+        expose |= set(policy["also"])
+        hide |= set(policy["never"])
+        expose -= set(policy["never"])
+        return expose, hide - expose
+
     def plan(self) -> dict | None:
         """THE PLAN (0.13): the frame the rooms are drawn in, and the drawing
         under the walls — None when the house declares none. A house that
@@ -662,6 +763,9 @@ class House:
             ]
         if "oidc" in self.data:
             names.append("oidc_client_secret")
+        assist = self.assist()
+        if assist and assist["ceiling"]:
+            names.append(assist["ceiling"]["watchman"]["token"])
         return names
 
     # --- the vocabulary, by role ----------------------------------------------
@@ -2082,6 +2186,11 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                 f"the house writes {word} but pack {pack!r} is not enabled — nothing renders them"
             )
 
+    # Assist (0.31): the pack needs its block (the block without the pack is a
+    # root key no fragment claims — the strict schema refuses it first)
+    if house.has_pack("assist") and not data.get("assist"):
+        errors.append("pack assist needs an `assist:` block — `llm: { url, model }` at least")
+
     if not house.labels.found:
         warnings.append(
             f"no labels for lang {house.labels.lang!r} "
@@ -2122,6 +2231,9 @@ def load_house(path: Path) -> House:
     loose = copy.deepcopy(schema)
     loose["$defs"]["thing"]["additionalProperties"] = True
     loose["$defs"]["area"]["additionalProperties"] = True
+    # and, since 0.31, a top-level block a pack owns (`assist:`) — pass 2
+    # refuses what no pack claims
+    loose["additionalProperties"] = True
     _validate(loose, data, path)
 
     profile = load_profile(data["profile"])

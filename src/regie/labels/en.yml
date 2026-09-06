@@ -54,6 +54,14 @@ ui:
   all_off: All off
   silent: went silent
   floor: Floor
+  # Assist (0.31): the doorman and its lines
+  porter: The Porter
+  porter_waking: "I am waking the server — give it two minutes and ask me again."
+  porter_unknown: "The server does not answer, and I cannot tell whether it sleeps."
+  porter_absent: "The server is awake but does not answer."
+  porter_knock_failed: "I could not wake the server."
+  porter_no_agent: "No assistant is connected to the house yet."
+  assist_instructions: "Answer in complete sentences. When you call a tool, name colours in English (blue, red, warm white), never as a colour temperature."
   # the vocabulary (0.4): the signals, the modes, the mouth
   house: House
   # the palette (0.20)

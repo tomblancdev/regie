@@ -1,0 +1,24 @@
+# Pack `assist` — the house's voice assistant, wired (0.31). Home Assistant's
+# Assist answers commands from its own sentences; what the sentences cannot
+# answer goes to an LLM. In this house the LLM may live on a host that SLEEPS
+# (the ceiling tier of docs/ai.md: an address, a watchman that says whether it
+# is up, a knock that raises it), so the pipeline's agent is not the LLM but
+# LE PORTIER — the doorman: a conversation entity of the product's own
+# component (base/components/regie) that hands the turn to the LLM's agent
+# when the host is awake, says the house's line and knocks when it sleeps,
+# and asks anyway when nobody can tell. The pack renders the ceiling's sensor
+# (binary_sensor.tower_awake, from the watchman's word — unavailable when it
+# cannot be read, never "off"), the knock (rest_command.knock_ceiling) and the
+# doorman's settings; `apply` makes the LLM's config entry and its agent, the
+# pipeline in the house's language with *prefer local* on, and decides what
+# Assist SEES (the rooms' lights by role, the looks under their labels — never
+# a single bulb, never a walk's script).
+name: assist
+summary: Assist — Le Portier (conversation.porter) in front of the house's LLM, tower_awake from a watchman, the knock, what Assist sees, the pipeline in the house's language
+kinds: []
+services: []
+schema: schema.json
+templates:
+  - { src: packages/assist.yaml.j2, dst: home-assistant/packages/assist.yaml }
+  - { src: packages/porter.yaml.j2, dst: home-assistant/packages/porter.yaml }
+cards: []

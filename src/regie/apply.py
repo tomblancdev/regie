@@ -23,6 +23,7 @@ conductor back in and mints it again — nothing is typed at a screen."""
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import re
@@ -37,9 +38,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import HouseError
-from .flows import PERSON_FIELDS, Outcome, fill_form, walk
+from .flows import PERSON_FIELDS, Outcome, fill_form, walk, walk_subentry
 from .ha import HomeAssistant
-from .host import STATE
+from .host import STATE, read_state, write_state
 from .house import House
 from .otbr import Otbr
 from .render import MANIFEST
@@ -50,6 +51,35 @@ MATTER_URL = "ws://localhost:5580/ws"  # the server beside the brain (pack matte
 HTTP_META = ("created_at", "error", "error_message")
 ENTRIES = "/api/config/config_entries/entry"
 MARKS = {"ok": "=", "changed": "+", "would": "?", "hand": "!", "waiting": "~"}
+# an Assist pipeline's fields (Home Assistant 2026.8, assist_pipeline/pipeline/create
+# wants every one of them; the speech engines are None until pack voice fills them)
+PIPELINE_FIELDS = (
+    "conversation_engine",
+    "conversation_language",
+    "language",
+    "name",
+    "stt_engine",
+    "stt_language",
+    "tts_engine",
+    "tts_language",
+    "tts_voice",
+    "wake_word_entity",
+    "wake_word_id",
+    "prefer_local_intents",
+)
+PORTER = "conversation.porter"  # the doorman's entity (base/components/regie)
+
+
+def _stamp(data: dict) -> str:
+    """A digest of what the house asked — the brain hands a subentry's data
+    back to nobody, so the conductor remembers what it set (.regie/assist.json)."""
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _joined(base: str | None, line: str) -> str:
+    """A prompt: Home Assistant's own text, then the house's line."""
+    base = (base or "").rstrip()
+    return f"{base}\n\n{line}" if base else line
 
 
 # a unique id in a rendered package: `unique_id: regie_x` (bare or quoted)
@@ -1445,6 +1475,10 @@ class Conductor:
                 if uid not in gone:
                     continue
                 why = "a look the house no longer has"
+            elif e.get("platform") == "regie":
+                # the product's own component (0.31): its entities live with
+                # the component, no package names them — never a ghost
+                continue
             elif not uid.startswith("regie_") or uid in rendered:
                 continue
             else:
@@ -1640,6 +1674,211 @@ class Conductor:
         if reseed and not self.check:
             seed(ws, self.house, self.root, link)
 
+    # --- Assist (pack assist, 0.31) --------------------------------------------
+    def assist_models(self, url: str) -> set[str] | None:
+        """What the LLM server holds (Ollama's /api/tags) — None when it does
+        not answer. Asked before the agent is made: the brain would otherwise
+        DOWNLOAD a missing model through itself, gigabytes on the wrong host."""
+        try:
+            with urllib.request.urlopen(f"{url}/api/tags", timeout=5) as r:
+                data = json.load(r)
+        except (OSError, ValueError):
+            return None
+        return {m.get("name") or m.get("model") or "" for m in data.get("models") or []}
+
+    def assist(self, ws) -> None:
+        a = self.house.assist()
+        if not a:
+            return
+        self.assist_agent(ws, a["llm"])
+        self.assist_exposure(ws)
+        self.assist_pipeline(ws, a["pipeline"])
+
+    def assist_agent(self, ws, llm: dict) -> None:
+        """The LLM's config entry (its title is its url) and, under it, the
+        conversation agent — a SUBENTRY the house's answers fill. The brain
+        hands a subentry's data back to nobody, so a stamp of the answers says
+        whether it must be made again; the prompt is Home Assistant's own text
+        (the form's suggestion, remembered from the first time) plus the
+        house's line."""
+        url, platform = llm["url"], llm["platform"]
+        entry_name, agent_name = f"entry {platform}", f"agent {platform}"
+        have = [e for e in self.domain_entries(platform) if e.get("title") == url]
+        if have:
+            self.step(entry_name, "ok", f"the LLM at {url}")
+        else:
+            if self.check:
+                self.step(entry_name, "changed", f"set up the LLM at {url}")
+                self.step(agent_name, "changed", f"set up {llm['model']} with the Assist API")
+                return
+            out = walk(self.ha, platform, {"url": url})
+            if out.state == "waiting":
+                self.step(entry_name, "waiting", f"{url} does not answer — asleep? {out.detail}")
+                return
+            if out.state != "changed":
+                raise HouseError(f"{platform}: {out.detail}")
+            self.step(entry_name, "changed", f"set up the LLM at {url}")
+            have = [e for e in self.domain_entries(platform) if e.get("title") == url]
+            if not have:
+                raise HouseError(f"{platform}: the entry at {url} was made and cannot be found")
+        entry_id = have[0]["entry_id"]
+        answers: dict = {
+            "model": llm["model"],
+            "llm_hass_api": ["assist"],
+            "num_ctx": llm["context"],
+            "max_history": llm["history"],
+            "keep_alive": -1,  # the model stays loaded as long as its host lives
+            "think": llm["think"],
+        }
+        stamp = _stamp({**answers, "instructions": llm["instructions"]})
+        subs = ws.call("config_entries/subentries/list", entry_id=entry_id) or []
+        agents = [s for s in subs if s.get("subentry_type") == "conversation"]
+        remembered = read_state(self.root, "assist.json")
+        if agents and remembered.get("agent") == stamp:
+            self.step(agent_name, "ok", f"{llm['model']} — {agents[0].get('title')}")
+            return
+        what = "update" if agents else "set up"
+        if self.check:
+            self.step(agent_name, "changed", f"{what} {llm['model']} with the Assist API")
+            return
+        models = self.assist_models(url)
+        if models is None:
+            self.step(
+                agent_name, "waiting", f"{url} does not answer — tried again at the next apply"
+            )
+            return
+        if llm["model"] not in models:
+            self.step(
+                agent_name,
+                "waiting",
+                f"{llm['model']} is not on the server ({', '.join(sorted(models)) or 'nothing'}): "
+                "pull it there first — Home Assistant would download it through the brain",
+            )
+            return
+
+        def prompt(field: dict) -> str:
+            suggested = (field.get("description") or {}).get("suggested_value")
+            base = remembered.get("prompt_base") or suggested
+            remembered["prompt_base"] = base
+            return _joined(base, llm["instructions"])
+
+        answers["prompt"] = prompt
+        out = walk_subentry(
+            self.ha,
+            entry_id,
+            "conversation",
+            answers,
+            subentry_id=agents[0]["subentry_id"] if agents else None,
+            what=f"{platform} conversation",
+        )
+        if out.state != "changed":
+            raise HouseError(f"{platform} conversation: {out.detail}")
+        remembered["agent"] = stamp
+        write_state(self.root, "assist.json", remembered)
+        self.step(agent_name, "changed", f"{what} {llm['model']} with the Assist API")
+
+    def assist_exposure(self, ws) -> None:
+        """What Assist sees: the house's plan against the brain's list, for
+        the entities that exist — a look not rendered yet waits for the next
+        apply. A coordinator's permit-join switch is hidden by the product's
+        own rule: a mesh's door is nobody's voice command."""
+        listed = ws.call("homeassistant/expose_entity/list") or {}
+        current = listed.get("exposed_entities") or {}
+        exposed = {
+            e
+            for e, v in current.items()
+            if ((v or {}).get("conversation") or {}).get("should_expose")
+        }
+        known = {e["entity_id"] for e in ws.call("config/entity_registry/list") or []}
+        expose, hide = self.house.exposure_plan()
+        hide |= {e for e in exposed if "permit_join" in e}
+        on = sorted((expose - exposed) & known)
+        off = sorted(hide & exposed)
+        unborn = sorted(expose - exposed - known)
+        later = f"; {len(unborn)} not born yet ({', '.join(unborn[:3])}…)" if unborn else ""
+        name = "assist exposure"
+        if not on and not off:
+            self.step(name, "ok", f"{len(exposed)} entities{later}")
+            return
+        self.step(name, "changed", f"+{len(on)} −{len(off)} ({len(exposed)} before){later}")
+        if self.check:
+            return
+        if on:
+            ws.call(
+                "homeassistant/expose_entity",
+                assistants=["conversation"],
+                entity_ids=on,
+                should_expose=True,
+            )
+        if off:
+            ws.call(
+                "homeassistant/expose_entity",
+                assistants=["conversation"],
+                entity_ids=off,
+                should_expose=False,
+            )
+
+    def porter_entity(self, ws) -> str | None:
+        """The doorman's entity, by its unique id in the registry — None while
+        the component has not started (the first apply after the render that
+        laid it down restarts the brain first; the entity is there by then)."""
+        for e in ws.call("config/entity_registry/list") or []:
+            if e.get("platform") == "regie" and e.get("unique_id") == "regie_porter":
+                return e["entity_id"]
+        status, _ = self.ha.get(f"/api/states/{PORTER}")
+        return PORTER if status == 200 else None
+
+    def assist_pipeline(self, ws, p: dict) -> None:
+        """The house's pipeline — in its language, the doorman as its agent,
+        *prefer local* as declared, preferred. The speech engines are left as
+        they are (None until pack voice fills them); Home Assistant's own
+        English pipeline is left where it is."""
+        name = "assist pipeline"
+        agent = self.porter_entity(ws)
+        if agent is None:
+            self.step(name, "waiting", f"the porter is not up yet ({PORTER}) — the next apply")
+            return
+        lang = self.house.data["house"].get("lang", "en")
+        wanted = {
+            "name": p["name"],
+            "language": lang,
+            "conversation_engine": agent,
+            "conversation_language": lang,
+            "prefer_local_intents": p["prefer_local"],
+        }
+        local = "on" if p["prefer_local"] else "off"
+        listed = ws.call("assist_pipeline/pipeline/list") or {}
+        pipes = listed.get("pipelines") or []
+        preferred = listed.get("preferred_pipeline")
+        mine = next((x for x in pipes if x.get("name") == p["name"]), None)
+        if mine is None:
+            self.step(
+                name,
+                "changed",
+                f"« {p['name']} » ({lang}, {agent}, prefer local {local}), preferred",
+            )
+            if self.check:
+                return
+            body = {k: None for k in PIPELINE_FIELDS}
+            body.update(wanted)
+            made = ws.call("assist_pipeline/pipeline/create", **body)
+            ws.call("assist_pipeline/pipeline/set_preferred", pipeline_id=made["id"])
+            return
+        moved = {k: v for k, v in wanted.items() if mine.get(k) != v}
+        if not moved and preferred == mine["id"]:
+            self.step(name, "ok", f"« {p['name']} » ({lang}, {agent}, prefer local {local})")
+            return
+        said = ", ".join(sorted(moved)) or "not preferred"
+        self.step(name, "changed", f"« {p['name']} »: {said}")
+        if self.check:
+            return
+        if moved:
+            body = {k: mine.get(k) for k in PIPELINE_FIELDS}
+            body.update(wanted)
+            ws.call("assist_pipeline/pipeline/update", pipeline_id=mine["id"], **body)
+        if preferred != mine["id"]:
+            ws.call("assist_pipeline/pipeline/set_preferred", pipeline_id=mine["id"])
+
     # --- the run ----------------------------------------------------------------
     def run(self) -> list[Step]:
         if not self.onboarding():
@@ -1671,6 +1910,7 @@ class Conductor:
             self.skin(ws)
             self.resources(ws)
             self.workbench(ws)
+            self.assist(ws)
         return self.steps
 
 

@@ -21,7 +21,7 @@ house:
     name: temoin                 # what Home Assistant calls it (default: the library's name)
     dark: { lit: "#f0a92a" }     # this house's own filament; everything else is Nuit's
 profile: ct
-packs: [modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, matter, palette, chalet]
+packs: [modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, matter, palette, assist, chalet]
 # the family's controls (W3b): the settings view, the phones driving
 # home/away (behind a visible kill-switch), lights back from power taking
 # the default look; the ne-répond-plus alerts stay on here
@@ -62,6 +62,18 @@ thread:
   channel: 15
   border_routers:
     - { id: main, thing: coordinator_main, port: 8080 }
+# Assist, wired (pack assist, 0.31): the LLM behind Le Portier — Home
+# Assistant's own ollama integration at an address, the model ALREADY on that
+# server; the ceiling it lives on — a host that sleeps, a watchman that says
+# whether it is up (GET /api/targets/<t> → up) and takes the knock (POST
+# …/wake with the bearer the secret `watchman_token` holds); what Assist sees
+# (the defaults: the rooms' lights by role, the looks, never a bulb); the
+# pipeline in the house's language, the doorman as its agent, prefer local on.
+assist:
+  llm: { url: "http://192.0.2.50:11434", model: "example:9b" }
+  ceiling:
+    watchman: { url: "http://192.0.2.60:8080", target: llm, token: watchman_token }
+    replies: { waking: "Je réveille la tour — compte deux minutes et redemande-moi." }
 mqtt:
   host: 192.0.2.5
 # THE PLAN (0.13): the frame every room draws itself in - the flat's outer

@@ -58,6 +58,17 @@ ui:
   all_off: Tout éteindre
   silent: ne répond plus
   floor: Étage
+  # Assist (0.31): the doorman and its lines — a house writes its own
+  # (assist.ceiling.replies); « le serveur » here, never a house's word
+  porter: Le Portier
+  porter_waking: "Je réveille le serveur — compte deux minutes et redemande-moi."
+  porter_unknown: "Le serveur ne répond pas, et je ne sais pas s'il dort."
+  porter_absent: "Le serveur est réveillé mais ne répond pas."
+  porter_knock_failed: "Je n'ai pas réussi à réveiller le serveur."
+  porter_no_agent: "Aucune IA n'est encore branchée sur la maison."
+  # the one line added to Home Assistant's own prompt — English, as the prompt
+  # is; the language the answers take and the colour names tool calls need
+  assist_instructions: "Answer in French, in complete sentences. When you call a tool, name colours in English (blue, red, warm white), never as a colour temperature."
   # the vocabulary (0.4): the signals, the modes, the mouth
   house: Maison
   # the palette (0.20)

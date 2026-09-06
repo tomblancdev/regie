@@ -56,6 +56,9 @@ RELOAD_DOMAINS = {
     "scene": "scene/reload",
     "automation": "automation/reload",
     "script": "script/reload",
+    # pack assist (0.31): the ceiling's sensor and the knock
+    "rest": "rest/reload",
+    "rest_command": "rest_command/reload",
 }
 # a domain's entries carrying `platform:` (light: - platform: group)
 RELOAD_PLATFORMS = {"group": "group/reload", "template": "template/reload"}

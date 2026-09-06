@@ -112,6 +112,15 @@ def test_what_a_changed_brain_file_asks(tmp_path):
     assert list(brain_asks("home-assistant/packages/tpl.yaml", tmp_path, dash)) == [
         "template/reload"
     ]
+    # 0.31: the ceiling's sensor and the knock reload; the doorman's own block
+    # (`regie:`, a component's) is read once
+    (pk / "assist.yaml").write_text("rest:\n  - resource: x\nrest_command:\n  knock: { url: y }\n")
+    (pk / "porter.yaml").write_text("regie:\n  porter: { llm: ollama }\n")
+    assert sorted(brain_asks("home-assistant/packages/assist.yaml", tmp_path, dash)) == [
+        "rest/reload",
+        "rest_command/reload",
+    ]
+    assert list(brain_asks("home-assistant/packages/porter.yaml", tmp_path, dash)) == [RESTART]
     assert list(brain_asks("home-assistant/packages/broken.yaml", tmp_path, dash)) == [RESTART]
     assert list(brain_asks("home-assistant/packages/gone.yaml", tmp_path, dash)) == [RESTART]
     assert list(brain_asks("home-assistant/themes/nuit.yaml", tmp_path, dash)) == [
@@ -280,14 +289,16 @@ def test_check_plans_and_touches_nothing(witness, rendered_fresh, tmp_path, pinn
     result = up(witness, rendered_fresh, units_dir, runner, fetcher=lambda url: pinned)
     assert result.check and "would place 4" in result.summary()
     assert not units_dir.exists() and not runner.images
-    assert not (rendered_fresh / "home-assistant/custom_components").exists()
+    # the fetched component is not laid down; the product's own (regie, 0.31)
+    # is the render's, already there
+    assert not (rendered_fresh / "home-assistant/custom_components/auth_oidc").exists()
 
 
 def test_a_wrong_digest_installs_nothing(witness, rendered_fresh, tmp_path, pinned):
     bad = fake_zip(with_folder=True)  # different bytes, wrong digest
     with pytest.raises(HouseError, match="sha256"):
         up(witness, rendered_fresh, tmp_path / "s", FakeRunner(), fetcher=lambda url: bad)
-    assert not (rendered_fresh / "home-assistant/custom_components").exists()
+    assert not (rendered_fresh / "home-assistant/custom_components/auth_oidc").exists()
 
 
 def test_a_component_pinned_by_the_product_is_pinned_by_digest():

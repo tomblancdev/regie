@@ -1,0 +1,77 @@
+{
+  "properties": {
+    "assist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["llm"],
+      "description": "Assist, wired (pack assist, 0.31): the LLM behind the doorman, the ceiling it lives on, what Assist sees, the pipeline",
+      "properties": {
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "model"],
+          "description": "the house's LLM, through Home Assistant's own `ollama` integration: a config entry at `url`, a conversation agent on `model` with the Assist API",
+          "properties": {
+            "url": { "type": "string", "pattern": "^https?://", "description": "the LLM server's door (an address, never a host name the house does not resolve)" },
+            "model": { "type": "string", "minLength": 1, "description": "the model the agent runs — it must ALREADY be on the server: apply refuses to let Home Assistant download gigabytes through the brain" },
+            "instructions": { "type": "string", "description": "one line appended to Home Assistant's own prompt (default: the labels' — full sentences in the house's language, colours by their English name in tool calls)" },
+            "context": { "type": "integer", "minimum": 2048, "default": 8192, "description": "the context window (tokens)" },
+            "history": { "type": "integer", "minimum": 0, "default": 20, "description": "how many turns the agent remembers in a conversation" },
+            "think": { "type": "boolean", "default": false, "description": "let a thinking model think before answering (slower; off for a house)" }
+          }
+        },
+        "ceiling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["watchman"],
+          "description": "the LLM lives on a host that sleeps: a watchman says whether it is up and takes the knock (Le Veilleur's contract: GET /api/targets/<t> answers `up`, POST …/wake with a bearer raises it)",
+          "properties": {
+            "watchman": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "target", "token"],
+              "properties": {
+                "url": { "type": "string", "pattern": "^https?://", "description": "the watchman's door" },
+                "target": { "$ref": "#/$defs/id", "description": "the target the LLM's host is, in the watchman's words" },
+                "token": { "$ref": "#/$defs/id", "description": "the NAME of the secret holding the watchman's client token (the value never enters this file); the brain reads it as `<name>_bearer`" },
+                "every": { "type": "integer", "minimum": 5, "default": 30, "description": "seconds between two reads of the watchman" }
+              }
+            },
+            "replies": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "the doorman's lines, in the house's language (defaults: the labels')",
+              "properties": {
+                "waking": { "type": "string", "description": "the host sleeps: the knock is sent, this is said" },
+                "unknown": { "type": "string", "description": "the watchman cannot be read and the LLM did not answer" },
+                "absent": { "type": "string", "description": "the host is up and the LLM did not answer" },
+                "knock_failed": { "type": "string", "description": "the knock itself failed" },
+                "no_agent": { "type": "string", "description": "no LLM agent exists in the brain yet" }
+              }
+            }
+          }
+        },
+        "expose": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "what Assist sees, beyond Home Assistant's own defaults",
+          "properties": {
+            "lights": { "enum": ["roles", "rooms", "all"], "default": "roles", "description": "roles = each room's lights and its role groups (« Le QG — Plafond »), never a single bulb; rooms = the rooms' lights alone; all = every bulb too" },
+            "scenes": { "type": "boolean", "default": true, "description": "the rooms' looks as their scripts, under their labels (« Cinéma »)" },
+            "also": { "type": "array", "items": { "type": "string" }, "description": "entity ids to expose on top" },
+            "never": { "type": "array", "items": { "type": "string" }, "description": "entity ids to keep out (the permit-join switch of a coordinator is out by the product's own rule)" }
+          }
+        },
+        "pipeline": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "the Assist pipeline the house speaks through (the preferred one)",
+          "properties": {
+            "name": { "type": "string", "description": "its name (default: the house's label)" },
+            "prefer_local": { "type": "boolean", "default": true, "description": "the sentences answer first; the doorman sees only what they cannot — the one sanctioned floor-to-ceiling fallthrough" }
+          }
+        }
+      }
+    }
+  }
+}

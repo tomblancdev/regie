@@ -43,6 +43,14 @@ EXPECTED = {
     "home-assistant/packages/when_living.yaml",
     "home-assistant/packages/when_hall.yaml",
     "home-assistant/packages/hands_living.yaml",
+    # Assist (0.31): the ceiling's sensor + the knock, the doorman's settings,
+    # the product's own component copied as it is
+    "home-assistant/packages/assist.yaml",
+    "home-assistant/packages/porter.yaml",
+    "home-assistant/custom_components/regie/manifest.json",
+    "home-assistant/custom_components/regie/__init__.py",
+    "home-assistant/custom_components/regie/porter.py",
+    "home-assistant/custom_components/regie/conversation.py",
     "mosquitto/config/mosquitto.conf",
     "mosquitto/config/acl",
     "mosquitto/config/passwd",
@@ -104,6 +112,7 @@ def test_home_assistant_configuration(rendered):
     assert secrets == {
         "mqtt_password": "example-home-password",
         "oidc_client_secret": "example-oidc-client-secret",
+        "watchman_token_bearer": "Bearer example-watchman-token",  # pack assist (0.31)
     }
 
 

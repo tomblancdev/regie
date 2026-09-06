@@ -18,6 +18,8 @@ from regie.ha import HomeAssistant
 from regie.house import load_house
 
 FLOWS = "/api/config/config_entries/flow"
+SUBFLOWS = "/api/config/config_entries/subentries/flow"
+HA_PROMPT = "You are a voice assistant for Home Assistant.\nAnswer in plain text."
 OAUTH = ("home_connect", "smartthings")
 IOT_CLASS = {
     "home_connect": "cloud_push",
@@ -132,6 +134,73 @@ class FakeHA(HomeAssistant):
             "default": default,
         }
         self.restarts = 0
+        # Assist (0.31): the LLM server's answer, its entry's subentries, what
+        # Assist sees, the pipelines (Home Assistant's own English one at birth)
+        self.ollama_down = False
+        self.subentries: dict[str, list] = {}
+        self.exposed: dict[str, dict] = {}
+        self.pipelines: list[dict] = [
+            {
+                "id": "p0",
+                "name": "Home Assistant",
+                "language": "en",
+                "conversation_engine": "conversation.home_assistant",
+                "conversation_language": "en",
+                "stt_engine": None,
+                "stt_language": None,
+                "tts_engine": None,
+                "tts_language": None,
+                "tts_voice": None,
+                "wake_word_entity": None,
+                "wake_word_id": None,
+                "prefer_local_intents": False,
+            }
+        ]
+        self.preferred = "p0"
+
+    # --- the subentry flows (0.31): an LLM entry's conversation agent ---
+    def _sub_form(self, fid, flow):
+        entry_id, _stype = flow["handler"]
+        current = next(
+            (
+                s
+                for s in self.subentries.get(entry_id, [])
+                if s["subentry_id"] == flow.get("subentry_id")
+            ),
+            None,
+        )
+        suggested = (current or {}).get("_data", {}).get("prompt") or HA_PROMPT
+        schema = [
+            {"name": "model", "required": True, "default": "qwen3:4b-instruct"},
+            {"name": "prompt", "optional": True, "description": {"suggested_value": suggested}},
+            {"name": "llm_hass_api", "optional": True},
+            {"name": "num_ctx", "optional": True},
+            {"name": "max_history", "optional": True},
+            {"name": "keep_alive", "optional": True},
+            {"name": "think", "optional": True},
+        ]
+        if current is None:
+            schema.insert(0, {"name": "name", "required": True, "default": "Ollama Conversation"})
+        return self._form(fid, "set_options", schema)
+
+    def _sub_continue(self, fid, flow, body):
+        entry_id, stype = flow["handler"]
+        self.flows.pop(fid, None)
+        if flow.get("subentry_id"):
+            for s in self.subentries.get(entry_id, []):
+                if s["subentry_id"] == flow["subentry_id"]:
+                    s["_data"] = dict(body)
+            return 200, {"type": "abort", "flow_id": fid, "reason": "reconfigure_successful"}
+        self.n += 1
+        sub = {
+            "subentry_id": f"s{self.n}",
+            "subentry_type": stype,
+            "title": body.get("name", "Ollama Conversation"),
+            "unique_id": None,
+            "_data": dict(body),
+        }
+        self.subentries.setdefault(entry_id, []).append(sub)
+        return 200, {"type": "create_entry", "flow_id": fid, "title": sub["title"]}
 
     # --- the flows, per handler ---
     def _entry(self, domain, title, data):
@@ -199,6 +268,12 @@ class FakeHA(HomeAssistant):
                 self.flows.pop(fid)
                 return 200, {"type": "abort", "flow_id": fid, "reason": "already_configured"}
             return self._form(fid, "user", [{"name": "url", "required": True}])
+        if d == "ollama":
+            return self._form(
+                fid,
+                "user",
+                [{"name": "url", "required": True}, {"name": "api_key", "optional": True}],
+            )
         if d == "ipp":
             return self._form(
                 fid,
@@ -269,6 +344,15 @@ class FakeHA(HomeAssistant):
                     fid, "user", [{"name": "url", "required": True}], {"base": "cannot_connect"}
                 )
             return self._create(fid, flow, "Open Thread Border Router", body)
+        if d == "ollama":
+            if any(e["_data"].get("url") == body.get("url") for e in self.entries.get(d, [])):
+                self.flows.pop(fid)
+                return 200, {"type": "abort", "flow_id": fid, "reason": "already_configured"}
+            if self.ollama_down:
+                return self._form(
+                    fid, "user", [{"name": "url", "required": True}], {"base": "cannot_connect"}
+                )
+            return self._create(fid, flow, body["url"], body)  # the entry's title is its url
         if d == "heos":
             if body.get("host") in self.off:
                 return self._form(
@@ -494,6 +578,11 @@ class FakeHA(HomeAssistant):
                 {k: v for k, v in e.items() if k != "_data"}
                 for e in self.entries.get(path.split("=")[1], [])
             ]
+        if path.startswith(SUBFLOWS + "/"):
+            fid = path.rsplit("/", 1)[1]
+            if fid not in self.flows:
+                return 404, {"message": "Invalid flow specified"}
+            return self._sub_form(fid, self.flows[fid])
         if path.startswith(FLOWS + "/"):
             fid = path.rsplit("/", 1)[1]
             if fid not in self.flows:
@@ -547,6 +636,21 @@ class FakeHA(HomeAssistant):
                     value = str(body["value"])
                 self.states[body["entity_id"]] = value
             return 200, []
+        if path == SUBFLOWS:
+            self.n += 1
+            fid = f"subflow{self.n}"
+            entry_id = body["handler"][0]
+            assert any(e["entry_id"] == entry_id for es in self.entries.values() for e in es)
+            self.flows[fid] = {
+                "handler": list(body["handler"]),
+                "subentry_id": body.get("subentry_id"),
+            }
+            return self._sub_form(fid, self.flows[fid])
+        if path.startswith(SUBFLOWS + "/"):
+            fid = path.rsplit("/", 1)[1]
+            if fid not in self.flows:
+                return 404, {"message": "Invalid flow specified"}
+            return self._sub_continue(fid, self.flows[fid], body)
         if path == FLOWS:
             self.n += 1
             fid = f"flow{self.n}"
@@ -785,6 +889,43 @@ class FakeHA(HomeAssistant):
             raise AssertionError(payload)
         if type_ == "lovelace/resources/delete":
             self.resources = [r for r in self.resources if r["id"] != payload["resource_id"]]
+            return None
+        # Assist (0.31)
+        if type_ == "config_entries/subentries/list":
+            return [
+                {k: v for k, v in s.items() if k != "_data"}
+                for s in self.subentries.get(payload["entry_id"], [])
+            ]
+        if type_ == "homeassistant/expose_entity/list":
+            return {"exposed_entities": {k: dict(v) for k, v in self.exposed.items()}}
+        if type_ == "homeassistant/expose_entity":
+            assert payload["assistants"] == ["conversation"] and payload["entity_ids"]
+            for eid in payload["entity_ids"]:
+                self.exposed.setdefault(eid, {})["conversation"] = {
+                    "should_expose": payload["should_expose"]
+                }
+            return None
+        if type_ == "assist_pipeline/pipeline/list":
+            return {
+                "pipelines": [dict(p) for p in self.pipelines],
+                "preferred_pipeline": self.preferred,
+            }
+        if type_ == "assist_pipeline/pipeline/create":
+            missing = [k for k in self.pipelines[0] if k not in payload and k != "id"]
+            assert not missing, f"the whole pipeline, not a patch: {missing}"
+            self.n += 1
+            item = {"id": f"p{self.n}", **payload}
+            self.pipelines.append(item)
+            return dict(item)
+        if type_ == "assist_pipeline/pipeline/update":
+            for p in self.pipelines:
+                if p["id"] == payload["pipeline_id"]:
+                    p.update({k: v for k, v in payload.items() if k != "pipeline_id"})
+                    return dict(p)
+            raise AssertionError(payload)
+        if type_ == "assist_pipeline/pipeline/set_preferred":
+            assert any(p["id"] == payload["pipeline_id"] for p in self.pipelines)
+            self.preferred = payload["pipeline_id"]
             return None
         raise AssertionError(type_)
 
@@ -2017,3 +2158,171 @@ def test_a_look_the_house_lost_leaves_no_ghost_script(witness, secrets, rendered
     ids = {e["entity_id"] for e in ha.entities}
     assert "script.living_fantome" not in ids
     assert {"script.living_today", "script.mine"} <= ids
+
+
+# --- Assist (pack assist, 0.31) ------------------------------------------------------
+PLAN_LIGHTS = (
+    "light.living_lights",
+    "light.living_main",
+    "light.living_lamp",
+    "light.living_ceiling",
+    "light.living_floor_lamp",
+    "light.living",
+    "script.living_cinema",
+    "script.living_evening_drift",
+    "switch.zigbee2mqtt_bridge_permit_join",
+    "input_select.house_mode",
+)
+
+
+def furnished_for_assist(ha):
+    """The brain after the render's restart: the porter's entity is up, the
+    lights and looks the plan names exist, Home Assistant's own defaults
+    exposed every bulb, the mesh's room group and the permit-join switch."""
+    ha.entities.append(
+        {"entity_id": "conversation.porter", "platform": "regie", "unique_id": "regie_porter"}
+    )
+    for eid in PLAN_LIGHTS:
+        ha.entities.append({"entity_id": eid, "platform": "group", "unique_id": eid})
+    for eid in (
+        "light.living_ceiling",
+        "light.living_floor_lamp",
+        "light.living",
+        "light.living_lights",
+        "switch.zigbee2mqtt_bridge_permit_join",
+    ):
+        ha.exposed[eid] = {"conversation": {"should_expose": True}}
+
+
+def seen(ha):
+    return {e for e, v in ha.exposed.items() if v["conversation"]["should_expose"]}
+
+
+def details(steps):
+    return {s.name: s.detail for s in steps}
+
+
+@pytest.fixture
+def models(monkeypatch):
+    """The LLM server holds the witness's model (and one more)."""
+    held = {"example:9b", "other:1b"}
+    monkeypatch.setattr("regie.apply.Conductor.assist_models", lambda self, url: held)
+    return held
+
+
+def test_assist_the_agent_what_it_sees_and_the_pipeline(witness, secrets, tmp_path, models):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["entry ollama"] == "changed" and st["agent ollama"] == "changed"
+    (entry,) = ha.entries["ollama"]
+    assert entry["_data"] == {"url": "http://192.0.2.50:11434"}
+    (agent,) = ha.subentries[entry["entry_id"]]
+    assert agent["subentry_type"] == "conversation" and agent["title"] == "Ollama Conversation"
+    data = agent["_data"]
+    assert data["model"] == "example:9b" and data["llm_hass_api"] == ["assist"]
+    assert data["num_ctx"] == 8192 and data["max_history"] == 20
+    assert data["keep_alive"] == -1 and data["think"] is False
+    # the prompt: Home Assistant's own text, then the house's line
+    assert data["prompt"] == HA_PROMPT + "\n\n" + witness.assist()["llm"]["instructions"]
+    # what Assist sees: the role groups and the looks in, the bulbs, the mesh's
+    # room group, the walk and the permit-join switch out
+    assert st["assist exposure"] == "changed"
+    assert {
+        "light.living_lights",
+        "light.living_main",
+        "light.living_lamp",
+        "script.living_cinema",
+        "input_select.house_mode",
+    } <= seen(ha)
+    assert not seen(ha) & {
+        "light.living_ceiling",
+        "light.living_floor_lamp",
+        "light.living",
+        "switch.zigbee2mqtt_bridge_permit_join",
+        "script.living_evening_drift",
+    }
+    # the pipeline: the house's, in its language, the porter, prefer local,
+    # preferred — Home Assistant's own English one left where it is
+    assert st["assist pipeline"] == "changed"
+    mine = next(p for p in ha.pipelines if p["name"] == "Maison témoin")
+    assert mine["language"] == "fr" and mine["conversation_language"] == "fr"
+    assert mine["conversation_engine"] == "conversation.porter"
+    assert mine["prefer_local_intents"] is True and mine["stt_engine"] is None
+    assert ha.preferred == mine["id"]
+    assert ha.pipelines[0]["name"] == "Home Assistant" and ha.pipelines[0]["language"] == "en"
+    # again: nothing moves, nothing is made twice
+    again = states(apply(witness, secrets, tmp_path, ha, check=False))
+    for name in ("entry ollama", "agent ollama", "assist exposure", "assist pipeline"):
+        assert again[name] == "ok", name
+    assert len(ha.entries["ollama"]) == 1 and len(ha.subentries[entry["entry_id"]]) == 1
+    assert len(ha.pipelines) == 2
+
+
+def test_assist_a_changed_line_reconfigures_the_agent_not_the_prompt_twice(
+    witness, secrets, tmp_path, models, house_with
+):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    apply(witness, secrets, tmp_path, ha, check=False)
+
+    def breton(d):
+        d["assist"]["llm"]["instructions"] = "Réponds en breton."
+
+    house = load_house(house_with(breton))
+    st = states(apply(house, secrets, tmp_path, ha, check=False))
+    assert st["entry ollama"] == "ok" and st["agent ollama"] == "changed"
+    (entry,) = ha.entries["ollama"]
+    (agent,) = ha.subentries[entry["entry_id"]]
+    assert agent["_data"]["prompt"] == HA_PROMPT + "\n\nRéponds en breton."
+    assert states(apply(house, secrets, tmp_path, ha, check=False))["agent ollama"] == "ok"
+
+    # the pipeline's own knobs move the pipeline alone
+    def local_off(d):
+        d["assist"]["pipeline"] = {"name": "La maison", "prefer_local": False}
+
+    house = load_house(house_with(local_off))
+    st = states(apply(house, secrets, tmp_path, ha, check=False))
+    assert st["assist pipeline"] == "changed"
+    assert [p["name"] for p in ha.pipelines] == ["Home Assistant", "Maison témoin", "La maison"]
+    assert ha.preferred == ha.pipelines[2]["id"]
+
+
+def test_assist_a_sleeping_server_waits_and_so_does_a_missing_model(
+    witness, secrets, tmp_path, monkeypatch
+):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    ha.ollama_down = True
+    monkeypatch.setattr("regie.apply.Conductor.assist_models", lambda self, url: None)
+    st = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert st["entry ollama"] == "waiting" and "agent ollama" not in st
+    assert not ha.entries.get("ollama") and not ha.flows
+    # the server answers the flow but not the models' door (a race at its wake)
+    ha.ollama_down = False
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["entry ollama"] == "changed"
+    assert states(steps)["agent ollama"] == "waiting"
+    assert "does not answer" in details(steps)["agent ollama"]
+    # the model is not there: never let Home Assistant download it
+    monkeypatch.setattr("regie.apply.Conductor.assist_models", lambda self, url: {"other:1b"})
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["agent ollama"] == "waiting"
+    assert "not on the server (other:1b)" in details(steps)["agent ollama"]
+    assert not ha.subentries
+
+
+def test_assist_check_plans_and_a_porter_not_up_waits(witness, secrets, tmp_path, models):
+    ha = FakeHA()  # a bare brain: no porter yet, no light born
+    ha.ollama_down = True
+    apply(witness, secrets, tmp_path, ha, check=False)  # the first boot, the LLM asleep
+    ha.ollama_down = False
+    st = states(apply(witness, secrets, tmp_path, ha, check=True))
+    assert st["entry ollama"] == "would" and st["agent ollama"] == "would"
+    assert not ha.entries.get("ollama") and not ha.flows
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st = states(steps)
+    assert st["entry ollama"] == "changed" and st["agent ollama"] == "changed"
+    assert st["assist exposure"] == "ok" and "not born yet" in details(steps)["assist exposure"]
+    assert st["assist pipeline"] == "waiting" and len(ha.pipelines) == 1

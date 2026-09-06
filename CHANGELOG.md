@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.31.0 — Le Portier : Assist devant un serveur qui dort (2026-09-06)
+
+Le pack `assist` branche l'assistant vocal de Home Assistant sur une IA qui
+peut vivre sur un hôte ENDORMI — l'étage « plafond » de la maison : une
+adresse, un veilleur qui dit s'il est debout, un coup frappé qui le réveille.
+Home Assistant n'a pas d'agent de repli (lu dans `pipeline.py` 2026.8.3 : un
+agent injoignable finit la chaîne sur `intent-failed`), et une phrase
+personnalisée attrape-tout passerait DEVANT chaque commande intégrée
+(`best_metadata_key=METADATA_CUSTOM_SENTENCE`) — la réponse de réveil ne peut
+donc pas être du YAML. Elle est **Le Portier** : `conversation.porter`, une
+entité de conversation du composant propre du produit
+(`custom_components/regie`, premier locataire), l'agent de la chaîne. Hôte
+réveillé : il passe le tour à l'agent de l'IA DANS LE MÊME journal de
+conversation (`async_converse` rentre dans la session que la chaîne a
+ouverte : l'historique suit, la ligne de la personne n'est pas doublée, le
+flux vers la voix reste branché). Endormi : la ligne de la maison et le coup
+frappé par le service que le paquet nomme. Inconnu (le veilleur illisible,
+pas de capteur) : il demande quand même et dit l'échec pour ce qu'il est —
+un garde bâti sur une sonde qui ment est désarmé.
+
+Le bloc `assist:` — `llm: { url, model }` (l'intégration `ollama` de Home
+Assistant : l'entrée à l'adresse, puis la SOUS-ENTRÉE de l'agent avec l'API
+Assist, le contexte, l'historique, `think`, une ligne d'instructions ajoutée
+au prompt de Home Assistant : des phrases entières dans la langue de la
+maison, les couleurs par leur nom anglais dans les appels d'outils) ;
+`ceiling: { watchman: { url, target, token }, replies }` (le contrat de Le
+Veilleur : `GET /api/targets/<t>` répond `up` sans jeton, `POST …/wake` avec
+le bearer que le secret nommé porte — rendu `<nom>_bearer` dans secrets.yaml) ;
+`expose: { lights: roles|rooms|all, scenes, also, never }` ; `pipeline: {
+name, prefer_local }`. Le pack rend `binary_sensor.tower_awake` (un capteur
+REST sur le veilleur, toutes les 30 s, INDISPONIBLE quand le veilleur ne se
+lit pas — inconnu, jamais « non » ; jamais un sondage de la porte de l'IA,
+qui compterait comme un usage et tiendrait l'hôte debout pour toujours),
+`rest_command.knock_ceiling`, et les réglages du portier (`regie: porter:`,
+lu au démarrage : un changement redémarre le cerveau ; `rest` et
+`rest_command` se rechargent).
+
+`apply` gagne trois pas : **l'agent** (l'entrée `ollama` par le marcheur de
+flux, puis la sous-entrée `conversation` par un nouveau marcheur —
+`walk_subentry`, la même boucle sous une autre porte, `reconfigure_successful`
+= mis à jour ; une réponse peut être une fonction du champ du formulaire,
+pour ajouter au prompt suggéré au lieu de le remplacer ; une empreinte des
+réponses dans `.regie/assist.json` dit s'il faut refaire, le cerveau ne
+rendant pas les données d'une sous-entrée ; le modèle est vérifié sur le
+serveur AVANT — Home Assistant téléchargerait des gigaoctets par le cerveau ;
+serveur endormi = `waiting`), **ce qu'Assist voit** (le plan de la maison
+contre la liste du cerveau : les lumières de chaque pièce et ses groupes de
+rôle, jamais une ampoule seule ni un groupe de places ni le groupe du mesh
+qui porte le nom de la pièce, les ambiances sous leurs étiquettes, jamais
+une marche ni le défaut de la pièce, jamais les ampoules d'une pièce de
+rangement, le mode et la palette du jour ; l'interrupteur permit-join d'un
+coordinateur caché par règle du produit ; une entité pas encore née attend),
+**la chaîne** (« <label de la maison> » dans la langue de la maison, le
+portier pour agent, prefer local, préférée ; les moteurs de parole laissés
+tels quels pour le pack `voice` ; la chaîne anglaise de Home Assistant
+laissée en place). Le composant : `manifest.json`, `__init__.py`
+(`regie:` → la plateforme conversation par découverte), `porter.py` (le
+verdict, le choix de l'agent par plateforme ou par id, les lignes — sans
+import Home Assistant, lu tel quel par les tests), `conversation.py`. Les
+lignes par défaut dans les labels (fr, en) ; une maison écrit les siennes.
+La maison témoin porte le pack.
+
 ## 0.30.0 — le docteur : le cerveau relu après chaque convergence (2026-09-06)
 
 L'audit du cerveau, quatrième pas (V6). Une convergence disait `changed=0` et
@@ -32,6 +94,7 @@ vert. Le rôle `brain` de la collection lance le docteur après `apply`
 vrai par défaut) fait échouer le jeu sur du rouge, après le rapport — une
 flotte qui vit avec un rouge connu le temps d'un atterrissage le met à faux et
 lit les lignes.
+||||||| parent of 2e87033 (Le Portier : Assist devant un serveur qui dort (0.31.0, W5 étape 3a) : le pack assist branche l'assistant vocal sur une IA qui peut vivre sur un hôte ENDORMI — Home Assistant n'a pas d'agent de repli (lu dans pipeline.py 2026.8.3 : intent-failed) et une phrase personnalisée attrape-tout passe DEVANT chaque commande intégrée (best_metadata_key=METADATA_CUSTOM_SENTENCE), donc la réponse de réveil est Le Portier : conversation.porter, une entité de conversation du composant propre du produit (custom_components/regie, premier locataire), l'agent de la chaîne — hôte réveillé : le tour passe à l'agent de l'IA dans le MÊME journal de conversation (async_converse rentre dans la session ouverte par la chaîne : l'historique suit, la ligne de la personne n'est pas doublée, le flux vers la voix reste branché) ; endormi : la ligne de la maison et le coup frappé par le service que le paquet nomme ; inconnu : demandé quand même, l'échec dit pour ce qu'il est. Le bloc assist: — llm: { url, model, instructions, context, history, think } (l'entrée ollama de Home Assistant puis la SOUS-ENTRÉE de l'agent avec l'API Assist, une ligne ajoutée au prompt de HA : des phrases entières dans la langue de la maison, les couleurs par leur nom anglais dans les appels d'outils), ceiling: { watchman: { url, target, token }, replies } (le contrat de Le Veilleur : GET /api/targets/<t> → up sans jeton, POST …/wake avec le bearer que le secret nommé porte, rendu <nom>_bearer), expose: { lights: roles|rooms|all, scenes, also, never }, pipeline: { name, prefer_local }. Rendu : binary_sensor.tower_awake (REST sur le veilleur, 30 s, INDISPONIBLE quand il ne se lit pas — jamais « non » ; jamais un sondage de la porte de l'IA, qui compterait comme un usage), rest_command.knock_ceiling, regie: porter: (lu au démarrage : un changement redémarre ; rest et rest_command se rechargent), le composant copié tel quel (quatre fichiers). apply gagne trois pas : l'agent (l'entrée par le marcheur de flux, la sous-entrée par walk_subentry — la même boucle sous une autre porte, reconfigure_successful = mis à jour, une réponse peut être une fonction du champ du formulaire pour AJOUTER au prompt suggéré, une empreinte dans .regie/assist.json ; le modèle vérifié sur /api/tags AVANT — Home Assistant téléchargerait des gigaoctets par le cerveau ; serveur endormi = waiting), ce qu'Assist voit (les lumières de chaque pièce et ses groupes de rôle, les ambiances sous leurs étiquettes, le mode, la palette du jour ; jamais une ampoule seule, un groupe de places, le groupe du mesh qui porte le nom de la pièce, une marche, le défaut de la pièce, les ampoules d'une pièce de rangement, le permit-join d'un coordinateur ; une entité pas née attend), la chaîne (« <label de la maison> » dans la langue de la maison, le portier pour agent, prefer local, préférée ; la chaîne anglaise de HA laissée). Les entités du composant ne sont jamais des fantômes pour la règle des orphelins ; le bloc racine d'un pack passe la passe 1 du schéma (la passe 2 reste stricte) ; les lignes par défaut dans les labels fr/en (« le serveur », jamais un mot de maison) ; la maison témoin porte le pack ; 22 tests neufs (porter.py lu sans Home Assistant), la suite entière verte.)
 
 ## 0.29.0 — une release en une commande, le moteur depuis une copie de travail (2026-09-06)
 

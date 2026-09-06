@@ -1,0 +1,35 @@
+{% set a = house.assist() %}
+# rendered by La Régie — Assist (pack assist): the ceiling's truth and the knock.
+{% if a.ceiling %}
+{% set w = a.ceiling.watchman %}
+# tower_awake — the watchman's word on the host the LLM lives on: `on` while
+# its target is up, `off` while it sleeps, UNAVAILABLE while the watchman
+# cannot be read (unknown, never "no": a guard built on a lying probe is
+# disarmed). Read every {{ w.every }} s; the read costs the host nothing —
+# the watchman probes it, the brain never does (a poll on the LLM's own door
+# would count as use and keep the host up for ever).
+rest:
+  - resource: {{ (w.url ~ '/api/targets/' ~ w.target) | to_yaml }}
+    scan_interval: {{ w.every }}
+    timeout: 5
+    binary_sensor:
+      - name: tower_awake
+        unique_id: regie_tower_awake
+        icon: mdi:server
+        value_template: "{{ '{{' }} value_json.up {{ '}}' }}"
+        json_attributes: [up_for, quiet_for, blocked, pending, last_error]
+# the knock: the doorman asks the watchman to raise the target. The bearer
+# names this house in the watchman's audit log; the secret `{{ w.token }}_bearer`
+# carries the whole header value ("Bearer …"), rendered from `{{ w.token }}`.
+rest_command:
+  knock_ceiling:
+    url: {{ (w.url ~ '/api/targets/' ~ w.target ~ '/wake') | to_yaml }}
+    method: post
+    headers:
+      authorization: !secret {{ w.token }}_bearer
+    content_type: application/json
+    payload: '{"reason": "{{ '{{' }} reason | default(''assist'') {{ '}}' }}"}'
+    timeout: 10
+{% else %}
+# no ceiling declared: the LLM's host is always up — nothing to read, nobody to knock
+{% endif %}

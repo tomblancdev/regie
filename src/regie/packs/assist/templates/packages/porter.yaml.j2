@@ -1,0 +1,18 @@
+{% set a = house.assist() %}
+# rendered by La Régie — Le Portier (pack assist): the doorman in front of the
+# LLM, the product's own component (custom_components/regie, conversation
+# platform). Read once at start: a change here restarts the brain.
+regie:
+  porter:
+    name: {{ labels.ui.porter | to_yaml }}
+    # the agent the turn is handed to: an integration's platform (the first
+    # conversation entity it owns) or an entity id
+    llm: {{ a.llm.platform | to_yaml }}
+{% if a.ceiling %}
+    awake: binary_sensor.tower_awake
+    knock: rest_command.knock_ceiling
+{% endif %}
+    replies:
+{% for key, text in a.replies.items() %}
+      {{ key }}: {{ text | to_yaml }}
+{% endfor %}
