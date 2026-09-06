@@ -83,13 +83,14 @@ def test_what_assist_sees_is_the_rooms_by_role_never_a_bulb(witness):
 
 
 def test_what_assist_sees_belongs_to_a_room(witness):
-    """The exposed groups and looks carry their room; a role group its label,
-    the room's group the word for lights; a parking room places nothing."""
+    """The exposed groups and looks carry their room; a role group speaks as
+    its label, the room's group as the word for lights (aliases, never a
+    name); a parking room places nothing."""
     rooms = witness.exposure_rooms()
-    assert rooms["light.living_main"] == {"area": "living", "name": "Plafond"}
-    assert rooms["light.living_lamp"] == {"area": "living", "name": "Lampadaire"}
-    assert rooms["light.living_lights"] == {"area": "living", "name": "Lumières"}
-    assert rooms["script.living_cinema"] == {"area": "living", "name": None}
+    assert rooms["light.living_main"] == {"area": "living", "alias": "Plafond"}
+    assert rooms["light.living_lamp"] == {"area": "living", "alias": "Lampadaire"}
+    assert rooms["light.living_lights"] == {"area": "living", "alias": "Lumières"}
+    assert rooms["script.living_cinema"] == {"area": "living", "alias": None}
     assert not any(v["area"] == "spare" for v in rooms.values())
     expose, _ = witness.exposure_plan()
     assert set(rooms) <= expose

@@ -28,9 +28,14 @@ Trois défauts qu'un vrai cerveau seul pouvait montrer (Home Assistant
   exposés n'avaient ni pièce ni nom (`living_room_main`, aucune zone) — l'IA
   ne peut pas relier « Le QG » à ce qu'elle voit. Un pas `assist rooms` place
   chaque groupe et chaque ambiance exposés dans leur pièce (les lignes du
-  registre ; les identifiants des fichiers ne bougent pas) et nomme les
-  groupes de rôle d'après l'étiquette du rôle (« Plafond »), le groupe de la
-  pièce d'après le mot des lumières (« Lumières »).
+  registre ; les identifiants des fichiers ne bougent pas) et donne aux
+  groupes un ALIAS parlé — l'étiquette du rôle (« Plafond »), le mot des
+  lumières pour le groupe de la pièce — jamais un second nom : le customize
+  du pack lighting affiche déjà « Le QG — Plafond », une chose porte un nom
+  (0.10.2) ; les alias d'une personne sont gardés. Lu après : « mets le QG en
+  bleu » se règle EN LOCAL par la pièce en 0,2 s (HassLightSet sur les quatre
+  groupes exposés du QG) ; « allume le plafond du QG » passe par le portier à
+  l'IA, qui appelle HassTurnOn(name Plafond, area Le QG) en 3,3 s.
 
 ## 0.31.1 — Le composant voyage avec le paquet (2026-09-06)
 

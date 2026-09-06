@@ -1832,9 +1832,10 @@ class Conductor:
             )
 
     def assist_rooms(self, ws) -> None:
-        """Each exposed group and look in its room, the role groups named after
-        the role's label (the registry's rows — the files' ids stay): an agent
-        asked for « Le QG » finds « Plafond » there. Read live 2026-09-06: with
+        """Each exposed group and look in its room, and a spoken alias on the
+        groups (the role's label, the word for lights) — the registry's rows;
+        the files' ids and the displayed names stay (customize's « Le QG —
+        Plafond »), a person's own aliases are kept. Read live 2026-09-06: with
         the groups placed nowhere and called `living_room_main`, the LLM found
         no light in the room and asked for a bulb's exact name."""
         wanted = self.house.exposure_rooms()
@@ -1850,8 +1851,9 @@ class Conductor:
             area_id = self.area_ids.get(w["area"])
             if area_id and row.get("area_id") != area_id:
                 fields["area_id"] = area_id
-            if w["name"] and (row.get("name") or None) != w["name"]:
-                fields["name"] = w["name"]
+            have = list(row.get("aliases") or [])
+            if w["alias"] and w["alias"] not in have:
+                fields["aliases"] = sorted({*have, w["alias"]})
             if fields:
                 moves.append((eid, fields))
         name = "assist rooms"
@@ -1859,8 +1861,8 @@ class Conductor:
             self.step(name, "ok", f"{known} in their rooms")
             return
         placed = sum(1 for _, f in moves if "area_id" in f)
-        named = sum(1 for _, f in moves if "name" in f)
-        self.step(name, "changed", f"{placed} to place, {named} to name ({known} known)")
+        named = sum(1 for _, f in moves if "aliases" in f)
+        self.step(name, "changed", f"{placed} to place, {named} to alias ({known} known)")
         if self.check:
             return
         for eid, fields in moves:

@@ -2206,6 +2206,7 @@ def furnished_for_assist(ha):
     )
     for eid in PLAN_LIGHTS:
         ha.entities.append({"entity_id": eid, "platform": "group", "unique_id": eid})
+    ha.entities[-1 - PLAN_LIGHTS[::-1].index("light.living_lamp")]["aliases"] = ["la lampe"]
     for eid in (
         "light.living_ceiling",
         "light.living_floor_lamp",
@@ -2266,17 +2267,19 @@ def test_assist_the_agent_what_it_sees_and_the_pipeline(witness, secrets, tmp_pa
         "script.living_evening_drift",
     }
     # where what it sees belongs: the room's groups and looks in the room's
-    # area, the role groups named after the role's label, the room's own group
-    # after the word for lights, a look keeps its label
+    # area; a spoken alias on the groups (the role's label, the word for
+    # lights) — never a name (customize prints « Le QG — Plafond »); a person's
+    # own alias is kept; a look keeps its label
     assert st["assist rooms"] == "changed"
     rows = {e["entity_id"]: e for e in ha.entities}
     living = next(a["area_id"] for a in ha.areas if a["aliases"][0] == "living")
     assert rows["light.living_main"]["area_id"] == living
-    assert rows["light.living_main"]["name"] == "Plafond"
-    assert rows["light.living_lamp"]["name"] == "Lampadaire"
-    assert rows["light.living_lights"]["name"] == "Lumières"
+    assert rows["light.living_main"]["aliases"] == ["Plafond"]
+    assert rows["light.living_lamp"]["aliases"] == ["Lampadaire", "la lampe"]
+    assert rows["light.living_lights"]["aliases"] == ["Lumières"]
+    assert "name" not in rows["light.living_main"]
     assert rows["script.living_cinema"]["area_id"] == living
-    assert "name" not in rows["script.living_cinema"]
+    assert "aliases" not in rows["script.living_cinema"]
     assert "area_id" not in rows["input_select.house_mode"]
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert states(again)["assist rooms"] == "ok"
