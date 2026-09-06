@@ -215,3 +215,30 @@ def test_a_house_with_no_theme_renders_none_of_it(house_with, secrets, tmp_path)
     assert not (tmp_path / "home-assistant/www/regie-skin.js").exists()
     conf = (tmp_path / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
     assert "frontend:" not in conf
+
+
+def test_a_thing_with_no_entity_of_its_own_gets_no_tile(rendered, house_with, secrets, tmp_path):
+    """The printer (0.32): `ipp` exposes diagnostics, off by default, and the
+    tile on `sensor.<id>` the kind used to derive was dead from the day it was
+    drawn (the doctor's first run, `references`: `sensor.printer`). No entity
+    derives from the kind now — the thing is named under « sans commande »
+    like a remote, and a row that wants a tile names its `entity:`."""
+    text = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    assert "sensor.kitchen_printer" not in text
+    notes = [
+        c["content"]
+        for v in dashboard(rendered)["views"]
+        for s in v.get("sections", [])
+        for c in s["cards"]
+        if c["type"] == "markdown"
+    ]
+    assert any("Sans commande dans Home Assistant" in n and "Imprimante" in n for n in notes)
+    # a row's `entity:` — the tile, on the entity the row names
+    path = house_with(
+        lambda d: next(t for t in d["things"] if t["id"] == "kitchen_printer").update(
+            {"entity": "sensor.epson_status"}
+        )
+    )
+    render(load_house(path), tmp_path, secrets)
+    text = (tmp_path / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    assert "sensor.epson_status" in text

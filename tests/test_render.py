@@ -384,31 +384,63 @@ def test_the_release_carries_its_own_pin():
     )
 
 
-# --- 0.26.2: the manifest remembers the scripts it rendered, and the ones gone ---
-def test_the_manifest_remembers_the_scripts_and_the_ones_gone(witness, secrets, rendered_fresh):
-    """A YAML script's registry row is its object id, never a `regie_` unique
-    id: the conductor tells a look a room lost from a person's script by this
-    memory alone — kept until the look comes back."""
+# --- 0.26.2 / 0.32: the manifest remembers every YAML object it rendered, and the ones gone ---
+def test_the_manifest_remembers_the_objects_and_the_ones_gone(witness, secrets, rendered_fresh):
+    """A YAML script's or helper's registry row is its object id, never a
+    `regie_` unique id: the conductor tells a look a room lost, or a store the
+    palette dropped, from a person's own by this memory alone — kept until
+    the object comes back."""
     import json
 
     from regie.render import MANIFEST, render
 
     path = rendered_fresh / MANIFEST
     m = json.loads(path.read_text())
-    assert {"living_today", "living_default"} <= set(m["scripts"])
-    assert m["scripts_gone"] == []
-    # a script rendered once (the memory says so) and not any more
-    m["scripts"] = sorted(set(m["scripts"]) | {"living_fantome"})
+    assert "scripts" not in m and "scripts_gone" not in m, "one memory, the objects"
+    assert {"script.living_today", "script.living_default"} <= set(m["objects"])
+    assert {"input_select.living_look", "input_select.house_palette"} <= set(m["objects"])
+    assert any(o.startswith("input_text.") for o in m["objects"]), (
+        "the helpers too — the palette's stores were its ghosts"
+    )
+    assert m["objects_gone"] == []
+    # a script and a helper rendered once (the memory says so) and not any more
+    m["objects"] = sorted(set(m["objects"]) | {"script.living_fantome", "input_number.fantome"})
     path.write_text(json.dumps(m))
     render(witness, rendered_fresh, secrets)
     m = json.loads(path.read_text())
-    assert m["scripts_gone"] == ["living_fantome"] and "living_fantome" not in m["scripts"]
+    assert m["objects_gone"] == ["input_number.fantome", "script.living_fantome"]
+    assert "script.living_fantome" not in m["objects"]
     # the memory holds through a render that changes nothing
     render(witness, rendered_fresh, secrets)
-    assert json.loads(path.read_text())["scripts_gone"] == ["living_fantome"]
-    # a look that comes back leaves the gone list
+    assert json.loads(path.read_text())["objects_gone"] == [
+        "input_number.fantome",
+        "script.living_fantome",
+    ]
+    # an object that comes back leaves the gone list
     m = json.loads(path.read_text())
-    m["scripts_gone"] = ["living_fantome", "living_today"]
+    m["objects_gone"] = ["script.living_fantome", "script.living_today"]
     path.write_text(json.dumps(m))
     render(witness, rendered_fresh, secrets)
-    assert json.loads(path.read_text())["scripts_gone"] == ["living_fantome"]
+    assert json.loads(path.read_text())["objects_gone"] == ["script.living_fantome"]
+
+
+def test_a_manifest_of_the_old_shape_hands_its_scripts_over(witness, secrets, rendered_fresh):
+    """Before 0.32 the manifest carried `scripts` and `scripts_gone`: a brain
+    rendered by that engine keeps its memory of the looks it lost."""
+    import json
+
+    from regie.render import MANIFEST, render
+
+    path = rendered_fresh / MANIFEST
+    m = json.loads(path.read_text())
+    old = {
+        "engine": "0.31.0",
+        "files": m["files"],
+        "scripts": ["living_today", "living_ancien"],
+        "scripts_gone": ["living_fantome"],
+    }
+    path.write_text(json.dumps(old))
+    render(witness, rendered_fresh, secrets)
+    m = json.loads(path.read_text())
+    assert m["objects_gone"] == ["script.living_ancien", "script.living_fantome"]
+    assert "scripts" not in m and "scripts_gone" not in m

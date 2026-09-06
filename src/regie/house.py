@@ -49,7 +49,9 @@ DOMAIN: dict[str, str | None] = {
     "lock": "lock",
     "thermostat": "climate",
     "valve": "valve",
-    "printer": "sensor",
+    # a printer has no entity of its own (0.32): `ipp` exposes diagnostics, off
+    # by default — a row that wants a tile names its `entity:`
+    "printer": None,
     "coordinator": None,
     "proxy": None,
 }

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.32.0 — le docteur au vert : ce qui est rendu, ce qui l'a été, ce qui n'a pas d'entité (2026-09-06)
+
+L'audit du cerveau, la suite de V6 : la première lecture du docteur sur un
+cerveau réel a nommé trois rouges, et chacun tenait à une règle du produit —
+trois cavaliers, un atterrissage. **`rooms: all` résout depuis ce qui est
+rendu**, plus depuis la déclaration (`verbs.rooms_of`) : une pièce dont la
+lumière n'est pas encore arrivée déclare ses ambiances et ne rend aucun
+script pour elles, et la télécommande de la maison appelait `script.bedroom_day`
+et `script.storage_day` sur un cerveau qui ne les avait pas — une réparation
+à chaque pression, une ligne rouge pour le docteur. Une pièce qu'une personne
+nomme (`room:`, `rooms: [..]`) est tenue à ce qu'elle rend : `check` refuse
+le geste qui appellerait un script que le cerveau n'aura pas (la pièce sans
+lumière, l'ambiance déclarée que rien ne remplit), au lieu de le laisser
+tirer à vide. **Le manifeste se souvient de tout objet YAML** — `objects` et
+`objects_gone`, un `domaine.objet` par bloc que Home Assistant cle sur
+l'identifiant d'objet (les scripts, les aides `input_*`, les compteurs, les
+minuteurs, les horaires) — comme il se souvenait des scripts seuls depuis
+0.26.2 : les trente-quatre aides de l'ancienne palette (`atelier`, `perso1..3`,
+`try`, `add`) et `script.fx_fire` dormaient dans le registre en `unavailable ·
+restored` à travers chaque convergence, sans marque `regie_` pour les dire
+nôtres ; le chef d'orchestre retire désormais tout objet de cette mémoire qui
+lit `unavailable`, jamais celui d'une personne ni un des nôtres encore rendu
+(un manifeste de l'ancienne forme cède ses `scripts_gone`). Un cerveau qui a
+connu un fantôme avant ce numéro ne le voit pas dans sa mémoire : on le lui
+dit une fois (`objects_gone` complété à la main), il fait le reste. **Une
+imprimante n'a pas d'entité en propre** : `ipp` n'expose que des diagnostics,
+désactivés par défaut, et la tuile sur `sensor.<id>` que le genre dérivait
+était morte depuis le jour où elle a été dessinée — le genre ne dérive plus
+rien, l'objet est nommé « sans commande » comme une télécommande, le plan
+dessine son icône, et une ligne qui veut une tuile nomme son `entity:`. Le
+docteur lit vert, et une flotte qui vivait avec ses rouges connus remet
+`regie_doctor_strict` à vrai.
+
 ## 0.31.3 — Un alias se lit dans le registre, pas dans sa liste (2026-09-06)
 
 `config/entity_registry/list` ne porte pas les alias (lu en direct, Home
@@ -46,6 +79,7 @@ Trois défauts qu'un vrai cerveau seul pouvait montrer (Home Assistant
   bleu » se règle EN LOCAL par la pièce en 0,2 s (HassLightSet sur les quatre
   groupes exposés du QG) ; « allume le plafond du QG » passe par le portier à
   l'IA, qui appelle HassTurnOn(name Plafond, area Le QG) en 3,3 s.
+||||||| parent of c045d42 (Le docteur au vert : rooms: all résout depuis ce qui est rendu (verbs.rooms_of ; check tient une pièce nommée à ce qu'elle rend), le manifeste se souvient de tout objet YAML (objects / objects_gone, OBJECT_DOMAINS — le chef d'orchestre retire les aides fantômes comme les scripts depuis 0.26.2 ; un manifeste de l'ancienne forme cède ses scripts_gone), une imprimante n'a pas d'entité en propre (printer: None — une ligne nomme son entity:). Sept tests neufs ou réécrits.)
 
 ## 0.31.1 — Le composant voyage avec le paquet (2026-09-06)
 
@@ -60,6 +94,7 @@ posé. Corrigé d'une ligne ; un test lit les globs de `pyproject.toml` et exige
 que chaque fichier que le rendu copie tel quel (`plan(témoin)`) et tout
 `base/components/` en fassent partie — la leçon de 0.5.1 et 0.12.1 (« une
 release porte sa propre épingle ») appliquée aux données du paquet.
+||||||| parent of 3cd20d0 (Le docteur au vert : rooms: all résout depuis ce qui est rendu (verbs.rooms_of ; check tient une pièce nommée à ce qu'elle rend), le manifeste se souvient de tout objet YAML (objects / objects_gone, OBJECT_DOMAINS — le chef d'orchestre retire les aides fantômes comme les scripts depuis 0.26.2 ; un manifeste de l'ancienne forme cède ses scripts_gone), une imprimante n'a pas d'entité en propre (printer: None — une ligne nomme son entity:). Sept tests neufs ou réécrits.)
 
 ## 0.31.0 — Le Portier : Assist devant un serveur qui dort (2026-09-06)
 

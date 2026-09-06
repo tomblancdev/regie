@@ -491,12 +491,40 @@ def check_verb(house, area: dict, verb: dict, where: str, hints: list[str]) -> l
         looks = look if isinstance(look, list) else [look]
         ctx = verbs.Ctx(house, area["id"])
         rooms = verbs.rooms_of(ctx, verb, look if not isinstance(look, list) else None)
-        for lk in looks:
-            if lk is True or lk in verbs.LOOK_WORDS:
+        # `rooms: all` resolves from what is rendered (0.32). A room a person
+        # NAMES (`room:`, a `rooms:` list) is held to it — a look script the
+        # brain will not have is a repair at the first press, not a gesture;
+        # the remote's own room waiting for its light renders nothing for the
+        # gesture, and the hint says so (a house with no filled role loads)
+        named = verb.get("rooms") != "all" and ("room" in verb or "rooms" in verb)
+        for r in rooms:
+            if r not in known:
                 continue
-            for r in rooms:
-                if r in known and lk not in (known[r].get("scenes") or {}):
+            rendered = house.rendered_scenes(known[r])
+            if not rendered:
+                said = f"{where}: {r} renders no look yet (no light fills a role of it) — "
+                if named:
+                    errors.append(said + "the gesture would call a script the brain does not have")
+                else:
+                    hints.append(said + "the gesture waits (renders nothing)")
+                continue
+            for lk in looks:
+                if lk is True or lk in verbs.LOOK_WORDS:
+                    continue
+                if lk not in (known[r].get("scenes") or {}):
                     errors.append(f"{where}: look {lk!r} — {r} has none")
+                elif lk not in rendered:
+                    said = (
+                        f"{where}: look {lk!r} — {r} declares it and renders it not yet (no "
+                        "light fills its roles)"
+                    )
+                    if named:
+                        errors.append(
+                            said
+                            + f": script.{r}_{lk} would be called and the brain does not have it"
+                        )
+                    else:
+                        hints.append(said + " — the gesture waits (renders nothing)")
     if name == "level" and verb["level"] not in ("up", "down", "step"):
         errors.append(f"{where}: level takes up, down or step")
     if name == "walk" and verb["walk"] not in ("whites", "colours"):

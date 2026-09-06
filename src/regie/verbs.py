@@ -92,23 +92,30 @@ def walk_looks(ctx: Ctx, room: str) -> list[str]:
     return [lk for lk in room_looks(ctx.house, room) if lk not in NEVER_WALKED]
 
 
+def renders(ctx: Ctx, room: str, look=None) -> bool:
+    """Whether a room renders the look — a script the brain will have (0.32).
+    A room whose light has not come yet declares its looks and renders no
+    script for them; a parking room renders nothing. A look WORD (`default`,
+    `before`, `off`, `prev`, `next`) or none asks only that the room renders
+    something; a named look asks for that look."""
+    area = next((a for a in ctx.house.areas if a["id"] == room), None)
+    rendered = ctx.house.rendered_scenes(area) if area else set()
+    if not rendered:
+        return False
+    return look in (None, *LOOK_WORDS) or look in rendered
+
+
 def rooms_of(ctx: Ctx, verb: dict, look=None) -> list[str]:
     """Which rooms a verb aims at: `room:`, `rooms:` (a list, or `all` = every
-    room that has the look), else the room the verb speaks from."""
+    room that RENDERS the look), else the room the verb speaks from. `all`
+    reads what is rendered, not what is declared (0.32): the house remote's
+    `day` for every room called `script.bedroom_day` on a brain that had none
+    — a repair per press, and a red line for the doctor."""
     if "room" in verb:
         return [verb["room"]]
     rooms = verb.get("rooms")
     if rooms == "all":
-        out = []
-        for a in ctx.house.areas:
-            if ctx.house.parking(a):
-                continue
-            if look in (None, "default", "before", "off", "prev", "next") or look in (
-                a.get("scenes") or {}
-            ):
-                if ctx.house.scene_plan(a):
-                    out.append(a["id"])
-        return out
+        return [a["id"] for a in ctx.house.areas if renders(ctx, a["id"], look)]
     return list(rooms) if rooms else [ctx.room]
 
 
@@ -156,8 +163,14 @@ def render(verb: dict, ctx: Ctx) -> list[dict]:
 
 
 def _look(verb: dict, ctx: Ctx) -> list[dict]:
+    """The look in every room aimed at — and only where it renders: the
+    remote's own room waiting for its light renders nothing for the gesture
+    (check hints; a room a person NAMES is refused there instead)."""
     look = verb["look"]
-    return [look_action(room, look, ctx) for room in rooms_of(ctx, verb, look)]
+    one = look if not isinstance(look, list) else None
+    return [
+        look_action(room, look, ctx) for room in rooms_of(ctx, verb, one) if renders(ctx, room, one)
+    ]
 
 
 def _toggle(verb: dict, ctx: Ctx) -> list[dict]:
@@ -173,6 +186,8 @@ def _toggle(verb: dict, ctx: Ctx) -> list[dict]:
             return []
         if look is True:
             return [{"action": "light.toggle", "target": {"entity_id": target}}]
+        if not renders(ctx, room, look):
+            return []  # the look's script is not rendered yet: the gesture waits
         return [
             {
                 "if": [{"condition": "state", "entity_id": target, "state": "off"}],
@@ -181,6 +196,8 @@ def _toggle(verb: dict, ctx: Ctx) -> list[dict]:
             }
         ]
     look = "default" if look is True else look
+    if not renders(ctx, room, look):
+        return []  # a room waiting for its light: the gesture waits with it
     return [
         {
             "if": [{"condition": "state", "entity_id": f"light.{room}_lights", "state": "off"}],

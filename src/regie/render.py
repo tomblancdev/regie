@@ -250,14 +250,20 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
 
     manifest_path = out / MANIFEST
     previous: set[str] = set()
-    scripts_before: set[str] = set()
+    objects_before: set[str] = set()
     if manifest_path.is_file():
         seen = json.loads(manifest_path.read_text(encoding="utf-8"))
         previous = set(seen.get("files", []))
-        # every script the house ever rendered and renders no more (0.26.2): a
-        # YAML script's registry row is its object id, not a `regie_` unique id,
-        # so the conductor tells our ghosts from a person's by this memory
-        scripts_before = set(seen.get("scripts", [])) | set(seen.get("scripts_gone", []))
+        # every YAML object the house ever rendered and renders no more: a
+        # helper's or a script's registry row is its object id, not a `regie_`
+        # unique id, so the conductor tells our ghosts from a person's by this
+        # memory alone — the scripts since 0.26.2, every object since 0.32
+        # (the old palette's thirty-four helpers sat in the registry, unseen);
+        # a manifest of the old shape hands its scripts over
+        objects_before = set(seen.get("objects", [])) | set(seen.get("objects_gone", []))
+        objects_before |= {
+            f"script.{s}" for s in [*seen.get("scripts", []), *seen.get("scripts_gone", [])]
+        }
 
     result = Rendered()
     current: set[str] = set()
@@ -321,15 +327,15 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
             stale.unlink()
             result.removed.append(stale)
 
-    scripts = rendered_scripts(out, current)
+    objects = rendered_objects(out, current)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
         json.dumps(
             {
                 "engine": __version__,
                 "files": sorted(current),
-                "scripts": sorted(scripts),
-                "scripts_gone": sorted(scripts_before - scripts),
+                "objects": sorted(objects),
+                "objects_gone": sorted(objects_before - objects),
             },
             indent=2,
         )
@@ -339,9 +345,27 @@ def render(house: House, out: Path, secrets: dict) -> Rendered:
     return result
 
 
-def rendered_scripts(out: Path, files: set[str]) -> set[str]:
-    """The object ids of every script the rendered packages declare —
-    `script.<id>` on the brain, its registry row keyed on that id."""
+# the YAML blocks Home Assistant keys on the object id: `<domain>.<id>` on the
+# brain, the registry row's unique id that very `<id>` — no `unique_id:` of
+# ours can mark them, the manifest's memory does
+OBJECT_DOMAINS = (
+    "script",
+    "input_boolean",
+    "input_button",
+    "input_datetime",
+    "input_number",
+    "input_select",
+    "input_text",
+    "counter",
+    "timer",
+    "schedule",
+)
+
+
+def rendered_objects(out: Path, files: set[str]) -> set[str]:
+    """Every `domain.object` the rendered packages declare in a block keyed on
+    the object id (the scripts, the helpers, the counters — OBJECT_DOMAINS):
+    what the brain will hold under that id, and the registry row it keeps."""
     ids: set[str] = set()
     for rel in files:
         if not rel.startswith("home-assistant/packages/") or not rel.endswith(".yaml"):
@@ -350,7 +374,10 @@ def rendered_scripts(out: Path, files: set[str]) -> set[str]:
             pkg = yaml.safe_load((out / rel).read_text(encoding="utf-8")) or {}
         except yaml.YAMLError:
             continue  # a package the brain will refuse says so in its own test
-        block = pkg.get("script") if isinstance(pkg, dict) else None
-        if isinstance(block, dict):
-            ids.update(str(k) for k in block)
+        if not isinstance(pkg, dict):
+            continue
+        for domain in OBJECT_DOMAINS:
+            block = pkg.get(domain)
+            if isinstance(block, dict):
+                ids.update(f"{domain}.{k}" for k in block)
     return ids

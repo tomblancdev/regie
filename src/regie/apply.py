@@ -43,7 +43,7 @@ from .ha import HomeAssistant
 from .host import STATE, read_state, write_state
 from .house import House
 from .otbr import Otbr
-from .render import MANIFEST
+from .render import MANIFEST, OBJECT_DOMAINS
 from .z2m import Z2M
 
 CLIENT_NAME = "regie"
@@ -1481,16 +1481,18 @@ class Conductor:
         night group went with the ghosts and its hands aimed at nothing."""
         entities = ws.call("config/entity_registry/list") or []
         rendered = self.rendered_unique_ids()
-        gone = self.scripts_gone()
+        gone = self.objects_gone()
         for e in entities:
             uid = str(e.get("unique_id") or "")
-            if e.get("platform") == "script":
-                # a YAML script's registry row is keyed on its object id, never
-                # a `regie_` unique id (0.26.2): ours are the ones the manifest
-                # remembers rendering and renders no more — a look a room lost
-                if uid not in gone:
+            if e.get("platform") in OBJECT_DOMAINS:
+                # a YAML script's or helper's registry row is keyed on its
+                # object id, never a `regie_` unique id (0.26.2, every object
+                # domain since 0.32): ours are the ones the manifest remembers
+                # rendering and renders no more — a look a room lost, the old
+                # palette's stores
+                if f"{e['platform']}.{uid}" not in gone:
                     continue
-                why = "a look the house no longer has"
+                why = "the house rendered it once and renders it no more"
             elif e.get("platform") == "regie" or uid in COMPONENT_IDS:
                 # the product's own component (0.31): its entities live with
                 # the component, no package names them — never a ghost
@@ -1506,16 +1508,19 @@ class Conductor:
             if not self.check:
                 ws.call("config/entity_registry/remove", entity_id=e["entity_id"])
 
-    def scripts_gone(self) -> set[str]:
-        """The scripts the manifest remembers rendering and renders no more —
-        the render keeps that memory (0.26.2), the conductor acts on it."""
+    def objects_gone(self) -> set[str]:
+        """The `domain.object` ids the manifest remembers rendering and renders
+        no more — the render keeps that memory (0.26.2 for the scripts, 0.32
+        for every object domain), the conductor acts on it; a manifest of the
+        old shape says its scripts."""
         path = self.root / MANIFEST
         if not path.is_file():
             return set()
         try:
-            return set(json.loads(path.read_text(encoding="utf-8")).get("scripts_gone", []))
+            m = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return set()
+        return set(m.get("objects_gone", [])) | {f"script.{s}" for s in m.get("scripts_gone", [])}
 
     def rendered_unique_ids(self) -> set[str]:
         """Every `regie_` unique id the rendered packages carry: what the house

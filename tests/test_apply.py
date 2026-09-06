@@ -1858,7 +1858,12 @@ def test_a_device_with_no_address_is_the_one_under_the_rows_entry(witness, secre
     kitchen = next(a for a in ha.areas if a["aliases"][0] == "kitchen")
     assert printer["area_id"] == kitchen["area_id"]
     assert printer["name_by_user"] == "kitchen_printer"
-    assert "sensor.kitchen_printer" in {e["entity_id"] for e in ha.entities}
+    # a printer has no entity of its own (0.32): the device is roomed and named,
+    # its sensors wear the thing's name as the OTHER entities of a device do,
+    # and none is renamed to `sensor.kitchen_printer` — no tile names it
+    ids = {e["entity_id"] for e in ha.entities if e.get("device_id") == printer["id"]}
+    assert ids and "sensor.kitchen_printer" not in ids
+    assert all(i.startswith("sensor.") for i in ids)
 
 
 def test_an_entry_holding_two_devices_names_no_row(witness, secrets, tmp_path):
@@ -2144,10 +2149,12 @@ def test_the_draft_follows_the_files_unless_it_holds_edits(witness, secrets, tmp
     assert ceiling()["x"] == 180, "kept"
 
 
-def test_a_look_the_house_lost_leaves_no_ghost_script(witness, secrets, rendered_fresh):
+def test_an_object_the_house_lost_leaves_no_ghost(witness, secrets, rendered_fresh):
     """0.26.2: a YAML script's registry row is keyed on its object id, so the
     `regie_` rule never saw the four looks Le Passage lost (nor the chip's
-    script at 0.26.0). The manifest remembers what it rendered: a script gone
+    script at 0.26.0); 0.32: a helper's row the same — the old palette's
+    thirty-four stores sat in the registry `unavailable · restored` through
+    every converge. The manifest remembers what it rendered: an object gone
     from the render that reads unavailable is removed; one still rendered, or
     a person's, is not ours to touch."""
     import json
@@ -2156,19 +2163,32 @@ def test_a_look_the_house_lost_leaves_no_ghost_script(witness, secrets, rendered
 
     path = rendered_fresh / MANIFEST
     m = json.loads(path.read_text())
-    m["scripts_gone"] = ["living_fantome"]
+    m["objects_gone"] = ["script.living_fantome", "input_number.house_palette_atelier_start"]
     path.write_text(json.dumps(m))
     ha = FakeHA()
-    for entity_id, uid, state in (
-        ("script.living_fantome", "living_fantome", "unavailable"),
-        ("script.living_today", "living_today", "unavailable"),  # mid-restart, still rendered
-        ("script.mine", "mine", "unavailable"),  # a person's
+    for entity_id, platform, uid, state in (
+        ("script.living_fantome", "script", "living_fantome", "unavailable"),
+        ("script.living_today", "script", "living_today", "unavailable"),  # mid-restart
+        ("script.mine", "script", "mine", "unavailable"),  # a person's
+        (
+            "input_number.house_palette_atelier_start",
+            "input_number",
+            "house_palette_atelier_start",
+            "unavailable",
+        ),
+        (
+            "input_number.house_palette_perso1_start",
+            "input_number",
+            "house_palette_perso1_start",
+            "40",
+        ),
+        ("input_number.mine", "input_number", "mine", "unavailable"),  # a person's
     ):
         ha.entities.append(
             {
                 "entity_id": entity_id,
                 "device_id": None,
-                "platform": "script",
+                "platform": platform,
                 "entity_category": None,
                 "disabled_by": None,
                 "unique_id": uid,
@@ -2177,10 +2197,47 @@ def test_a_look_the_house_lost_leaves_no_ghost_script(witness, secrets, rendered
         ha.states[entity_id] = state
     steps = apply(witness, secrets, rendered_fresh, ha, check=False)
     orphans = sorted(s.detail for s in steps if s.name == "orphan")
-    assert orphans == ["script.living_fantome removed (a look the house no longer has)"]
+    gone = "removed (the house rendered it once and renders it no more)"
+    assert orphans == [
+        f"input_number.house_palette_atelier_start {gone}",
+        f"script.living_fantome {gone}",
+    ]
     ids = {e["entity_id"] for e in ha.entities}
-    assert "script.living_fantome" not in ids
-    assert {"script.living_today", "script.mine"} <= ids
+    assert not {"script.living_fantome", "input_number.house_palette_atelier_start"} & ids
+    assert {
+        "script.living_today",
+        "script.mine",
+        "input_number.house_palette_perso1_start",
+        "input_number.mine",
+    } <= ids
+
+
+def test_a_manifest_of_the_old_shape_still_names_its_ghosts(witness, secrets, rendered_fresh):
+    """`apply` on a tree the previous engine rendered (`scripts_gone`, before
+    0.32) reads the same memory."""
+    import json
+
+    from regie.render import MANIFEST
+
+    path = rendered_fresh / MANIFEST
+    m = json.loads(path.read_text())
+    path.write_text(json.dumps({"engine": "0.31.0", "files": m["files"], "scripts_gone": ["x"]}))
+    ha = FakeHA()
+    ha.entities.append(
+        {
+            "entity_id": "script.x",
+            "device_id": None,
+            "platform": "script",
+            "entity_category": None,
+            "disabled_by": None,
+            "unique_id": "x",
+        }
+    )
+    ha.states["script.x"] = "unavailable"
+    steps = apply(witness, secrets, rendered_fresh, ha, check=False)
+    assert [s.detail for s in steps if s.name == "orphan"] == [
+        "script.x removed (the house rendered it once and renders it no more)"
+    ]
 
 
 # --- Assist (pack assist, 0.31) ------------------------------------------------------

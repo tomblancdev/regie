@@ -167,6 +167,9 @@ def test_the_house_remote_and_the_pin(house_with, secrets, tmp_path):
         ),
         encoding="utf-8",
     )
+    # a room whose light has not come yet: it declares `day` and `night` and
+    # renders no script (0.32 — La Piaule, read on the doctor's first run)
+    (path.parent / "rooms" / "cellar.yml").write_text(CELLAR, encoding="utf-8")
     render(load_house(path), tmp_path, secrets)
     hall = yaml.safe_load(
         (tmp_path / "home-assistant/packages/hands_hall.yaml").read_text(encoding="utf-8")
@@ -207,6 +210,93 @@ def test_the_house_remote_and_the_pin(house_with, secrets, tmp_path):
     assert {"action": "script.living_night"} in b[("right",)] and {
         "action": "script.hall_night"
     } not in b[("right",)], "rooms: all = every room that has the look"
+    called = {a["action"] for key in (("right",), ("hold_on",)) for a in b[key] if "action" in a}
+    assert not {"script.cellar_day", "script.cellar_night"} & called, (
+        "rooms: all = every room that RENDERS the look — a room waiting for its light "
+        "declares day and night and renders neither"
+    )
+    packages = tmp_path / "home-assistant/packages"
+    assert not (packages / "hands_cellar.yaml").exists()
+    text = "".join(p.read_text(encoding="utf-8") for p in packages.glob("*.yaml"))
+    assert "script.cellar_" not in text, "nothing in the house calls a script the brain lacks"
+
+
+CELLAR = """id: cellar
+label: La Cave
+roles: { main: {}, lamp: {} }
+scenes:
+  day:   { main: { brightness: 100, ct: neutral } }
+  night: { main: { brightness: 5, ct: warm } }
+  soft:  { lamp: { brightness: 30, ct: warm } }
+defaults: { dark: day, dim: day, bright: day }
+"""
+
+
+def test_check_holds_a_named_room_to_the_look_it_renders(house_with):
+    """A room a person names (`room:`, `rooms: [..]`) must render the look:
+    a gesture calling `script.cellar_day` on a brain that has none is a
+    repair at the first press (read live on « La maison :) », 2026-09-04)."""
+    path = house_with(lambda d: None)
+    (path.parent / "rooms" / "cellar.yml").write_text(CELLAR, encoding="utf-8")
+    living = path.parent / "rooms" / "living.yml"
+    original = living.read_text(encoding="utf-8")
+
+    def remote(line: str) -> None:
+        living.write_text(
+            original.replace("  living_remote: { behaviour: room_remote }", f"  {line}"),
+            encoding="utf-8",
+        )
+
+    remote("living_remote: { behaviour: room_remote, left: { look: day, rooms: [cellar] } }")
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "cellar renders no look yet (no light fills a role of it)" in str(exc.value)
+    # the light comes for `main`: `day` renders, `soft` (the lamp's) still does not
+    path2 = house_with(
+        lambda d: d["things"].append(
+            {
+                "id": "cellar_ceiling",
+                "area": "cellar",
+                "kind": "light",
+                "via": "zigbee",
+                "ieee": "0x000d6ffffe0000c1",
+                "role": "main",
+            }
+        )
+    )
+    (path2.parent / "rooms" / "cellar.yml").write_text(CELLAR, encoding="utf-8")
+    living2 = path2.parent / "rooms" / "living.yml"
+    living2.write_text(
+        original.replace(
+            "  living_remote: { behaviour: room_remote }",
+            "  living_remote: { behaviour: room_remote, left: { look: day, rooms: [cellar] }, "
+            "right: { look: soft, room: cellar } }",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(HouseError) as exc:
+        load_house(path2)
+    assert "look 'soft' — cellar declares it and renders it not yet" in str(exc.value)
+    assert "script.cellar_soft would be called" in str(exc.value)
+    assert "look 'day'" not in str(exc.value), "the ceiling came: day renders"
+
+
+def test_a_remotes_own_room_waiting_for_its_light_renders_nothing_for_the_gesture(
+    house_with, secrets, tmp_path
+):
+    """A house with no filled role still loads (the modes pack's rule): the
+    remote's own room is not a room a person named — its looks render
+    nothing for the gesture, and `check` hints instead of refusing."""
+    from regie.render import render
+
+    path = house_with(lambda d: [(t.pop("role", None), t.pop("at", None)) for t in d["things"]])
+    h = load_house(path)
+    assert any("living renders no look yet" in x and "the gesture waits" in x for x in h.hints)
+    render(h, tmp_path, secrets)
+    liv = load(tmp_path, "living")
+    text = yaml.safe_dump(liv)
+    assert "script.living_" not in text, "no script the brain will not have"
+    assert "input_select.living_look" not in text
 
 
 @pytest.mark.parametrize(
