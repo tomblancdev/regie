@@ -20,6 +20,7 @@ def test_witness_loads_with_one_of_every_kind(witness):
         "hands",
         "matter",
         "palette",
+        "assist",
         "chalet",
     ]
     assert witness.packs[-1].origin == "house"
@@ -81,6 +82,7 @@ def test_mqtt_users_and_secret_names(witness):
         "zigbee_main_pan_id",
         "zigbee_main_ext_pan_id",
         "oidc_client_secret",
+        "watchman_token",  # the ceiling's watchman (assist, 0.31)
     }
 
 
@@ -139,8 +141,8 @@ def test_a_hardware_address_is_six_bytes_or_a_thread_eui64(house_with):
 def test_unknown_pack_lists_the_known_ones(house_with):
     with pytest.raises(
         HouseError,
-        match=r"unknown pack 'voice' — product packs: fx, hands, lighting, matter, modes, notify, "
-        r"palette, scenarios, scenes, signals, when; house packs \(packs\): chalet",
+        match=r"unknown pack 'voice' — product packs: assist, fx, hands, lighting, matter, modes, "
+        r"notify, palette, scenarios, scenes, signals, when; house packs \(packs\): chalet",
     ):
         load_house(house_with(lambda d: d.update(packs=["voice"])))
 

@@ -12,13 +12,13 @@ def test_check_reports_and_passes(witness_path, capsys):
     assert "maison_temoin — Maison témoin (fr, Europe/Paris)" in out
     assert (
         "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, "
-        "matter, palette, "
+        "matter, palette, assist, "
         "chalet (house)" in out
     )
     assert (
         "zigbee main: tcp://192.0.2.10:6638 (zstack), channel 25, 20 paired, 6 room groups" in out
     )
-    assert "secrets: 9 needed, all present" in out
+    assert "secrets: 10 needed, all present" in out
     assert "matter: the server beside the brain (ws://localhost:5580/ws), 1 thing(s)" in out
     assert "controls: panel on · presence on · restore-default on · silent on" in out
     assert "not paired yet" in out and out.rstrip().endswith("ok")
@@ -26,7 +26,7 @@ def test_check_reports_and_passes(witness_path, capsys):
 
 def test_check_without_secrets_names_them_and_strict_fails_on_warnings(witness_path, capsys):
     assert main(["check", str(witness_path)]) == 0
-    assert "9 needed, 9 missing" in capsys.readouterr().out
+    assert "10 needed, 10 missing" in capsys.readouterr().out
     assert main(["check", str(witness_path), "--strict"]) == 1
 
 
@@ -50,7 +50,8 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     )
     assert rc == 0
     out = capsys.readouterr().out
-    assert "41 written, 0 unchanged, 0 kept, 0 removed" in out
+    # 47 since 0.31: the assist pack's two packages and the component's four files
+    assert "47 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 
@@ -63,9 +64,9 @@ def test_mint_completes_a_secrets_file(witness_path, tmp_path, capsys):
     out = tmp_path / "secrets.yml"
     out.write_text("mqtt_password_home: keep-me\n")
     assert main(["mint", str(witness_path), "--secrets", str(out)]) == 0
-    assert "8 minted" in capsys.readouterr().out
+    assert "9 minted" in capsys.readouterr().out
     values = yaml.safe_load(out.read_text())
-    assert values["mqtt_password_home"] == "keep-me" and len(values) == 9
+    assert values["mqtt_password_home"] == "keep-me" and len(values) == 10
     assert len(values["zigbee_main_network_key"]) == 16
 
 

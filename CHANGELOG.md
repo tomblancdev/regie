@@ -62,6 +62,12 @@ import Home Assistant, lu tel quel par les tests), `conversation.py`. Les
 lignes par défaut dans les labels (fr, en) ; une maison écrit les siennes.
 La maison témoin porte le pack.
 
+La suite : le témoin porte le bloc `assist:` — un pack de plus, un secret
+(`watchman_token`), six fichiers rendus (les deux paquets, le composant),
+quatre pas d'`apply` — et les tests d'avant comptent ces pas ; aucun test ne
+touche le réseau (le serveur de l'IA ne répond jamais dans un test, sauf par
+le fixture `models`).
+
 ## 0.30.0 — le docteur : le cerveau relu après chaque convergence (2026-09-06)
 
 L'audit du cerveau, quatrième pas (V6). Une convergence disait `changed=0` et

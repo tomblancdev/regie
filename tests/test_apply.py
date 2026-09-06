@@ -945,6 +945,14 @@ def _door_answers(monkeypatch):
     monkeypatch.setattr("regie.apply.time.sleep", lambda s: None)
 
 
+@pytest.fixture(autouse=True)
+def _no_llm_server(monkeypatch):
+    """No LLM server answers in a test (the witness's is 192.0.2.50): the
+    agent's step waits, and the suite never reaches for the network. The
+    `models` fixture below hands a server that holds the witness's model."""
+    monkeypatch.setattr("regie.apply.Conductor.assist_models", lambda self, url: None)
+
+
 @pytest.fixture
 def with_oven(house_with):
     """The witness plus a cloud oven (Home Connect) and a HEOS receiver."""
@@ -1031,14 +1039,20 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert ha.pin_shown == 0 and not ha.flows
     tv = next(s for s in steps if s.name == "entry living_tv (androidtv_remote)")
     assert tv.detail == "androidtv_remote: a pin on its screen — regie link living_tv"
+    # Assist (0.31): the LLM's entry is made, its agent waits for a server no
+    # test answers for, the exposure has nothing born to show yet, the pipeline
+    # waits for the porter (a restart away) — the pack's own test furnishes them
+    assert st["entry ollama"] == "changed" and st["agent ollama"] == "waiting"
+    assert st["assist exposure"] == "ok" and st["assist pipeline"] == "waiting"
     hand = sum(1 for s in steps if s.state == "hand")
-    ok = sum(1 for s in steps if s.state == "ok")  # the puck's cast row: served by the TV's entry
-    # the mesh: no Zigbee2MQTT answers in a test, so the radio's step waits
-    # (the walk's own half has its own file, test_zigbee.py)
+    # ok: the puck's cast row (served by the TV's entry), the exposure
+    ok = sum(1 for s in steps if s.state == "ok")
+    # waiting: the mesh (no Zigbee2MQTT answers in a test — the walk's own half
+    # has its own file, test_zigbee.py), the LLM's agent, the pipeline
     waiting = sum(1 for s in steps if s.state == "waiting")
-    assert ok == 1 and waiting == 1
+    assert ok == 2 and waiting == 3
     assert summary(steps, False) == (
-        f"apply: {len(steps) - hand - ok - waiting} changed, 1 ok, {hand} by hand, "
+        f"apply: {len(steps) - hand - ok - waiting} changed, 2 ok, {hand} by hand, "
         f"{waiting} waiting"
     )
 
@@ -1350,8 +1364,9 @@ def test_check_plans_the_entries_without_starting_a_flow(witness, secrets, tmp_p
     printer = next(s for s in steps if s.name == "entry kitchen_printer")
     assert printer.detail == "set up ipp at 192.0.2.32"
     assert not ha.flows and ha.pin_shown == 0 and "POST " + FLOWS not in ha.log[seen:]
-    # 8 entries wanted + the Matter server's + the border router's, 1 by hand
-    assert summary(steps, True).startswith("apply: 9 would change")
+    # 8 entries wanted + the Matter server's + the border router's + the LLM's
+    # entry and its agent (assist, 0.31), 1 by hand
+    assert summary(steps, True).startswith("apply: 11 would change")
 
 
 def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):
@@ -1361,7 +1376,9 @@ def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, t
     printer = next(s for s in steps if s.name == "entry kitchen_printer")
     assert printer.state == "waiting" and "192.0.2.32 does not answer" in printer.detail
     assert "ipp" not in ha.entries and not ha.flows  # nothing made, nothing left open
-    assert ", 2 waiting" in summary(steps, False)  # the printer, and the mesh no test answers for
+    # the printer, the mesh no test answers for, the LLM's agent (no server in a
+    # test) and the pipeline (no porter before the restart)
+    assert ", 4 waiting" in summary(steps, False)
     ha.off.clear()  # powered on: the next apply makes the entry
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert states(again)["entry kitchen_printer"] == "changed"
