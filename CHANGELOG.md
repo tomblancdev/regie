@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.29.0 — une release en une commande, le moteur depuis une copie de travail (2026-09-06)
+
+L'audit du cerveau, troisième pas (V3). Une release était onze gestes à la
+main — trois marques à monter ensemble (`pyproject.toml`, `galaxy.yml`, le
+`regie_version` du rôle `engine`), l'entrée du changelog, le format, la
+suite, le commit, l'étiquette, le push, puis chez celui qui épingle sa
+version et son image — et quatre releases dans un après-midi en ont fait la
+démonstration. **`tools/release.sh <version>`** les fait : les trois marques
+montées d'un coup, les vérifications de la CI sur l'arbre qui sera étiqueté
+(`no-environment`, `ruff check`, `ruff format --check`, `pytest`), un commit,
+une étiquette annotée, un push. Il refuse, avant de toucher à quoi que ce
+soit : un arbre sale (les fichiers non suivis compris), des marques qui ne
+s'accordent pas (quelqu'un en a édité une à la main), une version qui n'est
+pas au-dessus de l'actuelle ou une étiquette qui existe déjà ici ou chez
+origin, un changelog dont la première entrée n'est pas cette version, une
+branche sans amont ou en retard dessus ; des vérifications rouges remettent
+les marques et ne commettent rien. L'entrée du changelog est écrite par une
+personne, avec le travail, et son titre (`## <version> — <titre> (<date>)`)
+devient le message du commit et de l'étiquette : l'histoire s'écrit une
+fois. Les vérifications passent par un préfixe optionnel, `RELEASE_RUN`
+(vide = ce shell, `.venv/bin/<outil>` s'il existe ; un portable qui n'a que
+podman y met sa ligne `podman run …`) ; git reste sur l'hôte, avec les clés.
+La commande s'arrête à l'étiquette poussée : celui qui l'épingle le fait dans
+sa propre configuration.
+
+**Le rôle `engine` prend un `regie_source`** : une copie de travail du
+produit sur le contrôleur. Posé, le rôle l'empaquette
+(`files/source-archive.sh` : ce dont une roue se construit, la version
+marquée `+local.<empreinte de l'arbre>`, reproductible), copie le fichier sur
+l'hôte et y installe le moteur — un changement du moteur atteint un cerveau
+sans étiquette, et `regie --version` le dit. L'installation est clée sur
+`local:<empreinte>` : une édition est une nouvelle installation, une copie
+inchangée ne change rien, et la convergence suivante sans `regie_source`
+voit une référence qui n'est pas l'étiquette, remet l'étiquette et retire
+l'archive. Vide, c'est l'étiquette — le seul chemin qu'une flotte prend.
+Avant, la surcouche d'une flotte ne portait que la collection : 0.28.1 et
+0.28.3 ont été coupées pour essayer une ligne du moteur. Lu à la première
+convergence par la surcouche : la ressource de l'Atelier porte la version du
+moteur dans son `?v=`, donc une surcouche la repointe une fois et
+l'épinglage la remet (`apply: 1 changed` dans chaque sens) — c'est ce que
+`?v=` est pour.
+
 ## 0.28.3 — un script refait passe par unavailable (2026-09-06)
 
 L'aller-retour de preuve de V1 (l'étiquette d'une ambiance changée puis

@@ -9,3 +9,12 @@ regie_venv: /opt/regie
 regie_bin: /usr/local/bin/regie
 # what the host needs first (Debian-like: python3 with venv, git for pip)
 regie_engine_packages: [python3, python3-venv, python3-packaging, git]   # packaging: what ansible's pip module imports on the target (Debian 13 ships without it)
+
+# The dev loop (0.29): a checkout of the product on the CONTROLLER. Set, the
+# engine is installed from it instead of the tag — packed by
+# files/source-archive.sh into regie_source_archive, its version labelled
+# `+local.<digest>`, keyed on `local:<digest>` — so a change in the working
+# copy reaches the host with no tag cut; the next run without it puts the
+# tag back. Empty is the tag, the only path a fleet takes.
+regie_source: ""
+regie_source_archive: /tmp/regie-source.tgz

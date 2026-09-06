@@ -1,5 +1,6 @@
 ---
-# engine — the CLI on the brain's host, from the product's tag
+# engine — the CLI on the brain's host, from the product's tag — or, for a
+# dev loop, from a checkout on the controller (regie_source)
 - name: engine — the host's packages
   ansible.builtin.apt:
     name: "{{ regie_engine_packages }}"
@@ -11,6 +12,39 @@
   ansible.builtin.command:
     cmd: python3 -m venv {{ regie_venv }}
     creates: "{{ regie_venv }}/bin/pip"
+
+# The dev loop (0.29): a checkout on the controller, packed into one
+# reproducible archive (files/source-archive.sh) whose version carries a
+# `+local.<digest>` label, copied to the host and installed from there. The
+# ref it is keyed on is `local:<digest>`: an edit in the working copy is a
+# new install, an unchanged copy changes nothing, and the next converge
+# without regie_source sees a ref that is not the tag and puts the tag back.
+- name: engine — the checkout, packed (a dev loop)
+  ansible.builtin.script:
+    cmd: source-archive.sh {{ regie_source }} {{ regie_source_archive }}
+  delegate_to: localhost
+  become: false
+  register: regie_engine_pack
+  changed_when: false
+  when: regie_source | length > 0
+
+- name: engine — the ref wanted
+  ansible.builtin.set_fact:
+    regie_engine_want: "{{ ('local:' ~ (regie_engine_pack.stdout | trim)) if regie_source | length > 0 else regie_version }}"
+    regie_engine_from: "{{ (regie_venv ~ '/source.tgz') if regie_source | length > 0 else ('git+' ~ regie_repo ~ '@' ~ regie_version) }}"
+
+- name: engine — the checkout, on the host
+  ansible.builtin.copy:
+    src: "{{ regie_source_archive }}"
+    dest: "{{ regie_venv }}/source.tgz"
+    mode: "0644"
+  when: regie_source | length > 0
+
+- name: engine — the checkout, gone (the tag path leaves no trace of a dev loop)
+  ansible.builtin.file:
+    path: "{{ regie_venv }}/source.tgz"
+    state: absent
+  when: regie_source | length == 0
 
 # keyed on the REF, not the version: a moved ref (a sha, a re-cut tag) with
 # the same version number is a different package - ansible's pip module
@@ -26,13 +60,13 @@
 
 - name: engine — the package, from the ref
   ansible.builtin.command:
-    cmd: "{{ regie_venv }}/bin/pip install --quiet --upgrade --force-reinstall git+{{ regie_repo }}@{{ regie_version }}"
-  when: (regie_engine_ref.content | default('') | b64decode | trim) != regie_version
+    cmd: "{{ regie_venv }}/bin/pip install --quiet --upgrade --force-reinstall {{ regie_engine_from }}"
+  when: (regie_engine_ref.content | default('') | b64decode | trim) != regie_engine_want
   register: regie_engine_install
 
 - name: engine — the ref, remembered
   ansible.builtin.copy:
-    content: "{{ regie_version }}\n"
+    content: "{{ regie_engine_want }}\n"
     dest: "{{ regie_venv }}/.ref"
     mode: "0644"
 
@@ -50,4 +84,4 @@
 
 - name: engine — say it
   ansible.builtin.debug:
-    msg: "{{ regie_engine_version.stdout }} ({{ regie_version }})"
+    msg: "{{ regie_engine_version.stdout }} ({{ regie_engine_want }})"

@@ -139,4 +139,28 @@ override them under `pins:` and `doctor` will say so. A bump of the product
 is a tag; a schema change ships a `migrate` and a line in the
 [changelog](CHANGELOG.md).
 
+**A release is one command** (0.29). Write the changelog entry with the
+work — `## <version> — <title> (<date>)`, the file's first entry — and
+commit it; then:
+
+```sh
+sh tools/release.sh 0.29.0
+```
+
+bumps the three version marks together (`pyproject.toml`, the collection's
+`galaxy.yml`, the engine role's pin), runs CI's checks on the tree that will
+be tagged, commits, cuts the annotated tag with the entry's title and pushes.
+It refuses a dirty tree, marks that disagree, a version that is not above
+the current one or a tag that exists, an entry that is not this version, a
+branch behind its upstream; red checks leave nothing committed. The checks
+run through `RELEASE_RUN` when set (a laptop with nothing on it but podman:
+`RELEASE_RUN="podman run --rm -v $PWD:/src -w /src docker.io/library/python:3.13-slim"`);
+git stays on the host. Whoever pins the tag does so in their own
+configuration.
+
+**Trying an engine change on a fleet's brain, with no tag:** the `engine`
+role's `regie_source` — a checkout on the controller — installs the engine
+from the working copy, its version labelled `+local.<digest>`; the next run
+without it puts the tag back ([`ansible/roles/engine`](ansible/roles/engine)).
+
 MIT — Tom Blanc.
