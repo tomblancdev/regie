@@ -72,11 +72,20 @@ RELOAD_ORDER = [*RELOAD_DOMAINS.values(), "frontend/reload_themes"]
 
 
 class _HaYaml(yaml.SafeLoader):
-    """Home Assistant's YAML read for its KEYS: its own tags (!secret,
-    !include_dir_named…) become nothing."""
+    """Home Assistant's YAML read for its SHAPE: its own tags (!secret,
+    !include_dir_named…) become the tag and its word, so a reference that
+    moves still counts as a change."""
 
 
-_HaYaml.add_multi_constructor("!", lambda loader, suffix, node: None)
+_HaYaml.add_multi_constructor(
+    "!", lambda loader, suffix, node: f"!{suffix} {getattr(node, 'value', '')}"
+)
+
+
+def _digest(value) -> str:
+    """One block of a package, in its normal form: what changed is read from
+    this, never from the file's bytes (a comment moved asks nothing)."""
+    return sha256(yaml.safe_dump(value, sort_keys=True, allow_unicode=True).encode("utf-8"))
 
 
 @dataclass
@@ -151,23 +160,28 @@ def dashboard_paths(root: Path) -> dict[str, str]:
     return out
 
 
-def brain_asks(rel: str, root: Path, dashboards: dict[str, str]) -> list[str]:
-    """What a changed Home Assistant file asks of the brain: the reload
-    services (`domain/service`), an event (`lovelace_updated <url path>`),
-    nothing (a file served on request) — or [RESTART] when only a start reads it."""
+def brain_asks(rel: str, root: Path, dashboards: dict[str, str]) -> dict[str, str]:
+    """What a Home Assistant file asks of the brain, each ask with a digest of
+    what it covers: the reload services (`domain/service`) — a package's, one
+    per domain it holds, the digest of that domain's block alone —, an event
+    (`lovelace_updated <url path>`), nothing (a file served on request) — or
+    RESTART when only a start reads it. An ask is made when its digest moved
+    since the last up: a look edited reloads the scripts, not the sensors
+    beside them (0.28.2)."""
+    p = root / rel
+    whole = sha256(p.read_bytes()) if p.is_file() else ""
     kind = rel.split("/")[1]
     if kind == "packages" and rel.endswith(".yaml"):
-        p = root / rel
         if not p.is_file():
-            return [RESTART]
+            return {RESTART: whole}
         try:
             data = yaml.load(p.read_text(encoding="utf-8"), Loader=_HaYaml) or {}
         except yaml.YAMLError:
-            return [RESTART]
-        asks: set[str] = set()
+            return {RESTART: whole}
+        blocks: dict[str, list] = {}
         for key, value in data.items():
             if key in RELOAD_DOMAINS:
-                asks.add(RELOAD_DOMAINS[key])
+                blocks.setdefault(RELOAD_DOMAINS[key], []).append((key, value))
                 continue
             platforms = (
                 {e.get("platform") for e in value}
@@ -175,20 +189,24 @@ def brain_asks(rel: str, root: Path, dashboards: dict[str, str]) -> list[str]:
                 else set()
             )
             if platforms and platforms <= set(RELOAD_PLATFORMS):
-                asks |= {RELOAD_PLATFORMS[x] for x in platforms}
+                for x in sorted(platforms):
+                    blocks.setdefault(RELOAD_PLATFORMS[x], []).append((key, value))
                 continue
-            return [RESTART]
-        return sorted(asks)
+            return {RESTART: whole}
+        return {
+            ask: _digest([list(kv) for kv in sorted(held, key=lambda kv: kv[0])])
+            for ask, held in blocks.items()
+        }
     if kind == "themes":
-        return ["frontend/reload_themes"]
+        return {"frontend/reload_themes": whole}
     if kind == "dashboards":
         url = dashboards.get(rel)
-        return [f"lovelace_updated {url}"] if url else []
+        return {f"lovelace_updated {url}": whole} if url else {}
     if kind == "www":
-        return []
+        return {}
     if rel in TOP_RELOADS:
-        return [TOP_RELOADS[rel]]
-    return [RESTART]
+        return {TOP_RELOADS[rel]: whole}
+    return {RESTART: whole}
 
 
 def _rank(ask: str) -> tuple[int, str]:
@@ -352,9 +370,10 @@ def up(
     restart = install_component(house, root, runner, result, fetcher)
 
     # the files each service reads, hashed: a change since the last up — or a
-    # file gone since — is a restart of its service, or for the brain what
-    # the file asks (its asks are remembered, so a domain a package no longer
-    # holds is reloaded once more, to let go of what it declared)
+    # file gone since — is a restart of its service; for the brain it is what
+    # the file asks, ask by ask, each made only when the block it covers moved
+    # (remembered in reloads.json: a domain a package no longer holds is
+    # reloaded once more, to let go of what it declared; a file gone the same)
     stamps = read_state(root, "stamps.json")
     remembered = read_state(root, "reloads.json")
     hashes = file_hashes(root, [r for r in rendered if not r.startswith("units/")])
@@ -374,12 +393,15 @@ def up(
         if u != "home-assistant":
             restart.add(u)
             continue
-        now = set(reloads.get(rel, []))
-        before = set(remembered.get(rel, [] if rel in reloads else [RESTART]))
-        if RESTART in now | before:
+        now = reloads.get(rel, {})
+        before = remembered.get(rel, {} if rel in reloads else {RESTART: ""})
+        if isinstance(before, list):  # 0.28.0's memory: the asks, no digests
+            before = dict.fromkeys(before, "")
+        moved = {a for a in set(now) | set(before) if now.get(a) != before.get(a)}
+        if RESTART in moved:
             restart.add(u)
         else:
-            asks |= now | before
+            asks |= moved
 
     # the reloads speak with the conductor's own token; a brain that has none
     # yet (a first converge, the tokens not minted) is restarted instead

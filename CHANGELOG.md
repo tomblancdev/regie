@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.28.2 — le grain est le domaine dont le bloc a bougé (2026-09-06)
+
+Lu dans les traces de la convergence de 0.28.1 : une automatisation retouchée
+dans six paquets de pièces, et `up` a rechargé les cinq domaines de chaque
+fichier — le rechargement des `template` a refait les capteurs (`_default`,
+`house_palette`, les occupations), et toute automatisation qui les regarde a
+tiré (un état né de rien passe `not_from: unavailable`) : la palette a
+repeint deux fois les pièces allumées et relancé leurs marches. Une demande
+porte désormais l'empreinte du bloc qu'elle couvre — le domaine seul, sous sa
+forme normale, une référence `!secret` déplacée comptant — et n'est faite que
+si l'empreinte a bougé : une ambiance retouchée recharge les scripts, pas les
+capteurs à côté ; un commentaire déplacé ne demande rien (« nothing to do »).
+La mémoire de 0.28.0 (des listes sans empreintes) est lue une fois comme
+« tout a bougé ». Trouvé à côté, à écrire dans la maison : un capteur refait
+par un rechargement est une naissance que `not_from` ne filtre pas — le
+déclencheur des paquets `signals`, `palette` et `when` a besoin d'une garde
+`trigger.from_state is not none` le jour où un bloc `template` change pour
+de vrai.
+
 ## 0.28.1 — une marche qui finit d'elle-même ne se relance pas (2026-09-06)
 
 Lu en direct trois minutes après la convergence de 0.28.0 : les démarreurs du
