@@ -456,6 +456,10 @@
         "plan": {
           "type": "string",
           "description": "the plan's own file (0.15): the frame, the drawing and the WALLS, in place of the `plan:` block here - the workbench's pull rewrites its walls"
+        },
+        "scenes": {
+          "type": "string",
+          "description": "the house's looks (0.34): one file, in place of the `scenes:` block here — declared once, inherited by every room that has a role they name"
         }
       }
     },
@@ -472,6 +476,16 @@
         "$ref": "#/$defs/scenario"
       },
       "description": "the stories — steps, waits, effects, scenes, words; one file each under include.scenarios"
+    },
+    "scenes": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/scene"
+      },
+      "description": "THE HOUSE'S LOOKS (0.34): declared once, by role, and inherited — a look reaches every room that has a role it names, for those roles alone (a role the room lacks is dropped; a look that names no role of the room does not reach it). A room's own `scenes:` says only what differs. The house's order is the rooms' order for what they do not restate"
     },
     "plan": {
       "type": "object",
@@ -591,9 +605,16 @@
             "pattern": "^[a-z][a-z0-9_]*$"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/scene"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/scene"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
           },
-          "description": "the room's looks by role; each renders as a script <room>_<scene> once a role it names is filled. `off` is implicit: every filled role off"
+          "description": "the room's looks by role; each renders as a script <room>_<scene> once a role it names is filled. `off` is implicit: every filled role off. A look the HOUSE declares (the top-level `scenes:`, 0.34) reaches this room for the roles it has, and this block says only what differs: a role's look here replaces the house's for that role, a scene's own keys (label, icon, palette, life…) key by key; `<look>: false` refuses the house's look; `<look>: true` takes it as it is, where the room writes it (its place in the room's order)"
         },
         "defaults": {
           "type": "object",

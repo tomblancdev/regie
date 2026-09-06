@@ -459,6 +459,31 @@ def check_hands(house, area: dict) -> tuple[list[str], list[str]]:
             for word, verb in gestures.items():
                 w = f"{where}{' ' + prefix if prefix else ''} {word}"
                 errors += check_verb(house, area, verb, w, hints)
+            arrows = [
+                word
+                for word, verb in gestures.items()
+                if isinstance(verb, dict) and verb.get("look") in ("prev", "next")
+            ]
+            if arrows:
+                own = spec.get("looks")
+                walk = (
+                    list(own)
+                    if own
+                    else [
+                        lk
+                        for lk in verbs.room_looks(house, area["id"])
+                        if lk not in verbs.NEVER_WALKED
+                    ]
+                )
+                hints.append(
+                    f"{where}{' ' + prefix if prefix else ''}: the arrows walk "
+                    + (" · ".join(walk) or "nothing yet")
+                    + (
+                        " — looks:'s order"
+                        if own
+                        else " — the file's order (a looks: line chooses)"
+                    )
+                )
     # an unfilled role is one hint, not one per gesture that names it
     seen: set[str] = set()
     kept: list[str] = []
@@ -497,6 +522,17 @@ def check_verb(house, area: dict, verb: dict, where: str, hints: list[str]) -> l
         # the remote's own room waiting for its light renders nothing for the
         # gesture, and the hint says so (a house with no filled role loads)
         named = verb.get("rooms") != "all" and ("room" in verb or "rooms" in verb)
+        if verb.get("rooms") == "all" and isinstance(look, str) and look not in verbs.LOOK_WORDS:
+            skipped = [
+                x["id"]
+                for x in house.areas
+                if house.rendered_scenes(x) and look not in house.rendered_scenes(x)
+            ]
+            if skipped:
+                hints.append(
+                    f"{where}: look {look!r} for every room skips {', '.join(skipped)} — "
+                    "no such look there"
+                )
         for r in rooms:
             if r not in known:
                 continue

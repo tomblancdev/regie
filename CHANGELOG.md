@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.35.0 — les ambiances de la maison, déclarées une fois (2026-09-06)
+
+L'audit du cerveau, la suite de V10 (H50, troisième réponse). Neuf fichiers de
+pièce disaient huit fois la même chose : Jour écrit huit fois avec les mêmes
+chiffres, Alarme sept fois sans que rien ne l'appelle jamais, l'en-tête de la
+Palette du jour sept fois, le même commentaire de six lignes sur le plan dans
+huit fichiers — 736 lignes dont un bon tiers de prose collée, et cinq règles
+que seul un commentaire connaissait. **Un bloc `scenes:` au niveau de la
+maison** (`include: scenes: scenes.yml`, `include.py` + le schéma) : une
+ambiance y est déclarée UNE fois, par rôle, et atteint chaque pièce qui a un
+rôle qu'elle nomme — pour ces rôles seuls (un rôle que la pièce n'a pas est
+retiré ; une ambiance qui ne nomme aucun rôle de la pièce ne l'atteint pas).
+La pièce ne dit que ce qui diffère : l'ambiance d'un rôle remplace celle de la
+maison pour ce rôle, les clés propres d'une ambiance (`label`, `icon`,
+`palette`, `life`…) se fondent clé par clé ; `<ambiance>: false` la refuse ;
+`<ambiance>: true` la prend telle quelle, là où la pièce l'écrit. **L'ordre**
+(la marche des flèches, la rangée de la page) : une ambiance que la pièce
+écrit est à sa place ; une ambiance de la maison qu'elle n'écrit pas suit
+l'ambiance de la maison qui la précède, ou ouvre la liste ; l'ordre des
+rôles dans une ambiance est l'ordre d'envoi du script, un rôle restitué
+garde sa place. Une pièce de parking n'hérite de rien. Résolu au chargement
+(`house.py`, `resolve_scenes`) : chaque lecteur voit une carte résolue ;
+`check` dit par pièce ce qui vient de la maison et ce qu'elle refuse, et
+refuse un `true` sur une ambiance que la maison ne déclare pas (un `false`
+sur une inconnue = un avertissement). **Les cinq règles muettes, dites par
+`check`** : un préfixe partagé par deux places EST un groupe (une indication
+quand `places:` ne le nomme pas ; un avertissement quand toutes les places le
+partagent — `arm_1` ferait un groupe égal au rôle) · l'ordre de `looks:` sur
+une télécommande est celui de la marche des flèches (`check` l'imprime, avec
+« l'ordre du fichier » quand rien n'est dit) · une pièce ne prend part à la
+palette du jour qu'avec une ambiance `today` (dit pour une pièce qui rend et
+n'en a pas, refusée ou non) · `rooms: all` sur la télécommande de la maison
+saute les pièces sans l'ambiance (nommées) · `enable:` absent de fx.yml rend
+un script pour chaque forme (le nombre dit). Trouvé à côté : un mode à
+`scene: none` (H35) demandait à chaque pièce une ambiance appelée None — une
+indication de moins. **La preuve, sur les fichiers du Squat** : le rendu
+entier octet pour octet identique avant/après (les 28 paquets, la page du
+téléphone, le manifeste — 736 lignes de pièces devenues 468 + 28 de maison),
+puis Alarme retirée seule (cinq scripts en moins, rien d'autre), puis une
+ambiance neuve d'une ligne au niveau maison rendue dans chaque pièce qui le
+peut. Six tests neufs ; le rendu du témoin inchangé.
 ## 0.34.0 — les oreilles et la bouche : deux adresses, le téléphone a sa pièce (2026-09-06)
 
 Le pack `assist` apprend la voix. **`assist.voice`** nomme deux serveurs
@@ -155,7 +196,6 @@ Trois défauts qu'un vrai cerveau seul pouvait montrer (Home Assistant
   bleu » se règle EN LOCAL par la pièce en 0,2 s (HassLightSet sur les quatre
   groupes exposés du QG) ; « allume le plafond du QG » passe par le portier à
   l'IA, qui appelle HassTurnOn(name Plafond, area Le QG) en 3,3 s.
-||||||| parent of c045d42 (Le docteur au vert : rooms: all résout depuis ce qui est rendu (verbs.rooms_of ; check tient une pièce nommée à ce qu'elle rend), le manifeste se souvient de tout objet YAML (objects / objects_gone, OBJECT_DOMAINS — le chef d'orchestre retire les aides fantômes comme les scripts depuis 0.26.2 ; un manifeste de l'ancienne forme cède ses scripts_gone), une imprimante n'a pas d'entité en propre (printer: None — une ligne nomme son entity:). Sept tests neufs ou réécrits.)
 
 ## 0.31.1 — Le composant voyage avec le paquet (2026-09-06)
 
@@ -170,7 +210,6 @@ posé. Corrigé d'une ligne ; un test lit les globs de `pyproject.toml` et exige
 que chaque fichier que le rendu copie tel quel (`plan(témoin)`) et tout
 `base/components/` en fassent partie — la leçon de 0.5.1 et 0.12.1 (« une
 release porte sa propre épingle ») appliquée aux données du paquet.
-||||||| parent of 3cd20d0 (Le docteur au vert : rooms: all résout depuis ce qui est rendu (verbs.rooms_of ; check tient une pièce nommée à ce qu'elle rend), le manifeste se souvient de tout objet YAML (objects / objects_gone, OBJECT_DOMAINS — le chef d'orchestre retire les aides fantômes comme les scripts depuis 0.26.2 ; un manifeste de l'ancienne forme cède ses scripts_gone), une imprimante n'a pas d'entité en propre (printer: None — une ligne nomme son entity:). Sept tests neufs ou réécrits.)
 
 ## 0.31.0 — Le Portier : Assist devant un serveur qui dort (2026-09-06)
 
@@ -272,7 +311,6 @@ vert. Le rôle `brain` de la collection lance le docteur après `apply`
 vrai par défaut) fait échouer le jeu sur du rouge, après le rapport — une
 flotte qui vit avec un rouge connu le temps d'un atterrissage le met à faux et
 lit les lignes.
-||||||| parent of 2e87033 (Le Portier : Assist devant un serveur qui dort (0.31.0, W5 étape 3a) : le pack assist branche l'assistant vocal sur une IA qui peut vivre sur un hôte ENDORMI — Home Assistant n'a pas d'agent de repli (lu dans pipeline.py 2026.8.3 : intent-failed) et une phrase personnalisée attrape-tout passe DEVANT chaque commande intégrée (best_metadata_key=METADATA_CUSTOM_SENTENCE), donc la réponse de réveil est Le Portier : conversation.porter, une entité de conversation du composant propre du produit (custom_components/regie, premier locataire), l'agent de la chaîne — hôte réveillé : le tour passe à l'agent de l'IA dans le MÊME journal de conversation (async_converse rentre dans la session ouverte par la chaîne : l'historique suit, la ligne de la personne n'est pas doublée, le flux vers la voix reste branché) ; endormi : la ligne de la maison et le coup frappé par le service que le paquet nomme ; inconnu : demandé quand même, l'échec dit pour ce qu'il est. Le bloc assist: — llm: { url, model, instructions, context, history, think } (l'entrée ollama de Home Assistant puis la SOUS-ENTRÉE de l'agent avec l'API Assist, une ligne ajoutée au prompt de HA : des phrases entières dans la langue de la maison, les couleurs par leur nom anglais dans les appels d'outils), ceiling: { watchman: { url, target, token }, replies } (le contrat de Le Veilleur : GET /api/targets/<t> → up sans jeton, POST …/wake avec le bearer que le secret nommé porte, rendu <nom>_bearer), expose: { lights: roles|rooms|all, scenes, also, never }, pipeline: { name, prefer_local }. Rendu : binary_sensor.tower_awake (REST sur le veilleur, 30 s, INDISPONIBLE quand il ne se lit pas — jamais « non » ; jamais un sondage de la porte de l'IA, qui compterait comme un usage), rest_command.knock_ceiling, regie: porter: (lu au démarrage : un changement redémarre ; rest et rest_command se rechargent), le composant copié tel quel (quatre fichiers). apply gagne trois pas : l'agent (l'entrée par le marcheur de flux, la sous-entrée par walk_subentry — la même boucle sous une autre porte, reconfigure_successful = mis à jour, une réponse peut être une fonction du champ du formulaire pour AJOUTER au prompt suggéré, une empreinte dans .regie/assist.json ; le modèle vérifié sur /api/tags AVANT — Home Assistant téléchargerait des gigaoctets par le cerveau ; serveur endormi = waiting), ce qu'Assist voit (les lumières de chaque pièce et ses groupes de rôle, les ambiances sous leurs étiquettes, le mode, la palette du jour ; jamais une ampoule seule, un groupe de places, le groupe du mesh qui porte le nom de la pièce, une marche, le défaut de la pièce, les ampoules d'une pièce de rangement, le permit-join d'un coordinateur ; une entité pas née attend), la chaîne (« <label de la maison> » dans la langue de la maison, le portier pour agent, prefer local, préférée ; la chaîne anglaise de HA laissée). Les entités du composant ne sont jamais des fantômes pour la règle des orphelins ; le bloc racine d'un pack passe la passe 1 du schéma (la passe 2 reste stricte) ; les lignes par défaut dans les labels fr/en (« le serveur », jamais un mot de maison) ; la maison témoin porte le pack ; 22 tests neufs (porter.py lu sans Home Assistant), la suite entière verte.)
 
 ## 0.29.0 — une release en une commande, le moteur depuis une copie de travail (2026-09-06)
 

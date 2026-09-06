@@ -149,6 +149,8 @@ def vocabulary(house: House) -> None:
             f"daylight dark < {m['daylight']['dark_below']}°, "
             f"bright > {m['daylight']['bright_above']}°"
         )
+    if house.data.get("scenes"):
+        print(f"looks (the house's, inherited): {' '.join(house.data['scenes'])}")
     for a in house.areas:
         declared = house.declared_roles(a)
         if not declared and not a.get("scenes") and not a.get("defaults"):
@@ -165,6 +167,13 @@ def vocabulary(house: House) -> None:
         )
         if a.get("scenes"):
             line += f" · scenes {' '.join(a['scenes'])} → scripts {' '.join(scripts) or 'none yet'}"
+            origin = house.scene_origin.get(a["id"], {})
+            inherited = [s for s, src in origin.items() if src == "house"]
+            refused = [s for s, src in origin.items() if src == "refused"]
+            if inherited:
+                line += f" · from the house: {' '.join(inherited)}"
+            if refused:
+                line += f" · refuses: {' '.join(refused)}"
         if a.get("defaults"):
             line += " · defaults per period"
         print(line)

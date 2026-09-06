@@ -7,6 +7,8 @@ the same on a Pi and on a fleet, never a driver's trick:
   keys over the line's), or appended when `areas:` has no line for it
 - modes / fx: exactly one file each, standing in for the block in home.yml
 - scenarios: one story per file; its id is the file's stem unless it says `id:`
+- scenes: exactly one file, the HOUSE's looks (0.34) — declared once, inherited
+  by every room that has a role they name (house.py, resolve_scenes)
 
 Paths and globs are relative to home.yml. A literal path must exist; a glob
 may match nothing (a house with no story yet)."""
@@ -19,7 +21,7 @@ import yaml
 
 from .errors import HouseError
 
-KINDS = ("rooms", "modes", "fx", "scenarios", "plan")
+KINDS = ("rooms", "modes", "fx", "scenarios", "plan", "scenes")
 
 
 def _patterns(value) -> list[str]:
@@ -53,7 +55,8 @@ def merge_includes(data: dict, base: Path) -> dict[str, list[Path]]:
         return {}
     if not isinstance(inc, dict):
         raise HouseError(
-            "include: a mapping of rooms / modes / fx / scenarios / plan → files was expected"
+            "include: a mapping of rooms / modes / fx / scenarios / plan / scenes → files "
+            "was expected"
         )
     unknown = sorted(set(inc) - set(KINDS))
     if unknown:

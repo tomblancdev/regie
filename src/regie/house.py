@@ -211,6 +211,9 @@ class House:
     warnings: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
     included: dict = field(default_factory=dict)
+    # where each room's looks come from (0.34): `house` · `room` · `both` (the
+    # house's, restated) · `refused` — resolve_scenes fills it
+    scene_origin: dict = field(default_factory=dict)
 
     # --- the lists ---------------------------------------------------------
     @property
@@ -1680,6 +1683,85 @@ class House:
 
 
 # --- loading ----------------------------------------------------------------
+def _inherit(base: dict, own: dict, roles: set[str]) -> dict:
+    """The house's look, cut to the roles this room has, the room's own words
+    over it: a role restated keeps the house's place, a role the room adds
+    comes after, a scene's own key (label, icon, palette, life…) key by key."""
+    out = {k: v for k, v in base.items() if k in SCENE_KEYS or k in roles}
+    out.update(own if isinstance(own, dict) else {})
+    return out
+
+
+def resolve_scenes(data: dict) -> dict[str, dict[str, str]]:
+    """The house's looks, inherited (0.34, the audit's V10). A look declared
+    once under the house's `scenes:` reaches every room that has a role it
+    names — for those roles alone. A room's own block says what differs:
+    a role's look replaces the house's for that role, a scene's own keys
+    key by key; `<look>: false` refuses the house's look; `<look>: true`
+    takes it as it is, where the room writes it; a look of the room's own is
+    the room's. THE ORDER (the arrows' walk, the page's row): a look the
+    room writes sits where the room wrote it; a house look it does not
+    write follows the house look before it (in the house's order), or opens
+    the list. A parking room inherits nothing. Rewrites every room's
+    `scenes` in place to the resolved map and returns, per room, where each
+    look came from: house · room · both · refused."""
+    house_scenes = data.get("scenes") or {}
+    origin: dict[str, dict[str, str]] = {}
+    for a in data.get("areas", []):
+        raw = a.get("scenes") or {}
+        where = origin.setdefault(a["id"], {})
+        refused = {k for k, v in raw.items() if v is False}
+        placed = {k for k, v in raw.items() if v is True}
+        where.update({k: "asked" for k in placed if k not in house_scenes})
+        own = {k: v for k, v in raw.items() if not isinstance(v, bool)}
+        if a.get("parking"):
+            a["scenes"] = own
+            where.update({k: "room" for k in own})
+            continue
+        roles = set(a.get("roles") or {}) | {
+            t["role"] for t in data.get("things", []) if t.get("area") == a["id"] and t.get("role")
+        }
+        where.update({k: "refused" for k in refused})
+        resolved: dict = {}
+        # the room's own text, in its order — a house look restated is merged
+        for sid in raw:
+            if sid in refused:
+                continue
+            base = house_scenes.get(sid)
+            if sid in placed:
+                if base is None:
+                    continue  # check refuses it: nothing to take
+                resolved[sid] = _inherit(base, {}, roles)
+                where[sid] = "house"
+            elif base is not None:
+                resolved[sid] = _inherit(base, own[sid], roles)
+                where[sid] = "both"
+            else:
+                resolved[sid] = own[sid]
+                where[sid] = "room"
+        # the house's looks the room does not write, each right after the house
+        # look before it (or first) — the house's order kept between them
+        prev = None
+        for sid, base in house_scenes.items():
+            if sid in refused:
+                continue
+            if sid in resolved:
+                prev = sid
+                continue
+            look = _inherit(base, {}, roles)
+            if not any(k not in SCENE_KEYS for k in look):
+                continue  # names no role of this room: not its look
+            ids = list(resolved)
+            at = ids.index(prev) + 1 if prev in ids else 0
+            ids.insert(at, sid)
+            resolved = {k: (look if k == sid else resolved[k]) for k in ids}
+            where[sid] = "house"
+            prev = sid
+        if resolved or raw:
+            a["scenes"] = resolved
+    return origin
+
+
 def _validate(schema: dict, data: dict, path: Path | str) -> None:
     validator = Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
     errors = sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.absolute_path])
@@ -1978,6 +2060,38 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                         f"{a['id']}: role {role} calls a place {word!r} something, and its "
                         "layout has no such place (nor a prefix of one)"
                     )
+            # a prefix two places share IS a group (light.<room>_<role>_<prefix>, a
+            # page of its own) — said, not silent (0.34); every place sharing one
+            # is a group equal to the role's own, a naming slip
+            by_prefix: dict[str, list[str]] = {}
+            for place in layout:
+                by_prefix.setdefault(place.split("_")[0], []).append(place)
+            for prefix, places in by_prefix.items():
+                if len(places) < 2:
+                    continue
+                if len(places) == len(layout):
+                    warnings.append(
+                        f"{a['id']}: every place of {role} shares the prefix {prefix!r} — the "
+                        f"group light.{a['id']}_{role}_{prefix} would equal the role's own; "
+                        f"write {prefix}1, not {prefix}_1"
+                    )
+                elif prefix not in named:
+                    hints.append(
+                        f"{a['id']}: {role}'s places {', '.join(places)} share the prefix "
+                        f"{prefix!r} — a group light.{a['id']}_{role}_{prefix} of its own, "
+                        "unnamed (a `places:` line names it)"
+                    )
+        house_looks = data.get("scenes") or {}
+        for sid, src in house.scene_origin.get(a["id"], {}).items():
+            if src == "refused" and sid not in house_looks:
+                warnings.append(
+                    f"{a['id']}: refuses look {sid!r} — the house declares no such look"
+                )
+            if src == "asked":
+                errors.append(
+                    f"{a['id']}: scene {sid}: true takes the house's look, and the house "
+                    "declares no such look"
+                )
         for scene_id, looks in scenes.items():
             for role in looks:
                 if role in SCENE_KEYS:
@@ -2059,6 +2173,18 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                     f"{', '.join(life['colour_shapes'])} have no still bulb to land on — "
                     "every bulb of the look roams"
                 )
+        if (
+            house.has_pack("palette")
+            and house.controls()["palette"]
+            and house.rendered_scenes(a)
+            and palette_mod.AUTO not in scenes
+        ):
+            refused_today = house.scene_origin.get(a["id"], {}).get(palette_mod.AUTO) == "refused"
+            hints.append(
+                f"{a['id']}: no {palette_mod.AUTO} look"
+                + (" (refused)" if refused_today else "")
+                + " — the room sits out of the palette of the day"
+            )
         unfilled = sorted(r for r in declared if r not in filled)
         waiting = [p["id"] for p in house.scene_plan(a) if not p["renders"] and not p["implicit"]]
         if unfilled:
@@ -2183,7 +2309,8 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
         if modes["initial"] not in mode_ids:
             errors.append(f"modes: initial {modes['initial']!r} is not a mode")
         for m in modes["modes"]:
-            if m["scene"] not in ("default", "off"):
+            # `none` (H35: a pure state flip) asks no room for anything
+            if m["scene"] not in ("default", "off", None):
                 rooms_with = [a["id"] for a in house.areas if m["scene"] in (a.get("scenes") or {})]
                 if not rooms_with and not m.get("else"):
                     hints.append(
@@ -2218,6 +2345,11 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             f"fx: unknown backend {fx.get('backend')!r} — known: {', '.join(known_backends())}"
         )
     shapes = load_shapes(fx.get("shapes"))
+    if not fx.get("enable"):
+        hints.append(
+            f"fx: no enable: — every shape of the library renders a script ({len(shapes)}); "
+            "an enable: list picks"
+        )
     for name in fx.get("enable") or []:
         if name not in shapes:
             errors.append(
@@ -2271,7 +2403,9 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             )
     for word, pack in VOCABULARY_PACKS.items():
         present = (
-            bool(data.get(word)) if word != "scenes" else any(a.get("scenes") for a in house.areas)
+            bool(data.get(word))
+            if word != "scenes"
+            else bool(data.get("scenes")) or any(a.get("scenes") for a in house.areas)
         )
         if present and not house.has_pack(pack):
             hints.append(
@@ -2353,7 +2487,20 @@ def load_house(path: Path) -> House:
     _validate(strict, data, path)
 
     _fill_defaults(data)
+    # the house's looks reach the rooms (0.34) — before anything reads a room's
+    # `scenes`, so every reader sees one resolved map
+    origin = resolve_scenes(data)
     labels = Labels(data["house"].get("lang", "en"))
-    house = House(path, data, profile, packs, labels, known_kinds, known_via, included=included)
+    house = House(
+        path,
+        data,
+        profile,
+        packs,
+        labels,
+        known_kinds,
+        known_via,
+        included=included,
+        scene_origin=origin,
+    )
     house.warnings, house.hints = _cross_check(house)
     return house
