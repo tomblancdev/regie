@@ -1087,7 +1087,7 @@ def test_the_sensors_switch_is_born_on_and_then_the_familys(witness, secrets, tm
     ha.states["input_boolean.hall_motion"] = "off"  # the family's word
     steps = apply(witness, secrets, tmp_path, ha, check=False)
     assert next(s for s in steps if s.name == "knob hall_motion").detail == (
-        "off — set from the UI (the file says on), kept"
+        "off (born on, the family's since)"
     )
 
 
@@ -1149,6 +1149,10 @@ def test_a_ghost_of_ours_is_removed_and_a_live_one_or_a_persons_kept(
 
 
 def test_a_knob_the_family_moved_is_read_and_kept(witness, secrets, tmp_path):
+    """0.33 (the rule, pull.py — test_pull.py drills it): a knob the file
+    declares a value for is kept when the phone moved it and NAMED so; a born
+    one is the family's; the memory lost, a fresh helper has no word and the
+    file leads."""
     ha = FakeHA()
     apply(witness, secrets, tmp_path, ha, check=False)
     ha.states["input_datetime.house_period_morning"] = "07:00:00"  # edited in the UI
@@ -1156,11 +1160,14 @@ def test_a_knob_the_family_moved_is_read_and_kept(witness, secrets, tmp_path):
     steps = apply(witness, secrets, tmp_path, ha, check=False)
     morning = next(s for s in steps if s.name == "knob house_period_morning")
     assert morning.state == "ok" and morning.detail == (
-        "07:00 — set from the UI (the file says 06:30), kept"
+        "07:00 — edited on the phone (06:30 → 07:00), kept — not yet pulled: "
+        "`regie pull home.yml knobs` writes it"
     )
     assert ha.states["input_datetime.house_period_morning"] == "07:00:00"
     assert ha.states["input_select.house_mode"] == "cinema"
-    assert next(s for s in steps if s.name == "knob house_period_day").detail == "09:00"
+    assert next(s for s in steps if s.name == "knob house_period_day").detail == (
+        "09:00 — follows the files"
+    )
     # the marks lost (a rebuilt brain): seeded again, the family's 07:00 overwritten
     (tmp_path / ".regie/knobs.json").unlink()
     steps = apply(witness, secrets, tmp_path, ha, check=False)
@@ -2125,13 +2132,13 @@ def test_the_draft_follows_the_files_unless_it_holds_edits(witness, secrets, tmp
     ceiling()["x"] = 180
     steps = apply(h2, secrets, tmp_path, ha, check=False)
     assert states(steps)["workbench"] == "ok"
-    assert "edits not yet pulled (1 thing(s) moved (light.living_ceiling))" in detail(steps)
+    assert "edited on the phone (1 thing(s) moved (light.living_ceiling)), kept" in detail(steps)
     assert ceiling()["x"] == 180, "kept"
     # the files move too: by hand, and the draft is still kept
     h3 = moved(front_left=[130, 90], front_right=[300, 95])
     steps = apply(h3, secrets, tmp_path, ha, check=False)
     assert states(steps)["workbench"] == "hand"
-    assert "files moved since (1 thing(s) moved (light.living_ceiling_2))" in detail(steps)
+    assert "files moved too (1 thing(s) moved (light.living_ceiling_2))" in detail(steps)
     assert ceiling()["x"] == 180, "kept"
     assert "by hand" in summary(steps, False)
     # the pull met them (the files say what the draft says): re-seeded once so

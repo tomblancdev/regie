@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.33.0 — ce que le téléphone possède : une règle, un verbe (2026-09-06)
+
+L'audit du cerveau, la suite de V4. Trois mécanismes disaient la même chose
+de trois façons : les boutons (`.regie/knobs.json` — semés depuis le fichier
+une fois, puis « réglé depuis l'interface, gardé » : l'interface gagnait pour
+toujours et rien ne ramenait sa valeur dans le fichier ; un fichier modifié
+après coup n'était même pas nommé), l'établi du plan (suit les fichiers ·
+modifié, pas encore rapatrié · les deux ont bougé, à la main — `regie plan
+pull`) et les palettes gardées (une réserve libérée sur son seul nom quand le
+fichier le porte — `regie palette --pull`). **Une règle dans le produit
+(`pull.py`)** : une chose que le téléphone peut posséder — un bouton que le
+fichier déclare (l'heure d'une période, l'ambiance d'une pièce pour une
+tranche du jour, les règles du jour de la palette comme UNE chose), le
+brouillon du plan, une réserve de palette — se lit de trois façons (les
+fichiers, le téléphone, la mémoire de ce que le chef d'orchestre a écrit en
+dernier) et porte un mot à chaque convergence : **suit les fichiers** (la
+mémoire rafraîchie — la valeur ramenée par un rapatriement devient la graine,
+ce que les boutons de suivi oubliaient) · **le fichier a bougé, le téléphone
+non → le fichier mène** (écrit sur le téléphone) · **modifié sur le
+téléphone, gardé, pas encore rapatrié** · **les deux ont bougé → à la main**.
+Un bouton auquel le fichier ne donne qu'un mot de naissance (un interrupteur
+né allumé, le mode de naissance de la maison, le select de la palette) est
+celui de la famille dès son premier souffle : semé une fois, jamais suivi,
+jamais rapatrié — la règle n'a rien à en dire. **Un verbe, `regie pull
+home.yml [knobs|plan|palettes]`**, ramène les modifications du téléphone
+dans les fichiers de la maison, **feuille par feuille, chaque autre octet
+gardé** (`edit.py` : la valeur d'un chemin de clés remplacée, insérée ou
+retirée dans le texte même du fichier — le commentaire de la ligne, son
+alignement, les notes de la personne ; un bloc ou une carte en flux, les deux
+formes que la maison écrit) : `modes.yml` (`periods.<id>.at`),
+`rooms/<id>.yml` (`defaults.<tranche>`, `sun` = la ligne retirée), `fx.yml`
+(`palettes.today.<règle>` qui a bougé, une réserve gardée ajoutée comme bloc
+sous son slug). Le rapatriement du plan compare la VALEUR du bloc avant
+d'écrire : un aller-retour sans rien toucher n'écrit rien. **`regie push
+home.yml [kind]`**, l'inverse à la main : les boutons remis depuis les
+fichiers, le brouillon ressemé, une réserve que le fichier porte libérée.
+Une réserve que le fichier porte AUTREMENT (le téléphone a retouché après le
+rapatriement, ou les nombres du fichier ont bougé) attend une main — elle
+était libérée sur son nom seul, la retouche perdue. `regie plan push|pull`
+et `regie palette --pull` sont retirés (les scripts du laboratoire les
+appelaient seuls). La quatrième sorte (V5 : une ambiance réglée dans le
+panneau de lumière et gardée) dira les mêmes quatre choses : lire les trois,
+décrire le chemin, écrire le téléphone, écrire les fichiers. Neuf tests
+neufs ou réécrits.
+
 ## 0.32.0 — le docteur au vert : ce qui est rendu, ce qui l'a été, ce qui n'a pas d'entité (2026-09-06)
 
 L'audit du cerveau, la suite de V6 : la première lecture du docteur sur un

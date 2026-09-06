@@ -539,65 +539,27 @@ class Conductor:
                 )
 
     def knobs(self) -> None:
-        """What the files SEED and the UI owns after: the periods' times, the
-        house's first mode. Seeded ONCE per brain — the conductor keeps its own
-        memory of it (<root>/.regie/knobs.json): a fresh helper does not read
-        `unknown` (a time helper starts at 00:00, a select at its first option
-        — found live), so the mark, not the brain's state, says whether the
-        file has spoken. A marked knob is read, compared, and kept (the file
-        is the seed, never the master — an `initial:` on the helper would
-        reset it at every restart, so the engine renders none)."""
-        marks_path = self.root / STATE / "knobs.json"
-        marks: dict = {}
-        if marks_path.is_file():
-            marks = json.loads(marks_path.read_text(encoding="utf-8"))
-        for k in self.house.knobs():
-            entity = k["entity"]
-            status, state = self.ha.get(f"/api/states/{entity}")
-            name = f"knob {entity.split('.', 1)[1]}"
-            if status == 404:
-                self.step(name, "ok", "no such helper on the brain — nothing to seed")
-                continue
-            if status != 200:
-                raise HouseError(f"{entity}: {status} {state}")
-            current = state.get("state", "unknown")
-            shown = k["reads"](current) if k.get("follow") else current
-            shown = shown[:5] if entity.startswith("input_datetime.") else shown
+        """The knobs under the rule (pull.py, 0.33): a helper the file declares
+        a value for follows the files, is kept when the phone moved it, waits
+        for a hand when both moved — `regie pull home.yml knobs` brings the
+        phone's word into the files, `regie push` the files' onto the phone.
+        The conductor's memory of what it last wrote is <root>/.regie/knobs.json
+        (a fresh helper reads a default, not `unknown` — found live; the mark,
+        not the brain's state, says whether the file has spoken). A born knob
+        is seeded once and the family's after."""
+        from . import pull
 
-            def seed(reason: str, k=k, entity=entity, name=name) -> None:
-                self.step(name, "changed", reason)
-                if not self.check:
-                    domain, service = k["action"].split("/")
-                    st, body = self.ha.post(
-                        f"/api/services/{domain}/{service}", {"entity_id": entity, **k["data"]}
-                    )
-                    if st != 200:
-                        raise HouseError(f"{entity}: {st} {body}")
-                    marks[entity] = k["value"]
-
-            if entity not in marks:
-                seed(f"seed {k['value']} (was {shown})")
-                continue
-            if shown == k["value"]:
-                self.step(name, "ok", shown)
-            elif k.get("follow") and shown == marks[entity]:
-                # the brain still reads what the file seeded last time, and the
-                # file moved: the file leads (0.24, the day's rules)
-                seed(f"{marks[entity]} → {k['value']} (the file moved, the UI had not)")
-            elif k.get("follow") and marks[entity] != k["value"]:
-                self.step(
-                    name,
-                    "hand",
-                    f"{shown} on the brain, {k['value']} in the file, both moved since the seed "
-                    f"{marks[entity]} — `regie palette pull` keeps the brain's, or edit the file",
-                )
-            else:
-                self.step(
-                    name, "ok", f"{shown} — set from the UI (the file says {k['value']}), kept"
-                )
+        marks = pull.read_marks(self.root)
+        owned, born = pull.read_knobs(self.house, self.ha, marks)
+        for b in born:
+            self.step(b["name"], b["state"], b["detail"])
+        if not self.check:
+            pull.seed_born(self.ha, marks, born)
+        for o in owned:
+            state, detail = pull.settle(o, self.check)
+            self.step(o.name, state, detail)
         if not self.check and marks:
-            marks_path.parent.mkdir(parents=True, exist_ok=True)
-            marks_path.write_text(json.dumps(marks, indent=2) + "\n", encoding="utf-8")
+            pull.write_marks(self.root, marks)
 
     # --- what the brain knows about an integration ----------------------------------
     def oauth_domains(self, ws) -> set[str]:
@@ -1448,26 +1410,17 @@ class Conductor:
                 ws.call("config/entity_registry/update", entity_id=e["entity_id"], hidden_by="user")
 
     def palette_slots(self) -> None:
-        """A store whose name the file now carries is freed (0.23 → 0.24): the
-        family kept a palette on the phone, `regie palette pull` wrote it, the
-        file has it — the store's name is emptied, the select still offers the
-        named one (the file's)."""
-        from . import palette as palette_mod
+        """The stores under the rule (0.33; freed on their name alone 0.24 →
+        0.32): a store the files carry as it stands is freed — the family kept
+        a palette on the phone, `regie pull` wrote it, the file has it; one the
+        files do not carry is kept, not yet pulled; one the files carry
+        DIFFERENTLY waits for a hand (a re-edit on the phone after the pull, or
+        the file's numbers touched) — nothing is lost either way."""
+        from . import pull
 
-        if not self.house.has_pack("palette"):
-            return
-
-        def read(e):
-            status, state = self.ha.get(f"/api/states/{e}")
-            return state if status == 200 else None
-
-        for prefix in palette_mod.freed_stores(self.house, read):
-            self.step("palette", "changed", f"store {prefix} freed — the file carries it now")
-            if not self.check:
-                self.ha.post(
-                    "/api/services/input_text/set_value",
-                    {"entity_id": f"input_text.{prefix}_name", "value": ""},
-                )
+        for o in pull.read_stores(self.house, self.ha):
+            state, detail = pull.settle(o, self.check)
+            self.step(o.name, state, detail)
 
     def orphans(self, ws) -> None:
         """A package rendered once and gone leaves its entities in the registry
@@ -1662,8 +1615,9 @@ class Conductor:
         so and keeps the person's work (`hand` once the files moved too). The
         other way is never automatic: `regie plan pull` writes the draft into
         the room files, by hand; `regie plan push` re-seeds it on purpose."""
+        from . import pull
         from .dash import link
-        from .plan import WORKBENCH, seed, sync
+        from .plan import WORKBENCH, find_card, seed
 
         if self.house.plan() is None:
             return
@@ -1690,10 +1644,18 @@ class Conductor:
             draft = ws.call("lovelace/config", url_path=WORKBENCH)
         except HouseError:
             draft = None  # a dashboard holding no config yet: nothing to keep
-        state, detail, reseed = sync(self.house, self.root, draft, link)
+        if find_card(draft or {}) is None:
+            self.step(
+                "workbench",
+                "changed",
+                f"/{WORKBENCH} re-seeded from the files (it held no plan card)",
+            )
+            if not self.check:
+                seed(ws, self.house, self.root, link)
+            return
+        o = pull.read_plan(self.house, self.root, draft, ws, link)
+        state, detail = pull.settle(o, self.check)
         self.step("workbench", state, detail)
-        if reseed and not self.check:
-            seed(ws, self.house, self.root, link)
 
     # --- Assist (pack assist, 0.31) --------------------------------------------
     def assist_models(self, url: str) -> set[str] | None:

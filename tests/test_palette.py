@@ -576,7 +576,9 @@ def test_the_witness_house_gets_the_switch_the_flip_the_repaint_and_the_stores(r
     knobs = {k["entity"]: k for k in witness.knobs()}
     assert knobs["input_boolean.house_palette_repaint"]["value"] == "on"
     assert knobs["input_number.house_palette_today_weight_degrade"]["value"] == "5.0"
-    assert knobs["input_number.house_palette_today_weight_degrade"]["follow"] is True
+    assert knobs["input_number.house_palette_today_weight_degrade"]["group"] == "palette rules"
+    assert knobs["input_number.house_palette_today_weight_degrade"]["pull"] == "palettes"
+    assert knobs["input_boolean.house_palette_repaint"]["born"] is True
     assert knobs["input_text.house_palette_today_shapes"]["value"] == "glitch"
     assert knobs["input_number.house_palette_today_chance"]["value"] == "50.0"
 
@@ -661,7 +663,10 @@ def test_the_sensor_reads_a_kept_store_by_its_name(witness):
     assert json.loads(env.from_string(attr).render())["alive"] == "all"
 
 
-def test_pull_writes_the_stores_and_the_rules_into_the_file(witness, tmp_path):
+def test_a_store_and_the_rules_read_under_the_stores_form(witness):
+    """0.33: a store and the file's named palette compare under one form
+    (`store_normal`), the day's rules under theirs (`rules_normal`, a round
+    trip through the helpers — a count under « toutes » says nothing)."""
     values = {
         "input_text.house_palette_k1_name": "Nuit rouge",
         "input_number.house_palette_k1_start": "330.0",
@@ -676,18 +681,13 @@ def test_pull_writes_the_stores_and_the_rules_into_the_file(witness, tmp_path):
         "input_text.house_palette_k1_shapes": "glitch",
         "input_number.house_palette_k1_every_min": "90.0",
         "input_number.house_palette_k1_every_max": "400.0",
-        # the file carries this one: freed, not re-added
-        "input_text.house_palette_k3_name": "Nuit bleue",
     }
-    values.update(_rules_values(witness.palettes()["today"]))
-    values["input_number.house_palette_today_weight_libre"] = "1.0"
 
     def read(e):
         return {"state": values[e]} if e in values else None
 
-    palettes = P.pull_palettes(witness, read)
-    assert list(palettes) == ["nuit_bleue", "nuit_rouge", "today"]
-    assert palettes["nuit_rouge"] == {
+    store = P.store_from_helpers("house_palette_k1", read)
+    assert store == {
         "label": "Nuit rouge",
         "band": [330, 30],
         "accent": 200,
@@ -697,22 +697,37 @@ def test_pull_writes_the_stores_and_the_rules_into_the_file(witness, tmp_path):
         "alive": "all",
         "life": {"shapes": ["glitch"], "every": [90, 400]},
     }
-    assert palettes["today"]["harmonies"]["libre"] == 1
-    assert palettes["today"]["life"] == {"shapes": ["glitch"], "every": [120, 600], "chance": 50}
-    assert P.freed_stores(witness, read) == ["house_palette_k3"]
-    fx = tmp_path / "fx.yml"
-    fx.write_text(
-        "backend: ha\n# the palettes\npalettes:\n  old:\n    band: [1, 2]\nenable: [flash]\n"
+    # the file may write the same palette shorter: the same under the form
+    short = {
+        "label": "Nuit rouge",
+        "band": [330, 30],
+        "accent": 200,
+        "saturation": 95,
+        "level": {"curve": {"night": 40}, "jitter": 8},
+        "alive": "all",
+        "life": {"shapes": ["glitch"], "every": [90, 400]},
+    }
+    assert P.store_normal(store) == P.store_normal(short)
+    assert P.describe_store(P.store_normal(store), P.store_normal({**short, "accent": 120})) == (
+        "accent 200 → 120"
     )
-    assert P.rewrite_palettes(fx, palettes)
-    text = fx.read_text()
-    assert text.startswith("backend: ha\n# the palettes\npalettes:\n  nuit_bleue:\n")
-    assert "  nuit_rouge:\n    label: Nuit rouge\n    band: [330, 30]\n" in text
-    assert text.endswith("enable: [flash]\n")
-    assert not P.rewrite_palettes(fx, palettes)
-    assert yaml.safe_load(text)["palettes"]["nuit_rouge"]["life"] == {
-        "shapes": ["glitch"],
-        "every": [90, 400],
+    assert P.store_normal(witness.palettes()["named"]["nuit_bleue"])["life"] == {
+        "shapes": ["glitch", "lightning"],
+        "every": [120, 600],
+    }
+    rules = witness.palettes()["today"]
+    raw = {e: (v if isinstance(v, str) else str(v)) for e, v in P.rule_seeds(rules).items()}
+    raw["input_datetime.house_palette_turns"] = "06:30"
+    same = P.rules_round_trip(raw, rules)
+    assert same == {e: P.knob_value(e, v) for e, v in raw.items()}
+    raw["input_number.house_palette_today_alive_max"] = "3.0"  # alive_all is on: unsaid
+    assert P.rules_round_trip(raw, rules) == same
+    raw["input_number.house_palette_today_weight_libre"] = "1.0"
+    assert P.rules_round_trip(raw, rules)["input_number.house_palette_today_weight_libre"] == "1.0"
+    assert P.rules_normal(rules)["turns"] == "06:30"
+    assert P.rules_normal({**rules, "level": None})["level"] == {
+        "curve": {"morning": 100, "day": 100, "evening": 100, "night": 100},
+        "jitter": [0, 0],
     }
 
 

@@ -950,103 +950,80 @@ def slug(name: str) -> str:
     return out if out[0].isalpha() else "p_" + out
 
 
-def stores_from_helpers(house, read) -> dict[str, dict]:
-    """Every kept store by its slug, in store order."""
-    out = {}
-    for i in range(1, keep_of(house) + 1):
-        p = store_from_helpers(store_prefix(i), read)
-        if p:
-            out[slug(p["label"])] = p
+def knob_value(entity: str, value) -> str:
+    """A helper's value as the conductor reads and compares it: a number as
+    `str(float)`, an hour to the minute, a switch's word, a text."""
+    domain = entity.split(".", 1)[0]
+    if domain == "input_number":
+        return str(float(value))
+    if domain == "input_datetime":
+        return str(value)[:5]
+    return str(value)
+
+
+def rules_round_trip(raw: dict, file_rules: dict, kelvin: dict | None = None) -> dict:
+    """The rules' helpers as the phone holds them, read into the rules and
+    seeded back — a helper moved in a way the rules cannot say (a count under
+    « toutes ») reads as no edit."""
+
+    def read(e):
+        return {"state": raw[e]} if e in raw else None
+
+    rules = rules_from_helpers(read, file_rules)
+    seeds = rule_seeds(rules, kelvin)
+    seeds["input_datetime.house_palette_turns"] = rules["turns"]
+    return {e: knob_value(e, v) for e, v in seeds.items() if e in raw}
+
+
+def rules_normal(rules: dict) -> dict:
+    """The day's rules in the shape the helpers can say — the pull compares
+    the file's and the phone's under it, leaf by leaf."""
+    seeds = rule_seeds(rules)
+    seeds["input_datetime.house_palette_turns"] = rules["turns"] + ":00"
+    out = rules_from_helpers(lambda e: {"state": seeds[e]} if e in seeds else None, rules)
+    out.pop("label", None)
     return out
 
 
-def freed_stores(house, read) -> list[str]:
-    """The stores whose name the file now carries: the conductor empties them
-    at the converge — the file is the design."""
-    named = house.palettes()["named"]
-    known = {p["label"] for p in named.values()} | set(named)
-    out = []
-    for i in range(1, keep_of(house) + 1):
-        prefix = store_prefix(i)
-        p = store_from_helpers(prefix, read)
-        if p and (p["label"] in known or slug(p["label"]) in named):
-            out.append(prefix)
-    return out
-
-
-def pull_palettes(house, read) -> dict:
-    """The `palettes:` mapping `regie palette pull` writes: the file's own
-    named palettes kept as written, the kept stores added by their slug, the
-    day's rules as the brain holds them."""
-    raw = dict((house.data.get("fx") or {}).get("palettes") or {})
-    today = dict(raw.pop(AUTO, None) or {})
-    rules = rules_from_helpers(read, house.palettes()["today"])
-    new_today: dict = {
-        "harmonies": rules["harmonies"],
-        "avoid": rules["avoid"],
-        "saturation": rules["saturation"],
-        "level": rules["level"],
-        "turns": rules["turns"],
+def store_normal(p: dict | None) -> dict | None:
+    """A palette as a store spells it, whichever side wrote it — the file's
+    named palette and the phone's store compare under this form."""
+    if not p:
+        return None
+    lo, hi = p["band"]
+    level = p.get("level") or {}
+    curve = level.get("curve") or {}
+    jitter = level.get("jitter", 0)
+    if isinstance(jitter, list):
+        jitter = jitter[-1] if jitter else 0
+    alive = p.get("alive")
+    life = p.get("life") or {}
+    return {
+        "label": p.get("label"),
+        "band": [int(lo) % 360, int(hi) % 360],
+        "accent": int(p["accent"]) if p.get("accent") is not None else 30,
+        "saturation": int(p.get("saturation", 100)),
+        "white": p.get("white", "warm"),
+        "curve": {per: int(curve.get(per, 100)) for per in PERIODS},
+        "jitter": int(jitter),
+        "alive": "all" if alive == "all" else (int(alive) if alive else 0),
+        "life": (
+            {
+                "shapes": list(life.get("shapes") or []),
+                "every": [int(x) for x in (life.get("every") or [120, 600])],
+            }
+            if life.get("shapes")
+            else None
+        ),
     }
-    if rules["alive"] is not None:
-        new_today["alive"] = rules["alive"]
-    if rules["life"]:
-        new_today["life"] = rules["life"]
-    if today.get("label"):
-        new_today["label"] = today["label"]
-    out = dict(raw)
-    for pid, p in stores_from_helpers(house, read).items():
-        out[pid] = {k: v for k, v in p.items()}
-    out[AUTO] = new_today
-    return out
 
 
-def _flow(v) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return str(v)
-    if isinstance(v, str):
-        return f'"{v}"' if any(c in v for c in ":#{}[],&*?|<>=!%@`'\"") or v != v.strip() else v
-    if isinstance(v, list):
-        return "[" + ", ".join(_flow(x) for x in v) + "]"
-    if isinstance(v, dict):
-        return "{ " + ", ".join(f"{k}: {_flow(x)}" for k, x in v.items()) + " }"
-    return str(v)
-
-
-def palettes_block(palettes: dict) -> str:
-    """The `palettes:` block as the house writes it: one palette per key, its
-    parts one under the other, leaves in flow style."""
-    lines = ["palettes:"]
-    for pid, p in palettes.items():
-        lines.append(f"  {pid}:")
-        for k, v in p.items():
-            lines.append(f"    {k}: {_flow(v)}")
-    return "\n".join(lines) + "\n"
-
-
-PALETTES_BLOCK = None  # compiled lazily (re is imported below)
-
-
-def rewrite_palettes(path, palettes: dict) -> bool:
-    """Replace the file's top-level `palettes:` block (append one if it has
-    none); every other byte of the file is kept. Returns whether it changed."""
-    import re
-
-    block = re.compile(r"^palettes:\n(?:(?:[ \t]+.*|\s*)\n?)*", re.M)
-    text = path.read_text(encoding="utf-8")
-    new = palettes_block(palettes)
-    m = block.search(text)
-    out = (
-        text[: m.start()] + new + text[m.end() :]
-        if m
-        else text + ("" if text.endswith("\n") else "\n") + new
-    )
-    if out == text:
-        return False
-    path.write_text(out, encoding="utf-8")
-    return True
+def describe_store(a: dict | None, b: dict | None) -> str:
+    """The parts that differ between two palettes under the store's form."""
+    a, b = a or {}, b or {}
+    keys = ("label", "band", "accent", "saturation", "white", "curve", "jitter", "alive", "life")
+    moved = [f"{k} {a.get(k)} → {b.get(k)}" for k in keys if a.get(k) != b.get(k)]
+    return ", ".join(moved) or "nothing"
 
 
 def helper_palette_jinja(prefix: str, kelvin: dict) -> str:

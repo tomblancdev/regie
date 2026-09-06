@@ -1454,9 +1454,15 @@ class House:
         return None
 
     def knobs(self) -> list[dict]:
-        """What the conductor seeds ONCE from the files and the UI owns after:
-        the periods' times, the house's first mode, the sensors' switches."""
+        """Every helper the files have a word for (pull.py, 0.33). Two natures:
+        a knob the file DECLARES A VALUE for — a period's hour, a room's look
+        for a stretch of the day, the day's palette rules (one group) — is
+        owned under the rule (`pull:` names the verb's kind, `leaf:` where the
+        pull writes it); a knob the file gives a BIRTH word to — a switch born
+        on, the mode the house is born in, the palette's select — is seeded
+        once and the family's after (`born`)."""
         out: list[dict] = []
+        raw_modes = self.data.get("modes") or {}
         for a in self.areas:
             kinds = self.kinds_in(a["id"])
             if kinds.get("motion") and kinds.get("light") and not self.parking(a):
@@ -1468,6 +1474,7 @@ class House:
                         "action": "input_boolean/turn_on",
                         "data": {},
                         "value": "on",
+                        "born": True,
                         "reads": lambda state: state,
                     }
                 )
@@ -1480,6 +1487,7 @@ class House:
                         "action": "input_boolean/turn_on",
                         "data": {},
                         "value": "on",
+                        "born": True,
                         "reads": lambda state: state,
                     }
                 )
@@ -1493,6 +1501,8 @@ class House:
                     "action": "input_datetime/set_datetime",
                     "data": {"time": pal["today"]["turns"] + ":00"},
                     "value": pal["today"]["turns"],
+                    "group": "palette rules",
+                    "pull": "palettes",
                     "reads": lambda state: state[:5],
                 }
             )
@@ -1503,6 +1513,7 @@ class House:
                     "action": "input_select/select_option",
                     "data": {"option": auto},
                     "value": auto,
+                    "born": True,
                     "reads": lambda state: state,
                 }
             )
@@ -1514,12 +1525,13 @@ class House:
                     "action": "input_boolean/turn_on",
                     "data": {},
                     "value": "on",
+                    "born": True,
                     "reads": lambda state: state,
                 }
             )
-            # the day's rules as helpers (0.24): seeded from fx.yml and FOLLOWING
-            # the file — a rule the phone never touched takes the file's new value
-            # at the next converge; one the phone edited is kept (`hand` when both moved)
+            # the day's rules as helpers (0.24), ONE thing under the rule (0.33):
+            # seeded from fx.yml and following it; edited on the phone they are
+            # kept, `regie pull home.yml palettes` writes them back
             for entity, value in palette_mod.rule_seeds(pal["today"], self.kelvin()).items():
                 domain = entity.split(".", 1)[0]
                 if domain == "input_number":
@@ -1545,26 +1557,34 @@ class House:
                         "value": value,
                         "reads": lambda state: state,
                     }
-                out.append({"entity": entity, "follow": True, **knob})
+                out.append({"entity": entity, "group": "palette rules", "pull": "palettes", **knob})
         m = self.modes()
         if not m:
             return out
-        out += [
-            {
-                "entity": f"input_datetime.house_period_{p['id']}",
-                "action": "input_datetime/set_datetime",
-                "data": {"time": p["time"] + ":00"},
-                "value": p["time"],
-                "reads": lambda state, p=p: state[:5],
-            }
-            for p in m["periods"]
-        ]
+        for p in m["periods"]:
+            # a period given as a bare hour or as a map: the leaf is where the file put it
+            bare = isinstance((raw_modes.get("periods") or {}).get(p["id"]), str)
+            out.append(
+                {
+                    "entity": f"input_datetime.house_period_{p['id']}",
+                    "action": "input_datetime/set_datetime",
+                    "data": {"time": p["time"] + ":00"},
+                    "value": p["time"],
+                    "pull": "knobs",
+                    "leaf": {
+                        "file": "modes",
+                        "path": ["periods", p["id"]] + ([] if bare else ["at"]),
+                    },
+                    "reads": lambda state, p=p: state[:5],
+                }
+            )
         out.append(
             {
                 "entity": "input_select.house_mode",
                 "action": "input_select/select_option",
                 "data": {"option": m["initial"]},
                 "value": m["initial"],
+                "born": True,
                 "reads": lambda state: state,
             }
         )
@@ -1576,6 +1596,7 @@ class House:
                     "action": "input_boolean/turn_on",
                     "data": {},
                     "value": "on",
+                    "born": True,
                     "reads": lambda state: state,
                 }
             )
@@ -1593,6 +1614,8 @@ class House:
                             "action": "input_select/select_option",
                             "data": {"option": base[d]},
                             "value": base[d],
+                            "pull": "knobs",
+                            "leaf": {"file": "rooms", "room": a["id"], "path": ["defaults", d]},
                             "reads": lambda state: state,
                         }
                     )
@@ -1605,6 +1628,14 @@ class House:
                             "action": "input_select/select_option",
                             "data": {"option": seed},
                             "value": seed,
+                            "pull": "knobs",
+                            "leaf": {
+                                "file": "rooms",
+                                "room": a["id"],
+                                "path": ["defaults", period],
+                                # `sun` = no period line: the daylight base drives
+                                "value": lambda v: None if v == "sun" else v,
+                            },
                             "reads": lambda state: state,
                         }
                     )

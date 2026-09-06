@@ -698,13 +698,14 @@ def test_normal_reads_past_minted_ids_and_float_noise(witness):
     )
 
 
-def test_sync_reads_the_draft_the_files_and_the_memory(witness, tmp_path):
-    """No plan card in the draft: re-seed (nothing to keep). A seed remembered
-    and a draft equal to the files: it follows them, nothing to do."""
+def test_the_draft_is_read_three_ways_and_settled_by_the_rule(witness, tmp_path):
+    """The seed written and remembered; a draft equal to its seed follows the
+    files (0.33: the decision is pull.py's rule, shared with every kind)."""
     import json
 
     from regie.dash import link
-    from regie.plan import WORKBENCH, find_card, read_seed, seed, seed_path, sync
+    from regie.plan import WORKBENCH, find_card, read_seed, seed, seed_path
+    from regie.pull import NO_MEMORY, read_plan, settle
 
     class WS:
         calls: list = []
@@ -713,17 +714,16 @@ def test_sync_reads_the_draft_the_files_and_the_memory(witness, tmp_path):
             self.calls.append((type_, payload))
 
     assert read_seed(tmp_path) is None
-    state, detail, reseed = sync(witness, tmp_path, None, link)
-    assert (state, reseed) == ("changed", True) and "no plan card" in detail
     config = seed(WS(), witness, tmp_path, link)
     assert WS.calls[0][0] == "lovelace/config/save" and WS.calls[0][1]["url_path"] == WORKBENCH
     assert seed_path(tmp_path).name == "plan-seed.json"
     assert read_seed(tmp_path) == json.loads(json.dumps(find_card(config)))
-    assert sync(witness, tmp_path, config, link) == (
-        "ok",
-        f"/{WORKBENCH} follows the files",
-        False,
-    )
+    o = read_plan(witness, tmp_path, config, WS(), link)
+    assert o.kind == "plan" and o.decide() == "agree" and not o.stale
+    assert settle(o, check=False) == ("ok", f"/{WORKBENCH} — follows the files")
+    seed_path(tmp_path).unlink()
+    o = read_plan(witness, tmp_path, config, WS(), link)
+    assert o.seed is NO_MEMORY and o.decide() == "agree", "a draft equal to the files agrees"
 
 
 def test_a_door_on_a_shared_wall_stays_with_the_room_that_declared_it(house_with):

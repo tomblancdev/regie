@@ -417,7 +417,7 @@ def rewrite_walls(path: Path, walls: list[list[int]]) -> bool:
     return True
 
 
-# --- the sync (0.16): the draft follows the files, unless it holds a person's work -----
+# --- the sync (0.16; the rule shared with every kind since 0.33, pull.py) --------------
 # Tom, 2026-09-04: the things the install placed (sensors, remotes, the stars,
 # the corridor's six) were in the room files and NOT in his editor - apply
 # seeded the workbench once and only `plan push` re-seeded it, by hand. The
@@ -427,7 +427,8 @@ def rewrite_walls(path: Path, walls: list[list[int]]) -> bool:
 # act. To tell a person's gesture from the files' own move, the conductor
 # remembers what it last seeded (<root>/.regie/plan-seed.json) and compares
 # the draft and the files against that memory - the way the pull would read
-# them, never on ids: the editor re-mints every id on Save.
+# them, never on ids: the editor re-mints every id on Save. The decision is
+# the rule every owned thing shares (pull.state); this module reads the three.
 SEED = "plan-seed.json"
 
 
@@ -539,53 +540,3 @@ def describe(before: dict, after: dict) -> str:
     if before["walls"] != after["walls"]:
         out.append("the walls")
     return ", ".join(out) or "nothing"
-
-
-def sync(house: House, root: Path, draft: dict | None, link) -> tuple[str, str, bool]:
-    """THE ONE-WAY SYNC: the step's state and detail, and whether to re-seed.
-    Three readings decide - the draft, the files, and the memory of the last
-    seed: a draft that still is its seed follows the files; a draft a person
-    drew on since is kept, and the converge says so - `hand` when the files
-    moved too, so the two truths wait for the pull to meet."""
-    fresh = _json(find_card(workbench_config(house, link)))
-    files_n = normal(house, fresh)
-    card = find_card(draft or {})
-    if card is None:
-        return "changed", f"/{WORKBENCH} re-seeded from the files (it held no plan card)", True
-    draft_n = normal(house, card)
-    seeded = read_seed(root)
-    seed_n = normal(house, seeded) if seeded else None
-    if draft_n == files_n:
-        # nothing a pull would write: the draft agrees with the files, and what
-        # the files alone say (a label, the drawing, a badge's face) reaches it
-        if seeded == fresh:
-            return "ok", f"/{WORKBENCH} follows the files", False
-        return (
-            "changed",
-            f"/{WORKBENCH} re-seeded from the files (the draft agreed with them - nothing lost)",
-            True,
-        )
-    if seed_n is None:
-        return (
-            "hand",
-            f"/{WORKBENCH} differs from the files ({describe(files_n, draft_n)}) and the "
-            "conductor has no memory of the last seed - kept; `regie plan pull` if that is "
-            "your work, then `regie plan push`",
-            False,
-        )
-    if draft_n == seed_n:
-        way = describe(seed_n, files_n)
-        return "changed", f"/{WORKBENCH} re-seeded from the files ({way})", True
-    edits = describe(seed_n, draft_n)
-    if files_n == seed_n:
-        return (
-            "ok",
-            f"/{WORKBENCH} holds edits not yet pulled ({edits}) - `regie plan pull` writes them",
-            False,
-        )
-    return (
-        "hand",
-        f"/{WORKBENCH} holds edits not yet pulled ({edits}) and the files moved since "
-        f"({describe(seed_n, files_n)}) - kept; `regie plan pull`, then converge",
-        False,
-    )

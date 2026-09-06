@@ -328,22 +328,6 @@ def cmd_palette(args) -> int:
     secrets = load_secrets(args.secrets)
     ha = HomeAssistant(args.url)
     Conductor(house, secrets, Path(args.root), ha).session_token()
-    if args.pull:
-        # the stores and the day's rules, as the brain holds them, into fx.yml:
-        # the file is the design; a store the file now carries is freed at the
-        # next converge (0.24)
-        fx_path = Path(args.fx) if args.fx else (house.included.get("fx") or [None])[0]
-        if fx_path is None:
-            print("no fx file to write — the house includes none (include.fx)")
-            return 1
-        palettes = P.pull_palettes(house, lambda e: ha.get(f"/api/states/{e}")[1])
-        changed = P.rewrite_palettes(Path(fx_path), palettes)
-        kept = [k for k in palettes if k != P.AUTO and k not in house.palettes()["named"]]
-        print(
-            f"{fx_path}: palettes: {'rewritten' if changed else 'unchanged'} — "
-            f"the day's rules, {len(kept)} kept palette(s) added ({', '.join(kept) or 'none'})"
-        )
-        return 0
     status, state = ha.get("/api/states/sensor.house_palette")
     if status != 200 or not isinstance(state, dict):
         print(f"the brain: sensor.house_palette answers {status} — is the pack converged?")
@@ -373,75 +357,54 @@ def cmd_palette(args) -> int:
     return 0 if same else 1
 
 
-def cmd_plan(args) -> int:
-    """The plan's workbench: `push` re-seeds the editor's draft from the files
-    (what `apply` does at every converge unless the draft holds edits not yet
-    pulled - `push` does it regardless, and says so); `pull` writes the draft
-    back into the room files' `plan:` blocks."""
+def _brain(args):
     from .apply import Conductor
-    from .dash import link
     from .ha import HomeAssistant
-    from .plan import (
-        WORKBENCH,
-        find_card,
-        pull,
-        pull_walls,
-        rewrite,
-        rewrite_walls,
-        room_files,
-        seed,
-    )
 
     house = load_house(args.home)
     secrets = load_secrets(args.secrets)
     root = Path(args.root) if args.root else Path(house.root())
     ha = HomeAssistant(args.url)
     Conductor(house, secrets, root, ha).session_token()
-    if house.plan() is None:
-        print("the house draws no plan (plan: in home.yml, plan: in a room) — nothing to do")
-        return 1
-    with ha.ws() as ws:
-        if args.what == "push":
-            seed(ws, house, root, link)
-            print(f"/{WORKBENCH}: seeded from the files — the draft it held is gone")
-            return 0
-        try:
-            config = ws.call("lovelace/config", url_path=WORKBENCH)
-        except HouseError as exc:
-            print(f"/{WORKBENCH}: {exc} — `regie apply` opens it, `regie plan push` seeds it")
-            return 1
-    card = find_card(config or {})
-    if not card:
-        print(f"/{WORKBENCH} holds no plan card — `regie plan push` seeds it")
-        return 1
-    blocks, notes = pull(house, card)
-    files = room_files(house, args.rooms)
-    for n in notes:
-        print(f"  ~ {n}")
-    changed = 0
-    for rid, plan in blocks.items():
-        if rid not in files:
-            print(f"  ! {rid}: no room file to write (rooms/{rid}.yml)")
-            continue
-        if rewrite(files[rid], plan):
-            changed += 1
-            print(f"  + {files[rid].name}: plan written")
-        else:
-            print(f"  = {files[rid].name}: unchanged")
-    walls = pull_walls(card)
-    plan_file = args.plan or (house.included.get("plan") or [None])[0]
-    if walls and plan_file:
-        if rewrite_walls(Path(plan_file), walls):
-            changed += 1
-            print(f"  + {Path(plan_file).name}: {len(walls)} wall(s) written")
-        else:
-            print(f"  = {Path(plan_file).name}: walls unchanged")
-    elif walls:
-        print(
-            f"  ~ {len(walls)} wall(s) drawn and no plan file to hold them — "
-            "`include: plan: plan.yml` in home.yml, or --plan FILE"
-        )
-    print(f"pull: {changed} file(s) written, {len(notes)} note(s)")
+    return house, root, ha
+
+
+def _kinds(args) -> list[str]:
+    from .pull import KINDS
+
+    kinds = list(args.kinds) or list(KINDS)
+    bad = [k for k in kinds if k not in KINDS]
+    if bad:
+        raise HouseError(f"no such kind: {', '.join(bad)} — {', '.join(KINDS)}")
+    return kinds
+
+
+def cmd_pull(args) -> int:
+    """What the phone owns, into the house files (0.33): the knobs the phone
+    moved at their leaf, the plan's draft into the rooms' `plan:` blocks, the
+    kept palettes and the day's rules into the fx file — every other byte of
+    a file kept. What the conductor named « edited on the phone, not yet
+    pulled » at the last converge is what this writes."""
+    from . import pull as pull_mod
+    from .dash import link
+
+    house, root, ha = _brain(args)
+    files = pull_mod.house_files(house, args.rooms, modes=args.modes, fx=args.fx, plan=args.plan)
+    for line in pull_mod.pull(house, ha, root, _kinds(args), files, link):
+        print(line)
+    return 0
+
+
+def cmd_push(args) -> int:
+    """The files' word onto the phone (0.33) — the hand's override when the
+    conductor said « by hand »: the knobs set from the files, the plan's
+    draft re-seeded (what it held is gone), a store the files carry freed."""
+    from . import pull as pull_mod
+    from .dash import link
+
+    house, root, ha = _brain(args)
+    for line in pull_mod.push(house, ha, root, _kinds(args), link):
+        print(line)
     return 0
 
 
@@ -808,13 +771,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--name", help="print a named palette instead of the day's")
     s.add_argument("--plain", action="store_true", help="no colour bars")
-    s.add_argument(
-        "--pull",
-        action="store_true",
-        help="write the palettes the family kept on the phone, and the day's rules as the "
-        "phone holds them, into the fx file's palettes: block (needs --root)",
-    )
-    s.add_argument("--fx", type=Path, help="the fx file to rewrite (default: the house's include)")
     _secrets_arg(s)
     s.add_argument(
         "--root",
@@ -825,23 +781,37 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_palette)
 
     s = sub.add_parser(
-        "plan",
-        help="the plan's workbench (0.14): `push` seeds the editor's draft from the files "
-        "(apply does it at every converge unless the draft holds edits not yet pulled), "
-        "`pull` writes the draft back into the room files' plan: blocks",
+        "pull",
+        help="what the phone owns, into the house files (0.33): the knobs the phone moved, "
+        "the plan's draft, the kept palettes and the day's rules — every other byte kept; "
+        "what the converge named « edited on the phone, not yet pulled »",
     )
-    s.add_argument("what", choices=["push", "pull"])
     s.add_argument("home", type=Path)
+    s.add_argument("kinds", nargs="*", help="knobs, plan, palettes (default: all three)")
     s.add_argument(
         "--rooms", type=Path, help="the room files to rewrite (default: the house's own include)"
     )
+    s.add_argument("--modes", type=Path, help="the modes file to rewrite (default: include.modes)")
+    s.add_argument("--fx", type=Path, help="the fx file to rewrite (default: include.fx)")
     s.add_argument(
         "--plan", type=Path, help="the plan file whose walls to rewrite (default: include.plan)"
     )
     _secrets_arg(s)
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
-    s.set_defaults(func=cmd_plan)
+    s.set_defaults(func=cmd_pull)
+
+    s = sub.add_parser(
+        "push",
+        help="the files' word onto the phone (0.33), the hand's override for a « by hand »: "
+        "the knobs set from the files, the plan's draft re-seeded, a store the files carry freed",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("kinds", nargs="*", help="knobs, plan, palettes (default: all three)")
+    _secrets_arg(s)
+    s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.set_defaults(func=cmd_push)
 
     s = sub.add_parser("mint", help="write every secret the house needs and does not have yet")
     s.add_argument("home", type=Path)
