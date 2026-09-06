@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 
 from regie.errors import HouseError
-from regie.host import Runner, sha256
+from regie.host import Runner, read_state, sha256, write_state
 from regie.render import base_components
-from regie.up import image_of, unit_for, up
+from regie.up import RESTART, brain_asks, dashboard_paths, image_of, unit_for, up
 
 
 class FakeRunner(Runner):
@@ -79,6 +79,87 @@ def test_unit_for_and_image_of():
     assert unit_for("zigbee2mqtt/main/devices.yaml") == "zigbee2mqtt-main"
     assert unit_for("units/mosquitto.container") is None
     assert image_of("[Container]\nImage=docker.io/x/y:1.2\n") == "docker.io/x/y:1.2"
+
+
+def test_what_a_changed_brain_file_asks(tmp_path):
+    """0.28: a package asks the reload of the domains it holds (a word the
+    table does not know = a restart, the safe reading), a theme the themes'
+    reload, a dashboard the open pages' refresh, a www file nothing; a core
+    key, a secret, a component are read once - a restart."""
+    pk = tmp_path / "home-assistant" / "packages"
+    pk.mkdir(parents=True)
+    (pk / "scenes_living.yaml").write_text(
+        "automation:\n  - id: a\nscript:\n  x: {}\ninput_select:\n  y: {}\n"
+        "light:\n  - platform: group\n    name: g\nhomeassistant:\n  customize: {}\n"
+        "template:\n  - sensor: []\ninput_text:\n  z: { initial: !secret nope }\n"
+    )
+    (pk / "odd.yaml").write_text("script:\n  x: {}\nhttp:\n  server_port: 1\n")
+    (pk / "tpl.yaml").write_text("sensor:\n  - platform: template\n    sensors: {}\n")
+    (pk / "broken.yaml").write_text("script: [\n")
+    dash = {"home-assistant/dashboards/phone.yaml": "regie-phone"}
+    assert brain_asks("home-assistant/packages/scenes_living.yaml", tmp_path, dash) == [
+        "automation/reload",
+        "group/reload",
+        "homeassistant/reload_core_config",
+        "input_select/reload",
+        "input_text/reload",
+        "script/reload",
+        "template/reload",
+    ]
+    assert brain_asks("home-assistant/packages/odd.yaml", tmp_path, dash) == [RESTART]
+    assert brain_asks("home-assistant/packages/tpl.yaml", tmp_path, dash) == ["template/reload"]
+    assert brain_asks("home-assistant/packages/broken.yaml", tmp_path, dash) == [RESTART]
+    assert brain_asks("home-assistant/packages/gone.yaml", tmp_path, dash) == [RESTART]
+    assert brain_asks("home-assistant/themes/nuit.yaml", tmp_path, dash) == [
+        "frontend/reload_themes"
+    ]
+    assert brain_asks("home-assistant/dashboards/phone.yaml", tmp_path, dash) == [
+        "lovelace_updated regie-phone"
+    ]
+    assert brain_asks("home-assistant/dashboards/other.yaml", tmp_path, dash) == []
+    assert brain_asks("home-assistant/www/regie-skin.js", tmp_path, dash) == []
+    assert brain_asks("home-assistant/automations.yaml", tmp_path, dash) == ["automation/reload"]
+    for rel in (
+        "home-assistant/configuration.yaml",
+        "home-assistant/secrets.yaml",
+        "home-assistant/custom_components/auth_oidc/__init__.py",
+    ):
+        assert brain_asks(rel, tmp_path, dash) == [RESTART], rel
+
+
+def test_the_dashboards_are_read_from_the_rendered_configuration(rendered):
+    assert dashboard_paths(rendered) == {"home-assistant/dashboards/phone.yaml": "regie-phone"}
+    assert dashboard_paths(rendered / "nowhere") == {}
+
+
+class FakeBrain:
+    """The brain's API as `up` speaks to it: every POST recorded, answered."""
+
+    def __init__(self, status=200):
+        self.posts: list[tuple[str, dict]] = []
+        self.status = status
+
+    def post(self, path, body, auth=True):
+        self.posts.append((path, body))
+        return self.status, ([] if self.status == 200 else {"message": "refused"})
+
+
+def a_token(root: Path) -> None:
+    d = root / ".regie" / "tokens"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "regie").write_text("a-token\n")
+
+
+def a_scenes_package(root: Path) -> Path:
+    """The living room's looks: scripts, helpers, templates and the walk's
+    starter automation - every domain a look change can touch."""
+    p = root / "home-assistant/packages/scenes_living.yaml"
+    assert p.is_file()
+    return p
+
+
+def brain_up(witness, root, units_dir, runner, pinned, **kw):
+    return up(witness, root, units_dir, runner, fetcher=lambda url: pinned, **kw)
 
 
 def test_up_needs_a_render_first(witness, tmp_path):
@@ -191,5 +272,187 @@ def test_a_component_pinned_by_the_product_is_pinned_by_digest():
 def test_state_files_live_under_dot_regie(witness, rendered_fresh, tmp_path, pinned):
     up(witness, rendered_fresh, tmp_path / "s", FakeRunner(), fetcher=lambda url: pinned)
     names = {p.name for p in (rendered_fresh / ".regie").iterdir()}
-    assert {"manifest.json", "units.json", "stamps.json", "components.json"} <= names
+    assert {
+        "manifest.json",
+        "units.json",
+        "stamps.json",
+        "reloads.json",
+        "components.json",
+    } <= names
     assert isinstance(Path(rendered_fresh), Path)
+    # what every brain file asks, remembered for the day it changes or goes
+    remembered = read_state(rendered_fresh, "reloads.json")
+    assert remembered["home-assistant/configuration.yaml"] == [RESTART]
+    assert (
+        "script/reload"
+        in remembered[str(a_scenes_package(rendered_fresh).relative_to(rendered_fresh))]
+    )
+
+
+def test_a_package_change_reloads_its_domains_and_the_brain_stays_up(
+    witness, rendered_fresh, tmp_path, pinned
+):
+    """0.28: a look change is a package change - the brain reloads the domains
+    the package holds, automations before scripts, and is not restarted."""
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    pkg = a_scenes_package(rendered_fresh)
+    pkg.write_text(pkg.read_text() + "# a look changed\n")
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert not result.restarted and not result.started and not result.placed
+    assert "systemctl restart home-assistant.service" not in runner.log
+    assert "home-assistant: automation.reload" in result.reloaded
+    assert "home-assistant: script.reload" in result.reloaded
+    paths = [p for p, _ in brain.posts]
+    assert paths.index("/api/services/automation/reload") < paths.index(
+        "/api/services/script/reload"
+    )
+    assert all(body == {} for _, body in brain.posts)
+    assert result.changed and "reload " in result.summary() and not result.notes
+    again = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert not again.changed and again.summary().endswith("nothing to do")
+
+
+def test_a_core_change_still_restarts_the_brain(witness, rendered_fresh, tmp_path, pinned):
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    conf = rendered_fresh / "home-assistant/configuration.yaml"
+    conf.write_text(conf.read_text() + "\n# a core key moved\n")
+    pkg = a_scenes_package(rendered_fresh)
+    pkg.write_text(pkg.read_text() + "# and a look\n")
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert result.restarted == ["home-assistant"] and not result.reloaded
+    assert brain.posts == []  # the restart reads everything: no reload beside it
+
+
+def test_a_theme_change_reloads_the_themes(witness, rendered_fresh, tmp_path, pinned):
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    theme = rendered_fresh / "home-assistant/themes/soir.yaml"
+    theme.parent.mkdir(exist_ok=True)
+    theme.write_text("soir:\n  primary-color: '#123456'\n")
+    manifest = read_state(rendered_fresh, "manifest.json")
+    manifest["files"].append("home-assistant/themes/soir.yaml")
+    write_state(rendered_fresh, "manifest.json", manifest)
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert result.reloaded == ["home-assistant: frontend.reload_themes"] and not result.restarted
+    assert brain.posts == [("/api/services/frontend/reload_themes", {})]
+
+
+def test_a_dashboard_change_tells_the_open_pages(witness, rendered_fresh, tmp_path, pinned):
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    dash = rendered_fresh / "home-assistant/dashboards/phone.yaml"
+    dash.write_text(dash.read_text() + "# a card moved\n")
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert result.reloaded == ["home-assistant: lovelace_updated regie-phone"]
+    assert brain.posts == [("/api/events/lovelace_updated", {"url_path": "regie-phone"})]
+
+
+def test_a_package_gone_reloads_what_it_held(witness, rendered_fresh, tmp_path, pinned):
+    """A room's package removed: the domains it declared are reloaded once
+    more so the brain lets go of its entities - no restart."""
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    pkg = a_scenes_package(rendered_fresh)
+    rel = str(pkg.relative_to(rendered_fresh))
+    held = read_state(rendered_fresh, "reloads.json")[rel]
+    pkg.unlink()
+    manifest = read_state(rendered_fresh, "manifest.json")
+    manifest["files"].remove(rel)
+    write_state(rendered_fresh, "manifest.json", manifest)
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert not result.restarted
+    assert sorted(p for p, _ in brain.posts) == sorted(f"/api/services/{h}" for h in held)
+    assert rel not in read_state(rendered_fresh, "reloads.json")
+    assert rel not in read_state(rendered_fresh, "stamps.json")
+
+
+def test_a_file_gone_with_no_memory_restarts(witness, rendered_fresh, tmp_path, pinned):
+    """A brain stamped before 0.28 has no memory of what a file asked: gone,
+    it restarts - the safe reading, once."""
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    (rendered_fresh / ".regie/reloads.json").unlink()
+    pkg = a_scenes_package(rendered_fresh)
+    rel = str(pkg.relative_to(rendered_fresh))
+    pkg.unlink()
+    manifest = read_state(rendered_fresh, "manifest.json")
+    manifest["files"].remove(rel)
+    write_state(rendered_fresh, "manifest.json", manifest)
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert result.restarted == ["home-assistant"] and brain.posts == []
+
+
+def test_no_token_on_disk_restarts_instead_and_says_so(witness, rendered_fresh, tmp_path, pinned):
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    pkg = a_scenes_package(rendered_fresh)
+    pkg.write_text(pkg.read_text() + "# a look changed\n")
+    brain = FakeBrain()
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=brain)
+    assert result.restarted == ["home-assistant"] and not result.reloaded
+    assert brain.posts == [] and any("no conductor token" in n for n in result.notes)
+
+
+def test_a_refused_token_restarts_instead(witness, rendered_fresh, tmp_path, pinned):
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    pkg = a_scenes_package(rendered_fresh)
+    pkg.write_text(pkg.read_text() + "# a look changed\n")
+    result = brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=FakeBrain(401))
+    assert result.restarted == ["home-assistant"] and not result.reloaded
+    assert any("refused" in n for n in result.notes)
+    assert "systemctl restart home-assistant.service" in runner.log
+
+
+def test_a_refused_reload_is_a_fault_not_a_restart(witness, rendered_fresh, tmp_path, pinned):
+    """The brain refuses a reload when the config is broken: say so and stop -
+    a restart into the same config would take the house down with it."""
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    a_token(rendered_fresh)
+    pkg = a_scenes_package(rendered_fresh)
+    pkg.write_text(pkg.read_text() + "# a look changed\n")
+    with pytest.raises(HouseError, match="refused"):
+        brain_up(witness, rendered_fresh, units_dir, runner, pinned, brain=FakeBrain(500))
+    assert "systemctl restart home-assistant.service" not in runner.log
+
+
+def test_check_plans_the_reload_and_calls_nothing(witness, rendered_fresh, tmp_path, pinned):
+    units_dir = tmp_path / "systemd"
+    runner = FakeRunner()
+    brain_up(witness, rendered_fresh, units_dir, runner, pinned)
+    pkg = a_scenes_package(rendered_fresh)
+    pkg.write_text(pkg.read_text() + "# a look changed\n")
+    brain = FakeBrain()
+    planner = FakeRunner(check=True)  # the plan reads the machine as the first up left it
+    planner.active, planner.images = set(runner.active), set(runner.images)
+    result = brain_up(witness, rendered_fresh, units_dir, planner, pinned, brain=brain)
+    assert result.check and "would reload" in result.summary() and not result.notes
+    assert not result.started and not result.restarted
+    assert "home-assistant: script.reload" in result.reloaded and brain.posts == []
+    rel = str(pkg.relative_to(rendered_fresh))
+    assert read_state(rendered_fresh, "stamps.json")[rel] != sha256(pkg.read_bytes())

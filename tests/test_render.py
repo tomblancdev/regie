@@ -80,6 +80,9 @@ def test_units_pin_the_images(rendered, witness):
     ha = (rendered / "units/home-assistant.container").read_text()
     assert f"Image=ghcr.io/home-assistant/home-assistant:{witness.pins()['home_assistant']}" in ha
     assert "Network=host" in ha and "Volume=/srv/home/home-assistant:/config:Z" in ha
+    # 0.28: the brain's shutdown outlives podman's 10 s - 60 s of grace, under
+    # systemd's 90 s TimeoutStopSec (the default, not overridden)
+    assert "\nStopTimeout=60\n" in ha and "\nTimeoutStopSec=" not in ha
     z2m = (rendered / "units/zigbee2mqtt-main.container").read_text()
     assert "Requires=mosquitto.service" in z2m and "/srv/home/zigbee2mqtt/main:/app/data:Z" in z2m
 

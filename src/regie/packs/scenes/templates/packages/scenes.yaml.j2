@@ -222,21 +222,35 @@ script:
 
 # the switch is the ONLY truth about a sustained walk: turning it on starts the
 # loop, and Home Assistant coming back up starts it again. Without this the
-# helper reads `on` after a restart — or after a converge, which reloads the
-# scripts — while nothing is walking: a look frozen and claiming to move.
+# helper reads `on` after a restart while nothing is walking: a look frozen
+# and claiming to move. Since 0.28 a converge RELOADS the scripts instead of
+# restarting the brain, and a reload stops a walk whose script changed (one
+# whose text did not change keeps running) with no start event to follow — so
+# each walk script coming back `off` under a switch still on is a trigger too
+# (`for` 5 s: a walk that dies at once is retried at that pace, not in a
+# tight loop); a script already walking is left alone.
 automation:
 {% for p in drifting %}
+{% set walkers = [] %}
+{% if drift_plan(area, p) %}{% set _ = walkers.append('script.' ~ area.id ~ '_' ~ p.id ~ '_drift') %}{% endif %}
+{% if life_plan(area, p) %}{% set _ = walkers.append('script.' ~ area.id ~ '_' ~ p.id ~ '_life') %}{% endif %}
+{% set triggers = [
+  {'trigger': 'homeassistant', 'event': 'start'},
+  {'trigger': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'to': 'on'},
+] %}
+{% set actions = [] %}
+{% for w in walkers %}
+{% set _ = triggers.append({'trigger': 'state', 'entity_id': w, 'to': 'off', 'for': {'seconds': 5}}) %}
+{% set _ = actions.append({'if': [{'condition': 'state', 'entity_id': w, 'state': 'off'}], 'then': [{'action': 'script.turn_on', 'target': {'entity_id': w}}]}) %}
+{% endfor %}
 {{ [{
   'id': 'regie_' ~ area.id ~ '_' ~ p.id ~ '_drift',
   'alias': area.label ~ ' — ' ~ p.label ~ ' ↻',
-  'description': 'starts the sustained walk of ' ~ p.label ~ ' whenever its switch is on — at a restart, and when a hand turns it back on (La Régie, pack scenes)',
+  'description': 'starts the sustained walk of ' ~ p.label ~ ' whenever its switch is on — at a restart, after a reload of its scripts, and when a hand turns it back on (La Régie, pack scenes)',
   'mode': 'single',
-  'triggers': [
-    {'trigger': 'homeassistant', 'event': 'start'},
-    {'trigger': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'to': 'on'},
-  ],
+  'triggers': triggers,
   'conditions': [{'condition': 'state', 'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift', 'state': 'on'}],
-  'actions': [{'action': 'script.turn_on', 'target': {'entity_id': 'script.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}],
+  'actions': actions,
 }] | to_block(0) }}
 {% endfor %}
 {% endif %}

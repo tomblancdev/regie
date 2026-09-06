@@ -273,18 +273,29 @@ def test_a_zigbee_target_stretches_a_step_below_its_colour_floor(house_with):
     assert any("stretched" in h for h in house.hints)
 
 
-def test_the_switch_starts_the_walk_and_a_restart_resumes_it(rendered):
+def test_the_switch_starts_the_walk_and_a_restart_or_a_reload_resumes_it(rendered):
     """The kill-switch is the only truth: turning it on starts the loop, and
     Home Assistant coming back starts it again. Without this the helper reads
-    `on` after a restart (or a converge, which reloads the scripts) while
-    nothing walks — a look frozen while claiming to move."""
+    `on` after a restart while nothing walks — a look frozen while claiming to
+    move. 0.28: a converge RELOADS the scripts — a walk whose script changed is
+    stopped and no start event follows — so each walk script coming back `off`
+    (5 s) under a switch still on is a trigger too, and a script already
+    walking is left alone."""
     pkg = load(rendered, "living")
     auto = next(a for a in pkg["automation"] if a["id"] == "regie_living_party_drift")
-    assert [t["trigger"] for t in auto["triggers"]] == ["homeassistant", "state"]
+    kinds = [t["trigger"] for t in auto["triggers"]]
+    assert kinds[:2] == ["homeassistant", "state"] and set(kinds[2:]) == {"state"}
     assert auto["triggers"][1]["entity_id"] == "input_boolean.living_party_drift"
     assert auto["triggers"][1]["to"] == "on"
+    back = auto["triggers"][2:]
+    assert back and all(t["to"] == "off" and t["for"] == {"seconds": 5} for t in back)
+    walkers = [t["entity_id"] for t in back]
+    assert walkers[0] == "script.living_party_drift"
+    assert ("script.living_party_life" in walkers) == ("living_party_life" in pkg["script"])
     assert auto["conditions"][0]["state"] == "on"
-    assert auto["actions"][0]["target"]["entity_id"] == "script.living_party_drift"
+    assert [a["if"][0]["entity_id"] for a in auto["actions"]] == walkers
+    assert all(a["if"][0]["state"] == "off" for a in auto["actions"])
+    assert [a["then"][0]["target"]["entity_id"] for a in auto["actions"]] == walkers
 
 
 def test_every_look_writes_the_rooms_memory_and_lets_the_sensors_go(rendered):

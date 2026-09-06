@@ -11,6 +11,13 @@ Network=host
 Volume={{ root }}/home-assistant:/config:Z
 Volume=/etc/localtime:/etc/localtime:ro
 Environment=TZ={{ data.house.timezone | default('UTC') }}
+# the brain's shutdown (the recorder's last write, every integration's stop)
+# outlives podman's default 10 s: killed there, the recorder opens its next
+# run on an unfinished session. 60 s of grace, under systemd's 90 s
+# TimeoutStopSec (the default this profile keeps). podman bakes the value into
+# the container at its creation: a change here lands at the restart AFTER
+# the one that places it
+StopTimeout=60
 
 [Service]
 Restart=always

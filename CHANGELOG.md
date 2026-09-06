@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.28.0 — recharger, pas redémarrer (2026-09-06)
+
+Le pas V1 de l'audit (H50 ; Tom : « ok go with your recos ») : `up`
+redémarrait le cerveau pour tout fichier changé sous `home-assistant/` — 77
+redémarrages en sept jours, une ambiance retouchée = la maison sans cerveau
+une minute. Home Assistant relit en direct ce que les paquets portent : `up`
+demande désormais, par domaine, ce que le fichier changé tient (les aides
+`input_*`, `counter`, `timer`, `schedule`, `template`, `group` — les groupes de
+rôle sont `light: platform: group` —, `scene`, `automation`, `script`, et
+`homeassistant.reload_core_config` pour un `customize:`), les thèmes par
+`frontend.reload_themes`, une page YAML par l'événement `lovelace_updated` (le
+fichier est relu à la prochaine demande, les pages ouvertes redemandent), rien
+pour un fichier de `www/`. Un redémarrage reste la réponse à ce qui n'est lu
+qu'au démarrage : `configuration.yaml`, `secrets.yaml`, un composant, l'unité
+— et à un mot d'un paquet que la table ne connaît pas. Les demandes de chaque
+fichier sont mémorisées (`.regie/reloads.json`) : un paquet retiré fait
+recharger une dernière fois les domaines qu'il tenait — jusqu'ici un fichier
+disparu ne redémarrait même pas. `up` parle avec le jeton du chef d'orchestre ;
+sans jeton (une première convergence) ou jeton refusé, il redémarre et le dit ;
+un rechargement refusé (une configuration invalide) est une faute, pas un
+redémarrage. Les automatisations avant les scripts ; Home Assistant garde en
+marche ce dont le texte n'a pas bougé.
+
+Deux cavaliers. **Le gabarit de l'unité gagne `StopTimeout=60`** : chaque
+arrêt par `up` tuait le cerveau au bout des 10 s de podman (24 sessions
+d'enregistreur inachevées en sept jours) ; sous les 90 s de systemd. podman
+fige la valeur à la création du conteneur : elle vaut à partir du redémarrage
+qui SUIT celui qui la pose. **Le démarreur d'une marche relit ses scripts** :
+un rechargement arrête une marche dont le script a changé et aucun événement
+de démarrage ne suit — chaque script de marche qui revient `off` (5 s) sous un
+interrupteur encore allumé est un déclencheur de plus, un script déjà en marche
+n'est pas touché ; la vie (`_life`) est relancée comme la dérive.
+
 ## 0.27.0 — le régime de l'enregistreur (2026-09-06)
 
 L'audit de la maison (Tom : « fully audit our HA infra to determine what is

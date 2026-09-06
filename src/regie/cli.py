@@ -222,10 +222,13 @@ def cmd_up(args) -> int:
         ("removed", result.removed),
         ("pulled", result.pulled),
         ("restarted", result.restarted),
+        ("reloaded", result.reloaded),
         ("started", result.started),
     ):
         for i in items:
             print(f"  {what}: {i}")
+    for n in result.notes:
+        print(f"  ! {n}")
     return 0
 
 
