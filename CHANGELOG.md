@@ -24,6 +24,13 @@ Trois défauts qu'un vrai cerveau seul pouvait montrer (Home Assistant
   aplatit le réglage de chaque assistant en un booléen ; le produit (et son
   faux cerveau) lisaient la forme du magasin (`{should_expose: bool}`). Les
   deux formes sont lues ; le faux cerveau parle comme le vrai.
+- **« Mets le QG en bleu » ne trouvait aucune lumière** : les groupes de rôle
+  exposés n'avaient ni pièce ni nom (`living_room_main`, aucune zone) — l'IA
+  ne peut pas relier « Le QG » à ce qu'elle voit. Un pas `assist rooms` place
+  chaque groupe et chaque ambiance exposés dans leur pièce (les lignes du
+  registre ; les identifiants des fichiers ne bougent pas) et nomme les
+  groupes de rôle d'après l'étiquette du rôle (« Plafond »), le groupe de la
+  pièce d'après le mot des lumières (« Lumières »).
 
 ## 0.31.1 — Le composant voyage avec le paquet (2026-09-06)
 

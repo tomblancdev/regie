@@ -82,6 +82,19 @@ def test_what_assist_sees_is_the_rooms_by_role_never_a_bulb(witness):
     assert not (expose & hide)
 
 
+def test_what_assist_sees_belongs_to_a_room(witness):
+    """The exposed groups and looks carry their room; a role group its label,
+    the room's group the word for lights; a parking room places nothing."""
+    rooms = witness.exposure_rooms()
+    assert rooms["light.living_main"] == {"area": "living", "name": "Plafond"}
+    assert rooms["light.living_lamp"] == {"area": "living", "name": "Lampadaire"}
+    assert rooms["light.living_lights"] == {"area": "living", "name": "Lumières"}
+    assert rooms["script.living_cinema"] == {"area": "living", "name": None}
+    assert not any(v["area"] == "spare" for v in rooms.values())
+    expose, _ = witness.exposure_plan()
+    assert set(rooms) <= expose
+
+
 def test_the_policy_words_move_the_plan(house_with):
     def rooms_only(d):
         d["assist"]["expose"] = {

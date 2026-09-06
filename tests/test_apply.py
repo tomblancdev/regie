@@ -1043,15 +1043,16 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     # waits for the porter (a restart away) — the pack's own test furnishes them
     assert st["entry ollama"] == "changed" and st["agent ollama"] == "waiting"
     assert st["assist exposure"] == "ok" and st["assist pipeline"] == "waiting"
+    assert st["assist rooms"] == "ok"  # nothing of the plan born yet: nothing to place
     hand = sum(1 for s in steps if s.state == "hand")
-    # ok: the puck's cast row (served by the TV's entry), the exposure
+    # ok: the puck's cast row (served by the TV's entry), the exposure, the rooms
     ok = sum(1 for s in steps if s.state == "ok")
     # waiting: the mesh (no Zigbee2MQTT answers in a test — the walk's own half
     # has its own file, test_zigbee.py), the LLM's agent, the pipeline
     waiting = sum(1 for s in steps if s.state == "waiting")
-    assert ok == 2 and waiting == 3
+    assert ok == 3 and waiting == 3
     assert summary(steps, False) == (
-        f"apply: {len(steps) - hand - ok - waiting} changed, 2 ok, {hand} by hand, "
+        f"apply: {len(steps) - hand - ok - waiting} changed, 3 ok, {hand} by hand, "
         f"{waiting} waiting"
     )
 
@@ -2264,6 +2265,21 @@ def test_assist_the_agent_what_it_sees_and_the_pipeline(witness, secrets, tmp_pa
         "switch.zigbee2mqtt_bridge_permit_join",
         "script.living_evening_drift",
     }
+    # where what it sees belongs: the room's groups and looks in the room's
+    # area, the role groups named after the role's label, the room's own group
+    # after the word for lights, a look keeps its label
+    assert st["assist rooms"] == "changed"
+    rows = {e["entity_id"]: e for e in ha.entities}
+    living = next(a["area_id"] for a in ha.areas if a["aliases"][0] == "living")
+    assert rows["light.living_main"]["area_id"] == living
+    assert rows["light.living_main"]["name"] == "Plafond"
+    assert rows["light.living_lamp"]["name"] == "Lampadaire"
+    assert rows["light.living_lights"]["name"] == "Lumières"
+    assert rows["script.living_cinema"]["area_id"] == living
+    assert "name" not in rows["script.living_cinema"]
+    assert "area_id" not in rows["input_select.house_mode"]
+    again = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(again)["assist rooms"] == "ok"
     # the pipeline: the house's, in its language, the porter, prefer local,
     # preferred — Home Assistant's own English one left where it is
     assert st["assist pipeline"] == "changed"

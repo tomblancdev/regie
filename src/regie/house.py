@@ -768,6 +768,39 @@ class House:
             names.append(assist["ceiling"]["watchman"]["token"])
         return names
 
+    def exposure_rooms(self) -> dict[str, dict]:
+        """Where what Assist sees belongs (pack assist): each exposed light group
+        and look script keyed to its room, the role groups named after the
+        role's label and the room's own group after the word for lights — an
+        agent asked for « Le QG » must find « Plafond » in it, not a
+        `living_main` placed nowhere (read live 2026-09-06: the LLM found no
+        light in the room). {entity_id: {"area": <house area id>, "name": <str or None>}}."""
+        expose, _ = self.exposure_plan()
+        ui = self.labels.ui
+        lights_word = str(ui["lights"] if isinstance(ui, dict) else ui.lights).capitalize()
+        out: dict[str, dict] = {}
+        for area in self.areas:
+            aid = area["id"]
+            if self.parking(area):
+                continue
+            declared = self.declared_roles(area)
+            lights_id = f"light.{aid}_lights"
+            if lights_id in expose:
+                out[lights_id] = {"area": aid, "name": lights_word}
+            for role in self.roles_in(aid):
+                target = self.role_target(area, role)
+                if not target or not target.get("group"):
+                    continue
+                label = (declared.get(role) or {}).get("label")
+                for e in target["entities"]:
+                    if e in expose:
+                        out[e] = {"area": aid, "name": label or None}
+            for p in self.scene_plan(area):
+                sid = f"script.{aid}_{p['id']}"
+                if sid in expose:
+                    out[sid] = {"area": aid, "name": None}
+        return out
+
     # --- the vocabulary, by role ----------------------------------------------
     def roles_in(self, area_id: str) -> dict[str, list[dict]]:
         """The roles FILLED in a room: role → the things that carry it."""
