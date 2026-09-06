@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.28.3 — un script refait passe par unavailable (2026-09-06)
+
+L'aller-retour de preuve de V1 (l'étiquette d'une ambiance changée puis
+remise, deux convergences sans redémarrage) a montré la dérive du QG arrêtée
+par le rechargement de son script et jamais reprise : le démarreur de 0.28.1
+attendait un script « né de rien » (`not_from` tous les états réels), et le
+registre garde l'entité — un script refait par un rechargement passe par
+`off` → `unavailable` → `off`, lu sur le websocket pendant la convergence, et
+l'automatisation refaite par `on` → `unavailable` → `on`. Le déclencheur est
+`from: unavailable, to: off` (5 s) : exactement la renaissance, jamais la fin
+naturelle `on` → `off`. La dérive du Passage, dont le script n'a pas bougé, a
+traversé les quatre rechargements sans s'arrêter.
+
 ## 0.28.2 — le grain est le domaine dont le bloc a bougé (2026-09-06)
 
 Lu dans les traces de la convergence de 0.28.1 : une automatisation retouchée
