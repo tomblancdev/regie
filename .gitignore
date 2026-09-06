@@ -10,3 +10,5 @@ __pycache__/
 *.tar.gz
 # a rendered brain, when you try the engine locally
 /out/
+# a Claude Code session working in a worktree of this repo (the lab does the same)
+/.claude/worktrees/
