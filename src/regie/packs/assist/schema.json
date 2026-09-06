@@ -70,6 +70,47 @@
             "name": { "type": "string", "description": "its name (default: the house's label)" },
             "prefer_local": { "type": "boolean", "default": true, "description": "the sentences answer first; the doorman sees only what they cannot — the one sanctioned floor-to-ceiling fallthrough" }
           }
+        },
+        "voice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stt", "tts"],
+          "description": "the house's ears and mouth (0.34): two Wyoming speech servers by their ADDRESS (a capability is an address, never a place); the pipeline speaks through them and the phone's mic appears. Both or neither: ears without a mouth answer in silence",
+          "properties": {
+            "stt": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url"],
+              "description": "speech to text — a Wyoming server's door",
+              "properties": {
+                "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port> — the server's own --uri shape, an address the house resolves" }
+              }
+            },
+            "tts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url"],
+              "description": "text to speech — a Wyoming server's door, and the voice it speaks with",
+              "properties": {
+                "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port>" },
+                "voice": { "type": "string", "minLength": 1, "description": "the voice's name as the server announces it (Piper: fr_FR-siwis-medium); default: the server's first voice for the house's language" }
+              }
+            }
+          }
+        },
+        "mics": {
+          "type": "array",
+          "default": [],
+          "description": "what asks, and from which room when it does not say one (0.34): a device of the brain's registry (the phone's companion app today, a satellite tomorrow) placed in its room — the local sentences take the room from the device",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["device", "room"],
+            "properties": {
+              "device": { "type": "string", "minLength": 1, "description": "the device's name in the brain's registry (its own, or the one a person gave it)" },
+              "room": { "$ref": "#/$defs/id", "description": "the room it asks from unless it names one — an area id of the house" }
+            }
+          }
         }
       }
     }

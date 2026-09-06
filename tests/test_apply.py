@@ -274,6 +274,12 @@ class FakeHA(HomeAssistant):
                 "user",
                 [{"name": "url", "required": True}, {"name": "api_key", "optional": True}],
             )
+        if d == "wyoming":
+            return self._form(
+                fid,
+                "user",
+                [{"name": "host", "required": True}, {"name": "port", "required": True}],
+            )
         if d == "ipp":
             return self._form(
                 fid,
@@ -353,6 +359,29 @@ class FakeHA(HomeAssistant):
                     fid, "user", [{"name": "url", "required": True}], {"base": "cannot_connect"}
                 )
             return self._create(fid, flow, body["url"], body)  # the entry's title is its url
+        if d == "wyoming":
+            if body.get("host") in self.off:
+                return self._form(
+                    fid, "user", [{"name": "host", "required": True}], {"base": "cannot_connect"}
+                )
+            # the entry's title is the server's own name; a speech server's
+            # entity lands with the setup, keyed on the entry (unique_id
+            # <entry>-stt / -tts); a satellite (10700, the witness's) holds none
+            port = int(body["port"])
+            if port not in (10300, 10200):
+                return self._create(fid, flow, "Satellite témoin", body)
+            kind, title = ("stt", "faster-whisper") if port == 10300 else ("tts", "piper")
+            status, out = self._create(fid, flow, title, body)
+            entry_id = out["result"]["entry_id"]
+            self.entities.append(
+                {
+                    "entity_id": f"{kind}.{title.replace('-', '_')}",
+                    "platform": "wyoming",
+                    "unique_id": f"{entry_id}-{kind}",
+                    "config_entry_id": entry_id,
+                }
+            )
+            return status, out
         if d == "heos":
             if body.get("host") in self.off:
                 return self._form(
@@ -665,6 +694,16 @@ class FakeHA(HomeAssistant):
 
     def delete(self, path):
         self.log.append(f"DELETE {path}")
+        if path.startswith("/api/config/config_entries/entry/"):
+            entry_id = path.rsplit("/", 1)[1]
+            for domain, items in self.entries.items():
+                if any(e["entry_id"] == entry_id for e in items):
+                    self.entries[domain] = [e for e in items if e["entry_id"] != entry_id]
+                    self.entities = [
+                        e for e in self.entities if e.get("config_entry_id") != entry_id
+                    ]
+                    return 200, {"require_restart": False}
+            return 404, {"message": "Invalid entry specified"}
         fid = path.rsplit("/", 1)[1]
         if self.flows.pop(fid, None) is None:
             return 404, {"message": "Invalid flow specified"}
@@ -910,6 +949,27 @@ class FakeHA(HomeAssistant):
                 # the list's shape: a bool per assistant (HA 2026.8, read live)
                 self.exposed.setdefault(eid, {})["conversation"] = payload["should_expose"]
             return None
+        if type_ == "stt/engine/list":
+            return {
+                "providers": [
+                    {"engine_id": e["entity_id"], "supported_languages": ["en", "fr", "de"]}
+                    for e in self.entities
+                    if e["entity_id"].startswith("stt.")
+                ]
+            }
+        if type_ == "tts/engine/get":
+            assert any(e["entity_id"] == payload["engine_id"] for e in self.entities)
+            return {
+                "provider": {"engine_id": payload["engine_id"], "supported_languages": ["fr_FR"]}
+            }
+        if type_ == "tts/engine/voices":
+            assert payload["language"] == "fr_FR"
+            return {
+                "voices": [
+                    {"voice_id": "fr_FR-siwis-medium", "name": "siwis"},
+                    {"voice_id": "fr_FR-upmc-medium", "name": "upmc"},
+                ]
+            }
         if type_ == "assist_pipeline/pipeline/list":
             return {
                 "pipelines": [dict(p) for p in self.pipelines],
@@ -1051,14 +1111,16 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert st["assist exposure"] == "ok" and st["assist pipeline"] == "waiting"
     assert st["assist rooms"] == "ok"  # nothing of the plan born yet: nothing to place
     hand = sum(1 for s in steps if s.state == "hand")
-    # ok: the puck's cast row (served by the TV's entry), the exposure, the rooms
+    # ok: the puck's cast row (served by the TV's entry), the exposure, the
+    # rooms, the ears' and the mouth's engines (0.34: their entries answered)
     ok = sum(1 for s in steps if s.state == "ok")
     # waiting: the mesh (no Zigbee2MQTT answers in a test — the walk's own half
-    # has its own file, test_zigbee.py), the LLM's agent, the pipeline
+    # has its own file, test_zigbee.py), the LLM's agent, the pipeline, the
+    # phone's mic (no device registered yet)
     waiting = sum(1 for s in steps if s.state == "waiting")
-    assert ok == 3 and waiting == 3
+    assert ok == 5 and waiting == 4
     assert summary(steps, False) == (
-        f"apply: {len(steps) - hand - ok - waiting} changed, 3 ok, {hand} by hand, "
+        f"apply: {len(steps) - hand - ok - waiting} changed, 5 ok, {hand} by hand, "
         f"{waiting} waiting"
     )
 
@@ -1192,6 +1254,9 @@ def test_a_room_renamed_is_adopted_by_its_old_id_now_an_alias(
             if t["area"] == "living":
                 t["area"] = "living_room"
             t["bind"] = ["living_room" if b == "living" else b for b in t.get("bind", [])]
+        for m in d["assist"].get("mics", []):  # what asks from the room follows it (0.34)
+            if m["room"] == "living":
+                m["room"] = "living_room"
 
     path = house_with(rename)
     room = path.parent / "rooms" / "living.yml"
@@ -1378,8 +1443,9 @@ def test_check_plans_the_entries_without_starting_a_flow(witness, secrets, tmp_p
     assert printer.detail == "set up ipp at 192.0.2.32"
     assert not ha.flows and ha.pin_shown == 0 and "POST " + FLOWS not in ha.log[seen:]
     # 8 entries wanted + the Matter server's + the border router's + the LLM's
-    # entry and its agent (assist, 0.31), 1 by hand
-    assert summary(steps, True).startswith("apply: 11 would change")
+    # entry and its agent (assist, 0.31) + the ears' and the mouth's wyoming
+    # entries (0.34), 1 by hand
+    assert summary(steps, True).startswith("apply: 13 would change")
 
 
 def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, tmp_path):
@@ -1390,8 +1456,9 @@ def test_a_thing_that_does_not_answer_is_waiting_not_a_fault(witness, secrets, t
     assert printer.state == "waiting" and "192.0.2.32 does not answer" in printer.detail
     assert "ipp" not in ha.entries and not ha.flows  # nothing made, nothing left open
     # the printer, the mesh no test answers for, the LLM's agent (no server in a
-    # test) and the pipeline (no porter before the restart)
-    assert ", 4 waiting" in summary(steps, False)
+    # test), the pipeline (no porter before the restart) and the phone's mic
+    # (no device registered in a bare fake, 0.34)
+    assert ", 5 waiting" in summary(steps, False)
     ha.off.clear()  # powered on: the next apply makes the entry
     again = apply(witness, secrets, tmp_path, ha, check=False)
     assert states(again)["entry kitchen_printer"] == "changed"
@@ -2266,6 +2333,16 @@ def furnished_for_assist(ha):
     """The brain after the render's restart: the porter's entity is up, the
     lights and looks the plan names exist, Home Assistant's own defaults
     exposed every bulb, the mesh's room group and the permit-join switch."""
+    ha.devices.append(
+        {
+            "id": "dphone",
+            "name": "Téléphone témoin",
+            "name_by_user": None,
+            "area_id": None,
+            "identifiers": [["mobile_app", "phone-1"]],
+            "config_entries": [],
+        }
+    )
     ha.entities.append(
         # the row's platform is the component the entity was handed to (0.31.2)
         {
@@ -2359,7 +2436,8 @@ def test_assist_the_agent_what_it_sees_and_the_pipeline(witness, secrets, tmp_pa
     mine = next(p for p in ha.pipelines if p["name"] == "Maison témoin")
     assert mine["language"] == "fr" and mine["conversation_language"] == "fr"
     assert mine["conversation_engine"] == "conversation.porter"
-    assert mine["prefer_local_intents"] is True and mine["stt_engine"] is None
+    assert mine["prefer_local_intents"] is True
+    assert mine["stt_engine"] == "stt.faster_whisper" and mine["tts_engine"] == "tts.piper"
     assert ha.preferred == mine["id"]
     assert ha.pipelines[0]["name"] == "Home Assistant" and ha.pipelines[0]["language"] == "en"
     # again: nothing moves, nothing is made twice
@@ -2436,3 +2514,133 @@ def test_assist_check_plans_and_a_porter_not_up_waits(witness, secrets, tmp_path
     assert st["entry ollama"] == "changed" and st["agent ollama"] == "changed"
     assert st["assist exposure"] == "ok" and "not born yet" in details(steps)["assist exposure"]
     assert st["assist pipeline"] == "waiting" and len(ha.pipelines) == 1
+
+
+# --- the ears and the mouth (0.34) ------------------------------------------
+def pipeline_of(ha, name="Maison témoin"):
+    return next(p for p in ha.pipelines if p["name"] == name)
+
+
+def doors(ha):
+    """The ears' and the mouth's wyoming entries — the witness's satellite
+    (a thing, `integration: wyoming`) holds one of its own, not a door."""
+    return sorted(
+        (e for e in ha.entries.get("wyoming", []) if e["_data"]["port"] in (10300, 10200)),
+        key=lambda e: -e["_data"]["port"],
+    )
+
+
+def test_assist_voice_the_ears_the_mouth_and_the_mic(witness, secrets, tmp_path, models):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st, why = states(steps), details(steps)
+    assert st["entry wyoming stt"] == "changed" and st["entry wyoming tts"] == "changed"
+    assert "faster-whisper" in why["entry wyoming stt"] and "piper" in why["entry wyoming tts"]
+    stt, tts = doors(ha)
+    assert stt["_data"] == {"host": "192.0.2.70", "port": 10300}
+    assert tts["_data"] == {"host": "192.0.2.71", "port": 10200}
+    # the engines: the registry's ids, the engines' own language tags, the voice
+    assert st["voice stt"] == "ok" and st["voice tts"] == "ok"
+    p = pipeline_of(ha)
+    assert p["stt_engine"] == "stt.faster_whisper" and p["stt_language"] == "fr"
+    assert p["tts_engine"] == "tts.piper" and p["tts_language"] == "fr_FR"
+    assert p["tts_voice"] == "fr_FR-siwis-medium"
+    assert p["conversation_engine"] == "conversation.porter" and ha.preferred == p["id"]
+    # the phone asks from the living room
+    assert st["mic Téléphone témoin"] == "changed"
+    assert why["mic Téléphone témoin"] == "asks from living"
+    living = next(a["area_id"] for a in ha.areas if a["name"] == "Salon")
+    assert next(d for d in ha.devices if d["id"] == "dphone")["area_id"] == living
+    # the second apply: nothing to do, no twin
+    again = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert again["entry wyoming stt"] == "ok" and again["entry wyoming tts"] == "ok"
+    assert again["assist pipeline"] == "ok" and again["mic Téléphone témoin"] == "ok"
+    assert len(doors(ha)) == 2
+
+
+def test_assist_voice_a_door_that_does_not_answer_waits_and_the_pipeline_keeps_its_engines(
+    witness, secrets, tmp_path, models
+):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    ha.off.add("192.0.2.70")  # the ears are down; the mouth answers
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st, why = states(steps), details(steps)
+    assert st["entry wyoming stt"] == "waiting" and "does not answer" in why["entry wyoming stt"]
+    assert "voice stt" not in st and st["voice tts"] == "ok"
+    p = pipeline_of(ha)
+    assert p["stt_engine"] is None and p["tts_engine"] == "tts.piper"
+    assert [e["_data"]["port"] for e in doors(ha)] == [10200]
+    # the ears come back: the entry is made, the pipeline learns them, nothing else moves
+    ha.off.clear()
+    st = states(apply(witness, secrets, tmp_path, ha, check=False))
+    assert st["entry wyoming stt"] == "changed" and st["entry wyoming tts"] == "ok"
+    assert st["assist pipeline"] == "changed"
+    assert pipeline_of(ha)["stt_engine"] == "stt.faster_whisper"
+
+
+def test_assist_voice_a_moved_door_is_remade(witness, secrets, tmp_path, models, house_with):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    apply(witness, secrets, tmp_path, ha, check=False)
+
+    def moved(d):
+        d["assist"]["voice"]["stt"]["url"] = "tcp://192.0.2.72:10300"
+
+    house = load_house(house_with(moved))
+    # check says what would move, touches nothing
+    planned = apply(house, secrets, tmp_path, ha, check=True)
+    assert states(planned)["entry wyoming stt"] == "would"
+    assert "moved to tcp://192.0.2.72:10300" in details(planned)["entry wyoming stt"]
+    assert len(doors(ha)) == 2
+    st = states(apply(house, secrets, tmp_path, ha, check=False))
+    assert st["entry wyoming stt"] == "changed" and st["entry wyoming tts"] == "ok"
+    hosts = sorted(e["_data"]["host"] for e in doors(ha))
+    assert hosts == ["192.0.2.71", "192.0.2.72"]
+    assert pipeline_of(ha)["stt_engine"] == "stt.faster_whisper"
+
+
+def test_assist_voice_a_voice_the_mouth_lacks_waits(witness, secrets, tmp_path, models, house_with):
+    def nobody(d):
+        d["assist"]["voice"]["tts"]["voice"] = "fr_FR-nobody"
+
+    house = load_house(house_with(nobody))
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert states(steps)["voice tts"] == "waiting"
+    assert "fr_FR-siwis-medium" in details(steps)["voice tts"]
+    p = pipeline_of(ha)
+    assert p["stt_engine"] == "stt.faster_whisper" and p["tts_engine"] is None
+
+
+def test_assist_voice_adopts_the_one_entry_it_finds_with_no_memory(
+    witness, secrets, tmp_path, models
+):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    # the mouth's entry made by hand before the house named it
+    e = ha._entry("wyoming", "piper", {"host": "192.0.2.71", "port": 10200})
+    ha.entities.append(
+        {
+            "entity_id": "tts.piper",
+            "platform": "wyoming",
+            "unique_id": f"{e['entry_id']}-tts",
+            "config_entry_id": e["entry_id"],
+        }
+    )
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    st, why = states(steps), details(steps)
+    assert st["entry wyoming tts"] == "ok" and "adopted piper" in why["entry wyoming tts"]
+    assert st["entry wyoming stt"] == "changed"
+    assert len(doors(ha)) == 2 and pipeline_of(ha)["tts_engine"] == "tts.piper"
+
+
+def test_assist_a_mic_the_brain_does_not_hold_waits(witness, secrets, tmp_path, models):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    ha.devices = [d for d in ha.devices if d["id"] != "dphone"]
+    steps = apply(witness, secrets, tmp_path, ha, check=False)
+    assert states(steps)["mic Téléphone témoin"] == "waiting"
+    assert "not in the brain yet" in details(steps)["mic Téléphone témoin"]

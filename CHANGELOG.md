@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.34.0 — les oreilles et la bouche : deux adresses, le téléphone a sa pièce (2026-09-06)
+
+Le pack `assist` apprend la voix. **`assist.voice`** nomme deux serveurs
+Wyoming par leur ADRESSE — `stt: { url: tcp://… }`, `tts: { url: tcp://…,
+voice: … }` — comme le LLM l'est déjà (une capacité est une adresse, jamais
+un lieu : docs/ai.md A3-r chez Le Squat, les oreilles et la bouche chacune
+dans son conteneur sur un nœud 24/7, jamais dans le cerveau). `apply` fait
+une entrée `wyoming` par porte (hôte + port, l'unique formulaire de
+l'intégration, lu dans la source du cerveau), s'en souvient avec son adresse
+(`.regie/state/assist.json`) : une porte qui a DÉMÉNAGÉ est refaite
+(l'intégration n'a pas d'étape de reconfiguration ; les entités renaissent
+sous les mêmes identifiants), une porte qui ne répond pas attend et le
+pipeline garde ses moteurs ; sans mémoire, l'unique entrée qui porte déjà une
+entité de cette sorte est adoptée (un état refait de rien ne fabrique pas de
+jumeau). Les moteurs du pipeline sont lus dans le registre — jamais un nom
+deviné : le titre de l'entrée est le nom que le serveur se donne
+(`stt.faster_whisper` sert Parakeet) —, l'étiquette de langue est celle que
+le moteur épelle (`fr` / `fr_FR`, demandée au cerveau), la voix est vérifiée
+contre la liste du moteur (une voix qu'il n'a pas attend, en disant ce qu'il
+a). **`assist.mics`** : ce qui demande, et depuis quelle pièce quand il n'en
+nomme pas — un appareil du registre (le téléphone de l'application compagnon
+aujourd'hui, un satellite demain) posé dans sa pièce ; les phrases locales
+prennent la pièce de l'appareil (lu en direct le 2026-09-06 : « allume la
+lumière » depuis un téléphone sans pièce tombait sur le LLM, qui demandait).
+`check` refuse un micro dans une pièce que la maison n'a pas ; le schéma
+refuse des oreilles sans bouche. Au passage : une chose `integration:
+wyoming` (un satellite) répond le port de son formulaire — 10700 par
+convention, `options.port` sinon — là où une ligne avec le seul hôte
+bloquait son flow (le double de test a appris le vrai formulaire, et l'a
+dit). Dix tests neufs.
+
 ## 0.33.0 — ce que le téléphone possède : une règle, un verbe (2026-09-06)
 
 L'audit du cerveau, la suite de V4. Trois mécanismes disaient la même chose

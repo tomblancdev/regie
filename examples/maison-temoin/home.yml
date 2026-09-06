@@ -74,6 +74,14 @@ assist:
   ceiling:
     watchman: { url: "http://192.0.2.60:8080", target: llm, token: watchman_token }
     replies: { waking: "Je réveille la tour — compte deux minutes et redemande-moi." }
+  # the ears and the mouth (0.34): two Wyoming servers by their address, the
+  # pipeline speaks through them; the phone asks from the living room unless
+  # it names a room
+  voice:
+    stt: { url: "tcp://192.0.2.70:10300" }
+    tts: { url: "tcp://192.0.2.71:10200", voice: fr_FR-siwis-medium }
+  mics:
+    - { device: "Téléphone témoin", room: living }
 mqtt:
   host: 192.0.2.5
 # THE PLAN (0.13): the frame every room draws itself in - the flat's outer

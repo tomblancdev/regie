@@ -160,3 +160,51 @@ def test_a_wrong_policy_word_is_refused(house_with):
 
     with pytest.raises(HouseError, match="lights"):
         load_house(house_with(bulbs))
+
+
+# --- the ears and the mouth (0.34) ------------------------------------------
+def test_the_house_resolves_the_ears_the_mouth_and_the_mics(witness):
+    a = witness.assist()
+    assert a["voice"]["stt"] == {
+        "url": "tcp://192.0.2.70:10300",
+        "host": "192.0.2.70",
+        "port": 10300,
+    }
+    assert a["voice"]["tts"] == {
+        "url": "tcp://192.0.2.71:10200",
+        "host": "192.0.2.71",
+        "port": 10200,
+        "voice": "fr_FR-siwis-medium",
+    }
+    assert a["mics"] == [{"device": "Téléphone témoin", "room": "living"}]
+
+
+def test_no_voice_means_no_engines_and_no_mics(house_with):
+    def typed(d):
+        d["assist"].pop("voice")
+        d["assist"].pop("mics")
+
+    a = load_house(house_with(typed)).assist()
+    assert a["voice"] is None and a["mics"] == []
+
+
+def test_ears_without_a_mouth_are_refused(house_with):
+    def deaf(d):
+        d["assist"]["voice"].pop("tts")
+
+    with pytest.raises(HouseError, match="tts"):
+        load_house(house_with(deaf))
+
+    def not_a_door(d):
+        d["assist"]["voice"]["stt"]["url"] = "http://192.0.2.70:10300"
+
+    with pytest.raises(HouseError, match="url"):
+        load_house(house_with(not_a_door))
+
+
+def test_a_mic_in_no_room_of_the_house_is_refused(house_with):
+    def attic(d):
+        d["assist"]["mics"] = [{"device": "Téléphone témoin", "room": "attic"}]
+
+    with pytest.raises(HouseError, match="not a room of the house"):
+        load_house(house_with(attic))

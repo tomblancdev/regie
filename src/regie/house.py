@@ -57,6 +57,15 @@ DOMAIN: dict[str, str | None] = {
 }
 
 
+def wyoming_door(url: str) -> dict:
+    """A Wyoming server's door as the brain's wyoming integration wants it
+    (host + port) from the address the house writes (`tcp://host:port`, the
+    server's own --uri shape). The schema has already refused anything else."""
+    rest = str(url).strip().removeprefix("tcp://").rstrip("/")
+    host, _, port = rest.rpartition(":")
+    return {"host": host, "port": int(port)}
+
+
 def zigbee_group_id(area_id: str) -> int:
     """A room's Zigbee group number, DERIVED from its id and nothing else.
 
@@ -321,6 +330,17 @@ class House:
         }
         expose = raw.get("expose") or {}
         pipeline = raw.get("pipeline") or {}
+        voice = None
+        if raw.get("voice"):
+            v = raw["voice"]
+            voice = {
+                "stt": {"url": str(v["stt"]["url"]).rstrip("/"), **wyoming_door(v["stt"]["url"])},
+                "tts": {
+                    "url": str(v["tts"]["url"]).rstrip("/"),
+                    **wyoming_door(v["tts"]["url"]),
+                    "voice": v["tts"].get("voice"),
+                },
+            }
         return {
             "llm": {
                 "platform": "ollama",
@@ -343,6 +363,10 @@ class House:
                 "name": pipeline.get("name") or self.data["house"]["label"],
                 "prefer_local": bool(pipeline.get("prefer_local", True)),
             },
+            "voice": voice,
+            "mics": [
+                {"device": str(m["device"]), "room": m["room"]} for m in (raw.get("mics") or [])
+            ],
         }
 
     def exposure_plan(self) -> tuple[set[str], set[str]]:
@@ -2258,6 +2282,14 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
     # root key no fragment claims — the strict schema refuses it first)
     if house.has_pack("assist") and not data.get("assist"):
         errors.append("pack assist needs an `assist:` block — `llm: { url, model }` at least")
+    # the mics (0.34): a device asks from a room the house has
+    area_ids = {a["id"] for a in house.areas}
+    for m in (data.get("assist") or {}).get("mics") or []:
+        if m.get("room") not in area_ids:
+            errors.append(
+                f"assist.mics: {m.get('device')!r} asks from {m.get('room')!r}, "
+                "not a room of the house"
+            )
 
     if not house.labels.found:
         warnings.append(

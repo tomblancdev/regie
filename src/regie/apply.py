@@ -62,8 +62,17 @@ def _exposed_to(value) -> bool:
     return bool(value)
 
 
+def _language_tag(tags: list[str], lang: str) -> str | None:
+    """The tag an engine spells for a language: `fr` itself, else the first
+    dialect of it (`fr_FR`, `fr-FR`) — the engine's word, never the house's
+    guess."""
+    if lang in tags:
+        return lang
+    return next((t for t in tags if t.replace("-", "_").split("_", 1)[0] == lang), None)
+
+
 # an Assist pipeline's fields (Home Assistant 2026.8, assist_pipeline/pipeline/create
-# wants every one of them; the speech engines are None until pack voice fills them)
+# wants every one of them; the speech engines are None until assist.voice fills them)
 PIPELINE_FIELDS = (
     "conversation_engine",
     "conversation_language",
@@ -644,12 +653,17 @@ class Conductor:
         return None
 
     @staticmethod
-    def thing_answers(thing: dict) -> dict:
+    def thing_answers(thing: dict, domain: str | None = None) -> dict:
         out: dict = {}
         for key in ("host", "mac"):
             if thing.get(key):
                 out[key] = thing[key]
         out["name"] = thing.get("label") or thing["id"]
+        if domain == "wyoming":
+            # a satellite's door: Wyoming's convention unless the row says
+            # (the integration's form asks host AND port, read in the brain's
+            # own source — a row with a host alone stalled its flow)
+            out["port"] = int((thing.get("options") or {}).get("port", 10700))
         return out
 
     def credentials(self, ws) -> None:
@@ -719,7 +733,7 @@ class Conductor:
                 out = walk(
                     self.ha,
                     domain,
-                    self.thing_answers(t),
+                    self.thing_answers(t, domain),
                     flow_id=self.discovered(ws, domain, t),
                     verb=f"regie link {t['id']}",
                 )
@@ -1676,7 +1690,181 @@ class Conductor:
         self.assist_agent(ws, a["llm"])
         self.assist_exposure(ws)
         self.assist_rooms(ws)
-        self.assist_pipeline(ws, a["pipeline"])
+        engines = self.assist_voice(ws, a["voice"]) if a["voice"] else {}
+        self.assist_pipeline(ws, a["pipeline"], engines)
+        self.assist_mics(ws, a["mics"])
+
+    # --- the ears and the mouth (0.34) -----------------------------------------
+    def assist_voice(self, ws, voice: dict) -> dict:
+        """The ears and the mouth: one `wyoming` config entry per door (host +
+        port — the integration's one form, read in the brain's own source),
+        remembered with its address in the state; a door that MOVED is re-made
+        (the integration has no reconfigure step; the entities are re-minted
+        under the same ids once the old entry is gone); a door that does not
+        answer waits and the pipeline keeps what it has. With no memory, the
+        one wyoming entry that already holds an entity of that kind is adopted
+        (a state file rebuilt from nothing must not make a twin). Returns the
+        pipeline's fields: each engine's entity id from the registry (never a
+        guessed name — the entry's title is whatever the server calls itself),
+        its language tag as the engine spells it, the mouth's voice."""
+        remembered = read_state(self.root, "assist.json")
+        memory = remembered.setdefault("voice", {})
+        fields: dict = {}
+        lang = self.house.data["house"].get("lang", "en")
+        for kind, what in (("stt", "the ears"), ("tts", "the mouth")):
+            door = voice[kind]
+            name = f"entry wyoming {kind}"
+            have = {e["entry_id"]: e for e in self.domain_entries("wyoming")}
+            entities = ws.call("config/entity_registry/list") or []
+            mine = memory.get(kind) or {}
+            entry = have.get(mine.get("entry_id"))
+            if entry is None and not mine:
+                owners = {
+                    e.get("config_entry_id")
+                    for e in entities
+                    if e["entity_id"].startswith(f"{kind}.") and e.get("config_entry_id") in have
+                }
+                if len(owners) == 1:
+                    entry = have[owners.pop()]
+                    memory[kind] = {"entry_id": entry["entry_id"], "url": door["url"]}
+                    write_state(self.root, "assist.json", remembered)
+                    self.step(name, "ok", f"{what}: adopted {entry.get('title')} as {door['url']}")
+            if entry is not None and mine.get("url") not in (None, door["url"]):
+                self.step(
+                    name,
+                    "changed",
+                    f"{what} moved to {door['url']} (was {mine['url']}) — the entry re-made",
+                )
+                if self.check:
+                    continue
+                status, body = self.ha.delete(f"{ENTRIES}/{entry['entry_id']}")
+                if status != 200:
+                    raise HouseError(
+                        f"wyoming {kind}: the old entry refused to go: {status} {body}"
+                    )
+                have.pop(mine["entry_id"], None)
+                entry = None
+                memory.pop(kind, None)
+                write_state(self.root, "assist.json", remembered)
+            if entry is None:
+                if self.check:
+                    self.step(name, "changed", f"set up {what} at {door['url']}")
+                    continue
+                out = walk(self.ha, "wyoming", {"host": door["host"], "port": door["port"]})
+                if out.state == "waiting":
+                    self.step(
+                        name, "waiting", f"{what} at {door['url']} does not answer — {out.detail}"
+                    )
+                    continue
+                if out.state != "changed":
+                    raise HouseError(f"wyoming {kind}: {out.detail}")
+                fresh = [e for e in self.domain_entries("wyoming") if e["entry_id"] not in have]
+                if len(fresh) != 1:
+                    raise HouseError(f"wyoming {kind}: the entry was made and cannot be told apart")
+                entry = fresh[0]
+                memory[kind] = {"entry_id": entry["entry_id"], "url": door["url"]}
+                write_state(self.root, "assist.json", remembered)
+                self.step(name, "changed", f"set up {what} at {door['url']} — {entry.get('title')}")
+                for _ in range(10):  # the entities land with the entry's setup, a moment later
+                    entities = ws.call("config/entity_registry/list") or []
+                    if any(e.get("config_entry_id") == entry["entry_id"] for e in entities):
+                        break
+                    time.sleep(1)
+            elif mine.get("url") == door["url"]:
+                self.step(name, "ok", f"{what} at {door['url']} — {entry.get('title')}")
+            engine = next(
+                (
+                    e["entity_id"]
+                    for e in entities
+                    if e.get("config_entry_id") == entry["entry_id"]
+                    and e["entity_id"].startswith(f"{kind}.")
+                    and not e.get("disabled_by")
+                ),
+                None,
+            )
+            if engine is None:
+                self.step(
+                    f"voice {kind}", "waiting", f"{entry.get('title')} holds no {kind} entity yet"
+                )
+                continue
+            fields.update(self.voice_engine(ws, kind, engine, lang, door.get("voice")))
+        return fields
+
+    def voice_engine(self, ws, kind: str, engine: str, lang: str, voice: str | None) -> dict:
+        """One engine's pipeline fields: its entity id, the language tag it
+        spells for the house's language (`fr` or `fr_FR` — the engine's word,
+        asked of the brain), and for the mouth the declared voice, checked
+        against what the engine lists (a voice it lacks waits, and says what it
+        has)."""
+        name = f"voice {kind}"
+        if kind == "stt":
+            listed = ws.call("stt/engine/list") or {}
+            providers = listed.get("providers") or []
+            tags = next(
+                (
+                    p.get("supported_languages") or []
+                    for p in providers
+                    if p.get("engine_id") == engine
+                ),
+                [],
+            )
+        else:
+            got = ws.call("tts/engine/get", engine_id=engine) or {}
+            tags = (got.get("provider") or {}).get("supported_languages") or []
+        tag = _language_tag(tags, lang)
+        if tag is None:
+            self.step(
+                name, "waiting", f"{engine} speaks no {lang} ({', '.join(tags) or 'nothing'})"
+            )
+            return {}
+        fields = {f"{kind}_engine": engine, f"{kind}_language": tag}
+        if kind == "tts":
+            listed = ws.call("tts/engine/voices", engine_id=engine, language=tag) or {}
+            voices = listed.get("voices") or []
+            ids = [v.get("voice_id") for v in voices]
+            if voice and voice not in ids:
+                self.step(
+                    name, "waiting", f"{engine} has no voice {voice} ({', '.join(ids) or 'none'})"
+                )
+                return {}
+            fields["tts_voice"] = voice or (ids[0] if ids else None)
+        spoken = f", {fields['tts_voice']}" if fields.get("tts_voice") else ""
+        said = f"{engine} ({tag}{spoken})"
+        self.step(name, "ok", said)
+        return fields
+
+    def assist_mics(self, ws, mics: list[dict]) -> None:
+        """What asks, and from which room when it does not say one: the named
+        device of the registry placed in its room — the local sentences take
+        the room from the device (read live 2026-09-06: « allume la lumière »
+        from a phone with no room fell to the LLM, which asked). A device the
+        brain does not hold yet waits; a name two devices wear waits too."""
+        if not mics:
+            return
+        devices = ws.call("config/device_registry/list") or []
+        for m in mics:
+            name = f"mic {m['device']}"
+            found = [d for d in devices if m["device"] in (d.get("name_by_user"), d.get("name"))]
+            if not found:
+                self.step(name, "waiting", "not in the brain yet (the app has not registered)")
+                continue
+            if len(found) > 1:
+                self.step(
+                    name, "waiting", f"{len(found)} devices wear this name — say which by renaming"
+                )
+                continue
+            area_id = self.area_ids.get(m["room"])
+            if area_id is None:
+                self.step(name, "waiting", f"the room {m['room']} is not in the brain yet")
+                continue
+            dev = found[0]
+            if dev.get("area_id") == area_id:
+                self.step(name, "ok", f"asks from {m['room']}")
+                continue
+            self.step(name, "changed", f"asks from {m['room']}")
+            if self.check:
+                continue
+            ws.call("config/device_registry/update", device_id=dev["id"], area_id=area_id)
 
     def assist_agent(self, ws, llm: dict) -> None:
         """The LLM's config entry (its title is its url) and, under it, the
@@ -1850,11 +2038,12 @@ class Conductor:
         status, _ = self.ha.get(f"/api/states/{PORTER}")
         return PORTER if status == 200 else None
 
-    def assist_pipeline(self, ws, p: dict) -> None:
+    def assist_pipeline(self, ws, p: dict, engines: dict | None = None) -> None:
         """The house's pipeline — in its language, the doorman as its agent,
-        *prefer local* as declared, preferred. The speech engines are left as
-        they are (None until pack voice fills them); Home Assistant's own
-        English pipeline is left where it is."""
+        *prefer local* as declared, preferred; its speech engines the ears' and
+        the mouth's (0.34) when the house declares them and they answered —
+        a door that waits leaves the pipeline's engines as they are. Home
+        Assistant's own English pipeline is left where it is."""
         name = "assist pipeline"
         agent = self.porter_entity(ws)
         if agent is None:
@@ -1868,6 +2057,7 @@ class Conductor:
             "conversation_language": lang,
             "prefer_local_intents": p["prefer_local"],
         }
+        wanted.update(engines or {})
         local = "on" if p["prefer_local"] else "off"
         listed = ws.call("assist_pipeline/pipeline/list") or {}
         pipes = listed.get("pipelines") or []
@@ -1975,7 +2165,7 @@ def link(
         last = walk(
             ha,
             domain,
-            c.thing_answers(thing),
+            c.thing_answers(thing, domain),
             flow_id=flow_id,
             prompt=prompt,
             on_url=on_url,
