@@ -289,6 +289,9 @@ def test_the_switch_starts_the_walk_and_a_restart_or_a_reload_resumes_it(rendere
     assert auto["triggers"][1]["to"] == "on"
     back = auto["triggers"][2:]
     assert back and all(t["to"] == "off" and t["for"] == {"seconds": 5} for t in back)
+    # 0.28.1: only a script MADE AGAIN (its state from nowhere) - a walk ending on
+    # its own, on to off, never re-arms it (a life with no life today ends at once)
+    assert all(t["not_from"] == ["on", "off", "unavailable", "unknown"] for t in back)
     walkers = [t["entity_id"] for t in back]
     assert walkers[0] == "script.living_party_drift"
     assert ("script.living_party_life" in walkers) == ("living_party_life" in pkg["script"])

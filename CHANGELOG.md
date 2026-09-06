@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.28.1 — une marche qui finit d'elle-même ne se relance pas (2026-09-06)
+
+Lu en direct trois minutes après la convergence de 0.28.0 : les démarreurs du
+Passage et du QG se déclenchaient toutes les cinq secondes. La palette du jour
+n'a pas de vie aujourd'hui — le script `_life` vérifie `pal.life` et finit
+aussitôt — et le déclencheur « revient `off` 5 s » de 0.28.0 prenait cette
+fin naturelle (`on` → `off`) pour un script refait. Le déclencheur ne compte
+plus que l'entité REFAITE, dont l'état ne vient de nulle part (`not_from`
+tous les états réels — un rechargement retire et recrée un script dont le
+texte a changé ; au démarrage, l'événement de départ passe le premier grâce
+aux 5 s) ; une marche qui s'arrête d'elle-même n'est jamais un déclencheur.
+Pas de rendu de la maison sans un `_life` ou un `_drift` : le paquet de chaque
+pièce à marche change, la convergence recharge (automation puis script) et ne
+redémarre pas.
+
 ## 0.28.0 — recharger, pas redémarrer (2026-09-06)
 
 Le pas V1 de l'audit (H50 ; Tom : « ok go with your recos ») : `up`
