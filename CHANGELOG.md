@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.31.1 — Le composant voyage avec le paquet (2026-09-06)
+
+Le rendu de 0.31.0 depuis l'étiquette refusait sur le cerveau :
+`home-assistant/custom_components/regie/manifest.json: nothing to copy at
+…/site-packages/regie/base/components/regie/manifest.json`. Le paquet construit
+depuis l'étiquette portait les `.py` du composant (des paquets d'espace de
+noms, trouvés par setuptools) mais pas son `manifest.json` : `package-data` ne
+nommait pas `base/components/**/*`. La surcouche de développement n'avait
+jamais rendu sur un vrai cerveau — 0.31.0 était construit et testé, jamais
+posé. Corrigé d'une ligne ; un test lit les globs de `pyproject.toml` et exige
+que chaque fichier que le rendu copie tel quel (`plan(témoin)`) et tout
+`base/components/` en fassent partie — la leçon de 0.5.1 et 0.12.1 (« une
+release porte sa propre épingle ») appliquée aux données du paquet.
+
 ## 0.31.0 — Le Portier : Assist devant un serveur qui dort (2026-09-06)
 
 Le pack `assist` branche l'assistant vocal de Home Assistant sur une IA qui
