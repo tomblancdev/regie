@@ -87,6 +87,9 @@ def test_units_pin_the_images(rendered, witness):
 def test_home_assistant_configuration(rendered):
     text = (rendered / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
     assert "\ndefault_config:\n" in text  # the witness keeps `my`: one line
+    # 0.27.0: the commands are not recorded - one recorder block, never two
+    assert "\nrecorder:\n  exclude:\n    event_types:\n      - call_service\n" in text
+    assert text.count("\nrecorder:\n") == 1
     assert "packages: !include_dir_named packages" in text
     assert "automation: !include automations.yaml" in text
     assert "trusted_proxies" not in text  # the reverse proxy is the conductor's (stored config)
@@ -292,6 +295,10 @@ def test_a_house_without_my_renders_default_config_written_out(house_with, secre
     text = (out / "home-assistant/configuration.yaml").read_text(encoding="utf-8")
     assert "default_config:" not in text.replace("# default_config", "")
     assert "\nmy:\n" not in text
+    # 0.27.0: the recorder block is written once - a duplicate key would be
+    # the day `recorder` joins base.yml's member list
+    assert text.count("\nrecorder:\n") == 1
+    assert "      - call_service\n" in text
     members = base_default_config()
     assert "my" in members and len(members) >= 20
     for domain in members:

@@ -34,6 +34,19 @@ default_config:
 {% endfor %}
 {% endif %}
 
+# the recorder's diet (0.27.0): the commands are not recorded. A `call_service`
+# event is the brain writing down what it was just asked - nothing reads it
+# back (the logbook and the history are built from the states, a script's
+# trace lives in its own store) and a house whose looks walk their bulbs fires
+# one per step: 280 618 of a week's 333 799 events on the house this was read
+# on, for nothing. The states a walk writes are the walk's business, not the
+# recorder's. `recorder` is not a default_config member (history pulls it in),
+# so this block is the only one, with or without `my`.
+recorder:
+  exclude:
+    event_types:
+      - call_service
+
 automation: !include automations.yaml
 scene: !include scenes.yaml
 script: !include scripts.yaml

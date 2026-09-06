@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.27.0 — le régime de l'enregistreur (2026-09-06)
+
+L'audit de la maison (Tom : « fully audit our HA infra to determine what is
+good to change »), lu en direct sur le cerveau : 280 618 des 333 799
+événements d'une semaine sont des `call_service` — chaque pas d'une marche en
+émet un — et rien ne les relit : le journal et l'historique sont construits
+sur les états, la trace d'un script vit dans son propre magasin. Le gabarit de
+base exclut désormais ce type d'événement de l'enregistreur
+(`recorder: exclude: event_types: [call_service]`) ; `recorder` n'est pas un
+membre de `default_config` (c'est `history` qui l'amène), le bloc est donc
+unique, avec ou sans `my` — les tests le gardent. Lu avant de changer, pour ne
+pas promettre plus que la ligne : les tables d'événements pèsent 86 Mio des
+463 de la base ; les 369 autres sont la table des états et ses index —
+470 095 lignes de lumières sur les 580 409 d'une journée, les groupes et les
+ampoules qu'une marche repeint — l'affaire de la marche, pas de l'enregistreur.
+
 ## 0.26.2 — une ambiance retirée n'a plus de fantôme (2026-09-05)
 
 Tom : « let's fix the ghost script prune in the product ». L'écart connu
