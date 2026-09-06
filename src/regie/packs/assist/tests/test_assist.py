@@ -19,6 +19,9 @@ def test_the_ceiling_renders_the_sensor_and_the_knock(rendered):
     (sensor,) = rest["binary_sensor"]
     assert sensor["name"] == "tower_awake" and sensor["unique_id"] == "regie_tower_awake"
     assert sensor["value_template"] == "{{ value_json.up }}"
+    # a REST binary_sensor takes no json_attributes: HA refuses the whole
+    # rest: block for one (2026.8, read live 2026-09-06 — no tower_awake at all)
+    assert "json_attributes" not in sensor
     knock = pkg["rest_command"]["knock_ceiling"]
     assert knock["url"] == "http://192.0.2.60:8080/api/targets/llm/wake"
     assert knock["method"] == "post"

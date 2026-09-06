@@ -14,7 +14,8 @@ sentences cannot answer. The verdict (porter.py) reads the ceiling's sensor:
 - unknown: the LLM is asked anyway; a failure is said as what it is.
 
 The entity keeps its last verdict and the knock's time as attributes: the
-drills read them.
+drills read them. It is added by the component's __init__ straight into
+the conversation component (no platform discovery there).
 """
 
 from __future__ import annotations
@@ -26,8 +27,6 @@ from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .porter import DELEGATE, WAKE, decide, line, pick_agent
 
@@ -35,17 +34,6 @@ _LOGGER = logging.getLogger(__name__)
 
 ENTITY_ID = "conversation.porter"
 UNIQUE_ID = "regie_porter"
-
-
-async def async_setup_platform(
-    hass: HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
-) -> None:
-    if discovery_info is None:
-        return
-    async_add_entities([Porter(hass, dict(discovery_info))])
 
 
 class Porter(conversation.ConversationEntity):

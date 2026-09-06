@@ -12,9 +12,9 @@ release of the product — a changed file restarts the brain (up.py's rule).
 from __future__ import annotations
 
 import voluptuous as vol
+from homeassistant.components.conversation.const import DATA_COMPONENT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import discovery
 from homeassistant.helpers.typing import ConfigType
 
 DOMAIN = "regie"
@@ -42,7 +42,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config.get(DOMAIN) or {}
     hass.data[DOMAIN] = conf
     if "porter" in conf:
-        hass.async_create_task(
-            discovery.async_load_platform(hass, "conversation", DOMAIN, conf["porter"], config)
-        )
+        # handed to the conversation component the way its own default agent
+        # is (default_agent.py): that component never arms platform discovery
+        # — its async_setup keeps the EntityComponent without calling
+        # async_setup(config) on it, so a discovered platform dies unheard and
+        # async_setup_platform refuses ("async_setup needs to be called
+        # first"). Read live on Home Assistant 2026.8.3 (0.31.2). The registry
+        # row's platform is therefore `conversation`; the conductor knows the
+        # entity by its unique id.
+        from .conversation import Porter
+
+        await hass.data[DATA_COMPONENT].async_add_entities([Porter(hass, dict(conf["porter"]))])
     return True

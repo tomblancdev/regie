@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.31.2 — Le portier existe, la tour se lit (2026-09-06)
+
+Trois défauts qu'un vrai cerveau seul pouvait montrer (Home Assistant
+2026.8.3, lus en direct après le premier rendu de 0.31.1) :
+
+- **Le portier n'existait pas** : le composant chargeait sa plateforme
+  `conversation` par découverte (`discovery.async_load_platform`), et le
+  composant `conversation` de Home Assistant n'arme jamais la découverte —
+  son `async_setup` garde l'`EntityComponent` sans appeler
+  `async_setup(config)` dessus ; le signal mourait sans un mot, et
+  `async_setup_platform` refuse (« async_setup needs to be called first »).
+  L'entité est maintenant tendue au composant `conversation` comme l'agent
+  par défaut de Home Assistant l'est (`async_add_entities`) ; sa ligne de
+  registre dit donc `conversation`, et le chef d'orchestre la connaît par son
+  identifiant unique (`regie_porter`) — jamais un fantôme, quel que soit son
+  état.
+- **La tour ne se lisait pas** : un `binary_sensor` REST ne prend pas de
+  `json_attributes`, et Home Assistant refusait TOUT le bloc `rest:` pour
+  cette ligne (« Invalid config for 'rest' ») — pas de `tower_awake`. La
+  ligne est retirée.
+- **L'exposition plantait** : la liste `homeassistant/expose_entity/list`
+  aplatit le réglage de chaque assistant en un booléen ; le produit (et son
+  faux cerveau) lisaient la forme du magasin (`{should_expose: bool}`). Les
+  deux formes sont lues ; le faux cerveau parle comme le vrai.
+
 ## 0.31.1 — Le composant voyage avec le paquet (2026-09-06)
 
 Le rendu de 0.31.0 depuis l'étiquette refusait sur le cerveau :

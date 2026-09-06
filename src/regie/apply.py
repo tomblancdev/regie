@@ -51,6 +51,17 @@ MATTER_URL = "ws://localhost:5580/ws"  # the server beside the brain (pack matte
 HTTP_META = ("created_at", "error", "error_message")
 ENTRIES = "/api/config/config_entries/entry"
 MARKS = {"ok": "=", "changed": "+", "would": "?", "hand": "!", "waiting": "~"}
+
+
+def _exposed_to(value) -> bool:
+    """One assistant's word in the exposure list: Home Assistant's ws list
+    flattens the setting to a bool per assistant (2026.8, read live); the
+    store's own shape ({should_expose: bool}) is taken too."""
+    if isinstance(value, dict):
+        return bool(value.get("should_expose"))
+    return bool(value)
+
+
 # an Assist pipeline's fields (Home Assistant 2026.8, assist_pipeline/pipeline/create
 # wants every one of them; the speech engines are None until pack voice fills them)
 PIPELINE_FIELDS = (
@@ -68,6 +79,11 @@ PIPELINE_FIELDS = (
     "prefer_local_intents",
 )
 PORTER = "conversation.porter"  # the doorman's entity (base/components/regie)
+PORTER_UNIQUE_ID = "regie_porter"
+# the product's own component's entities: added straight into their domain's
+# component, so their registry row says `conversation`, not `regie` — never a
+# ghost, whatever their state (0.31.2)
+COMPONENT_IDS = {PORTER_UNIQUE_ID}
 
 
 def _stamp(data: dict) -> str:
@@ -1475,7 +1491,7 @@ class Conductor:
                 if uid not in gone:
                     continue
                 why = "a look the house no longer has"
-            elif e.get("platform") == "regie":
+            elif e.get("platform") == "regie" or uid in COMPONENT_IDS:
                 # the product's own component (0.31): its entities live with
                 # the component, no package names them — never a ghost
                 continue
@@ -1784,11 +1800,7 @@ class Conductor:
         own rule: a mesh's door is nobody's voice command."""
         listed = ws.call("homeassistant/expose_entity/list") or {}
         current = listed.get("exposed_entities") or {}
-        exposed = {
-            e
-            for e, v in current.items()
-            if ((v or {}).get("conversation") or {}).get("should_expose")
-        }
+        exposed = {e for e, v in current.items() if _exposed_to((v or {}).get("conversation"))}
         known = {e["entity_id"] for e in ws.call("config/entity_registry/list") or []}
         expose, hide = self.house.exposure_plan()
         hide |= {e for e in exposed if "permit_join" in e}
@@ -1819,11 +1831,12 @@ class Conductor:
             )
 
     def porter_entity(self, ws) -> str | None:
-        """The doorman's entity, by its unique id in the registry — None while
-        the component has not started (the first apply after the render that
-        laid it down restarts the brain first; the entity is there by then)."""
+        """The doorman's entity, by its unique id in the registry (its row's
+        platform is `conversation`, the component it was handed to) — None
+        while the component has not started (the first apply after the render
+        that laid it down restarts the brain first; the entity is there by then)."""
         for e in ws.call("config/entity_registry/list") or []:
-            if e.get("platform") == "regie" and e.get("unique_id") == "regie_porter":
+            if e.get("unique_id") == PORTER_UNIQUE_ID:
                 return e["entity_id"]
         status, _ = self.ha.get(f"/api/states/{PORTER}")
         return PORTER if status == 200 else None

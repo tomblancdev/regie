@@ -17,7 +17,8 @@ rest:
         unique_id: regie_tower_awake
         icon: mdi:server
         value_template: "{{ '{{' }} value_json.up {{ '}}' }}"
-        json_attributes: [up_for, quiet_for, blocked, pending, last_error]
+        # no json_attributes: a REST binary_sensor takes none, and Home
+        # Assistant refuses the WHOLE rest: block for it (2026.8, read live)
 # the knock: the doorman asks the watchman to raise the target. The bearer
 # names this house in the watchman's audit log; the secret `{{ w.token }}_bearer`
 # carries the whole header value ("Bearer …"), rendered from `{{ w.token }}`.

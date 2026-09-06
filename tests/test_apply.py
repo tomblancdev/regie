@@ -901,9 +901,8 @@ class FakeHA(HomeAssistant):
         if type_ == "homeassistant/expose_entity":
             assert payload["assistants"] == ["conversation"] and payload["entity_ids"]
             for eid in payload["entity_ids"]:
-                self.exposed.setdefault(eid, {})["conversation"] = {
-                    "should_expose": payload["should_expose"]
-                }
+                # the list's shape: a bool per assistant (HA 2026.8, read live)
+                self.exposed.setdefault(eid, {})["conversation"] = payload["should_expose"]
             return None
         if type_ == "assist_pipeline/pipeline/list":
             return {
@@ -2197,7 +2196,12 @@ def furnished_for_assist(ha):
     lights and looks the plan names exist, Home Assistant's own defaults
     exposed every bulb, the mesh's room group and the permit-join switch."""
     ha.entities.append(
-        {"entity_id": "conversation.porter", "platform": "regie", "unique_id": "regie_porter"}
+        # the row's platform is the component the entity was handed to (0.31.2)
+        {
+            "entity_id": "conversation.porter",
+            "platform": "conversation",
+            "unique_id": "regie_porter",
+        }
     )
     for eid in PLAN_LIGHTS:
         ha.entities.append({"entity_id": eid, "platform": "group", "unique_id": eid})
@@ -2208,11 +2212,11 @@ def furnished_for_assist(ha):
         "light.living_lights",
         "switch.zigbee2mqtt_bridge_permit_join",
     ):
-        ha.exposed[eid] = {"conversation": {"should_expose": True}}
+        ha.exposed[eid] = {"conversation": True}
 
 
 def seen(ha):
-    return {e for e, v in ha.exposed.items() if v["conversation"]["should_expose"]}
+    return {e for e, v in ha.exposed.items() if v["conversation"]}
 
 
 def details(steps):
