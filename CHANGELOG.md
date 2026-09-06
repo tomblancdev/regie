@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.31.3 — Un alias se lit dans le registre, pas dans sa liste (2026-09-06)
+
+`config/entity_registry/list` ne porte pas les alias (lu en direct, Home
+Assistant 2026.8.3) : le pas `assist rooms` de 0.31.2 relisait « aucun alias »
+à chaque convergence, réécrivait les 18 et aurait effacé ceux qu'une personne
+avait posés. L'alias se lit dans `config/entity_registry/get` (la ligne
+entière) ; le faux cerveau des tests liste sans alias, comme le vrai, et
+répond au `get`. Une convergence sans rien à faire dit maintenant
+`= assist rooms: 62 in their rooms`.
+
 ## 0.31.2 — Le portier existe, la tour se lit (2026-09-06)
 
 Trois défauts qu'un vrai cerveau seul pouvait montrer (Home Assistant

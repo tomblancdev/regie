@@ -806,7 +806,13 @@ class FakeHA(HomeAssistant):
                     return d
             raise AssertionError(payload)
         if type_ == "config/entity_registry/list":
-            return list(self.entities)
+            # the list is the compact row: no aliases (HA 2026.8, read live)
+            return [{k: v for k, v in e.items() if k != "aliases"} for e in self.entities]
+        if type_ == "config/entity_registry/get":
+            for e in self.entities:
+                if e["entity_id"] == payload["entity_id"]:
+                    return dict(e)
+            raise HouseError("config/entity_registry/get: not_found — Entity not found")
         if type_ == "config/entity_registry/remove":
             self.entities = [e for e in self.entities if e["entity_id"] != payload["entity_id"]]
             return None

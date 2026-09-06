@@ -1851,9 +1851,13 @@ class Conductor:
             area_id = self.area_ids.get(w["area"])
             if area_id and row.get("area_id") != area_id:
                 fields["area_id"] = area_id
-            have = list(row.get("aliases") or [])
-            if w["alias"] and w["alias"] not in have:
-                fields["aliases"] = sorted({*have, w["alias"]})
+            if w["alias"]:
+                # the list carries no aliases (HA 2026.8, read live): the row
+                # itself does — asked for, so a person's own aliases are kept
+                full = ws.call("config/entity_registry/get", entity_id=eid) or {}
+                have = list(full.get("aliases") or [])
+                if w["alias"] not in have:
+                    fields["aliases"] = sorted({*have, w["alias"]})
             if fields:
                 moves.append((eid, fields))
         name = "assist rooms"
