@@ -108,3 +108,27 @@
   ansible.builtin.debug:
     msg: "{{ regie_apply_run.stdout_lines }}"
   when: regie_apply | bool
+
+# the doctor (0.30): the brain's health after the converge, one line per
+# check, read and never written — the units and the images they run, the
+# brain's version against the pin, `up` with nothing left to do, the config
+# as the brain reads it, the references, the repairs, the ghosts, the mesh,
+# the things, the log, the recorder. Red = the brain disagrees with the
+# files (exit 1): a strict fleet fails the play on it, after the report
+- name: brain — doctor (the brain's health, read after the converge)
+  ansible.builtin.command:
+    cmd: "{{ regie_bin }} doctor {{ regie_home_dir }}/home.yml {{ regie_root_arg }} {{ regie_units_arg }} --url {{ regie_url }}"
+  register: regie_doctor_run
+  changed_when: false
+  failed_when: false
+  when: regie_doctor | bool
+
+- name: brain — what the doctor read
+  ansible.builtin.debug:
+    msg: "{{ regie_doctor_run.stdout_lines + regie_doctor_run.stderr_lines }}"
+  when: regie_doctor | bool
+
+- name: brain — the doctor is red
+  ansible.builtin.fail:
+    msg: "{{ regie_doctor_run.stdout_lines | select('match', '^(  ! |doctor:)') | list }}"
+  when: regie_doctor | bool and regie_doctor_strict | bool and regie_doctor_run.rc != 0

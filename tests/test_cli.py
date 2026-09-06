@@ -55,7 +55,7 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
 
 
 def test_declared_verbs_say_which_release(witness_path, capsys):
-    assert main(["doctor", str(witness_path)]) == 2
+    assert main(["backup", str(witness_path)]) == 2
     assert "lands in 0.8" in capsys.readouterr().err
 
 

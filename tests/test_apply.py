@@ -93,6 +93,36 @@ class FakeHA(HomeAssistant):
         self.commissionable: dict[str, dict] = {}  # a pairing code -> the node it makes
         self.commissioned: list[str] = []
         self.states: dict[str, str] = {}  # the helpers' states (the knobs): unknown until set
+        self.attributes: dict[str, dict] = {}  # a state's attributes, when a test gives some
+        self.version = "2026.8.3"  # what /api/config says
+        self.config_result = "valid"  # what check_config says
+        self.issues: list[dict] = []  # the repairs the brain opened
+        self.syslog: list[dict] = []  # system_log/list
+        self.services: dict[str, list[str]] = {
+            "light": ["turn_on", "turn_off", "toggle"],
+            "script": ["turn_on", "turn_off", "toggle", "reload"],
+            "input_select": ["select_option", "set_options", "reload"],
+            "input_boolean": ["turn_on", "turn_off", "toggle", "reload"],
+            "input_number": ["set_value", "increment", "decrement", "reload"],
+            "input_text": ["set_value", "reload"],
+            "input_datetime": ["set_datetime", "reload"],
+            "input_button": ["press", "reload"],
+            "media_player": ["turn_on", "turn_off", "volume_up", "volume_down", "media_play_pause"],
+            "automation": ["trigger", "turn_on", "turn_off", "reload"],
+            "scene": ["turn_on", "reload", "apply"],
+            "group": ["reload", "set"],
+            "template": ["reload"],
+            "homeassistant": ["reload_core_config", "restart"],
+            "frontend": ["reload_themes", "set_theme"],
+            "counter": ["increment", "reset", "reload"],
+            "timer": ["start", "cancel", "reload"],
+            "notify": ["send_message"],
+            "tts": ["speak"],
+            "switch": ["turn_on", "turn_off", "toggle"],
+            "select": ["select_option"],
+            "number": ["set_value"],
+            "button": ["press"],
+        }
         self.log: list[str] = []
         default = {"server_port": 8123, "use_x_forwarded_for": False, "trusted_proxies": []}
         self.http = {
@@ -428,6 +458,17 @@ class FakeHA(HomeAssistant):
             return 401, {"message": "Unauthorized"}
         if path == "/api/":
             return 200, {"message": "API running."}
+        if path == "/api/config":
+            return 200, {"version": self.version, "state": "RUNNING", "config_dir": "/config"}
+        if path == "/api/services":
+            return 200, [
+                {"domain": d, "services": dict.fromkeys(s)} for d, s in self.services.items()
+            ]
+        if path == "/api/states":
+            return 200, [
+                {"entity_id": e, "state": s, "attributes": self.attributes.get(e, {})}
+                for e, s in self.states.items()
+            ]
         if path.startswith("/api/states/"):
             entity = path.rsplit("/", 1)[1]
             if entity in self.states:
@@ -489,6 +530,8 @@ class FakeHA(HomeAssistant):
                 return 403, {"message": "already done"}
             self.onboarded[step] = True
             return 200, {} if step != "integration" else {"auth_code": "x"}
+        if path == "/api/config/core/check_config":
+            return 200, {"result": self.config_result, "errors": None, "warnings": None}
         if path == "/api/services/frontend/set_theme":
             self.default_theme = body["name"]
             self.default_dark_theme = body.get("name_dark")
@@ -590,7 +633,11 @@ class FakeHA(HomeAssistant):
                     a.update({k: v for k, v in payload.items() if k != "area_id"})
                     return a
         if type_ == "get_config":
-            return {"state": "RUNNING", "version": "2026.8.3"}
+            return {"state": "RUNNING", "version": self.version}
+        if type_ == "repairs/list_issues":
+            return {"issues": list(self.issues)}
+        if type_ == "system_log/list":
+            return list(self.syslog)
         if type_ == "http/config":
             h = self.http
             return {

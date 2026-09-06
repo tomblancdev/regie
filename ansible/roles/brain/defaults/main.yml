@@ -24,4 +24,10 @@ regie_url: "http://127.0.0.1:8123"
 regie_apply: true
 # seconds `up` waits for a (re)started service to answer
 regie_up_timeout: 300
+# the doctor after the converge (0.30): the brain's health, one line per
+# check, printed; strict = a red line (the brain disagrees with the files)
+# fails the play, after the report. A fleet living with a known red for a
+# landing or two sets strict false and reads the lines
+regie_doctor: true
+regie_doctor_strict: true
 regie_bin: /usr/local/bin/regie

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.30.0 — le docteur : le cerveau relu après chaque convergence (2026-09-06)
+
+L'audit du cerveau, quatrième pas (V6). Une convergence disait `changed=0` et
+ne disait pas si le cerveau était d'accord avec les fichiers : deux
+réparations ouvertes depuis le 4 septembre (une main du Passage appelle
+`script.bedroom_day` et `script.bedroom_night`, que rien ne rend) et
+trente-quatre aides de l'ancienne palette (`atelier`, `perso1..3`) que le
+registre garde en `unavailable · restored` n'ont été vues qu'à l'audit, à la
+main. **`regie doctor home.yml`** lit la santé du cerveau après la
+convergence, une ligne par vérification, sans rien écrire : chaque unité
+active (depuis quand) et le conteneur sur l'image que son unité nomme ; la
+version du cerveau contre l'épingle (celle du profil, testée — une épingle
+propre à la maison est dite) ; `up` sans rien à faire (ce qui tourne est ce
+qui a été rendu) ; la configuration valide telle que le cerveau la lit
+(`check_config`) ; chaque entité que les paquets et les tableaux de bord
+nomment présente dans le cerveau (un `domaine.objet` dans une valeur ou une
+clé, sauf un service du domaine ou le préfixe d'un gabarit) ; aucune
+réparation ouverte ; aucun fantôme (une entité que le registre garde et que
+rien ne fournit plus, `restored`) ; le maillage sur le courtier et sa fenêtre
+d'appairage fermée. À côté du verdict, ce qui vaut d'être su et n'est la
+faute de personne, en note : les objets qui ne répondent pas ou que le
+cerveau n'a pas, le journal depuis le démarrage (les erreurs les plus
+fréquentes), l'enregistreur (la taille du fichier, la session ouverte, si la
+dernière session fermée l'a été proprement ou par un kill — `closed_incorrect`
+—, combien l'ont été sur la vie du fichier). Une ligne rouge est un
+désaccord entre le cerveau et les fichiers : le verbe sort en 1. Une sonde
+qui ne peut pas lire le dit (`not read`) et est rouge : l'inconnu n'est pas
+vert. Le rôle `brain` de la collection lance le docteur après `apply`
+(`regie_doctor`), imprime ses lignes, et en mode strict (`regie_doctor_strict`,
+vrai par défaut) fait échouer le jeu sur du rouge, après le rapport — une
+flotte qui vit avec un rouge connu le temps d'un atterrissage le met à faux et
+lit les lignes.
+
 ## 0.29.0 — une release en une commande, le moteur depuis une copie de travail (2026-09-06)
 
 L'audit du cerveau, troisième pas (V3). Une release était onze gestes à la

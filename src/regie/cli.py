@@ -24,10 +24,6 @@ WITNESS = Path(__file__).parents[2] / "examples" / "maison-temoin" / "home.yml"
 NOT_YET = {
     "backup": ("Home Assistant's own backup, now, through its API", "0.8"),
     "restore": ("Home Assistant's own backup file, restored through its API", "0.8"),
-    "doctor": (
-        "the brain's health: the units, the pins against the tested ones, what drifted",
-        "0.8",
-    ),
     "suggest": (
         "the mesh's opinion on rooms, from link quality — suggests, never assigns",
         "0.8 — it reads a walked mesh, so it follows the walk",
@@ -230,6 +226,23 @@ def cmd_up(args) -> int:
     for n in result.notes:
         print(f"  ! {n}")
     return 0
+
+
+def cmd_doctor(args) -> int:
+    """The brain's health after a converge (0.30): one line per check, read
+    never written; exit 1 when a line is red — the brain disagrees with the
+    files. Queries only, so a tool this host lacks is said, not a fault."""
+    from .doctor import doctor
+    from .host import Runner
+
+    house = load_house(args.home)
+    root = Path(args.root) if args.root else Path(house.root())
+    units_dir = Path(args.units_dir) if args.units_dir else Path(house.units_dir())
+    report = doctor(house, root, units_dir, Runner(check=True), url=args.url)
+    for line in report.text():
+        print(line)
+    print(report.summary())
+    return report.exit_code()
 
 
 def cmd_apply(args) -> int:
@@ -686,6 +699,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
     s.add_argument("--check", action="store_true", help="print the plan, change nothing")
     s.set_defaults(func=cmd_apply)
+
+    s = sub.add_parser(
+        "doctor",
+        help="the brain's health after a converge (0.30): the units and their images, the "
+        "brain's version against the pin, up with nothing to do, the config as the brain "
+        "reads it, the references, the repairs, the ghosts, the mesh, the things, the log, "
+        "the recorder — one line each, red = the brain disagrees with the files (exit 1)",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("--root", type=Path, help="the brain's root (default: the house's)")
+    s.add_argument("--units-dir", type=Path, help="where the units are (default: the profile's)")
+    s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
+    s.set_defaults(func=cmd_doctor)
 
     s = sub.add_parser(
         "link",
