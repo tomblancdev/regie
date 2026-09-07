@@ -210,6 +210,12 @@ ui:
   sensors: Capteurs
   look_now: Ambiance en cours
   look_before: "Ambiance d'avant"
+  # « Garder » (0.36): a look tuned in Home Assistant's own panel, kept
+  keep: "Garder l'ambiance"
+  keep_now: "Garder l'ambiance en cours"
+  keep_note: >-
+    « Garder » enregistre le réglage actuel des lumières dans l'ambiance en
+    cours de la pièce ; la maison le rapatrie dans ses fichiers.
 
   # the things that pick a look (0.18)
   when_switch: "choisit l'ambiance"

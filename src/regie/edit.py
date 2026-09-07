@@ -22,6 +22,13 @@ from .errors import HouseError
 _KEY = re.compile(r"^(?P<indent>[ \t]*)(?P<key>[^\s#'\"\[{][^:#]*?):(?P<rest>$|\s.*$)")
 
 
+class Word(str):
+    """A word the house files spell BARE even though YAML would read it as
+    something else — a look's `on` / `off` (`{ main: on, lamp: off }`), which
+    the loader reads as a boolean and the grammar takes as the same word.
+    `flow` quotes any other such string; a Word goes down as it is."""
+
+
 def flow(v) -> str:
     """A value in YAML's flow style, the way the house writes its leaves."""
     if v is None:
@@ -29,6 +36,8 @@ def flow(v) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, Word):
         return str(v)
     if isinstance(v, str):
         special = any(c in v for c in ":#{}[],&*?|<>=!%@`'\"")
@@ -184,13 +193,29 @@ def _nest(path: list[str], value):
 
 
 # --- the block walk ----------------------------------------------------------------------
-def _set(lines: list[str], start: int, end: int, indent: int, path: list[str], value) -> None:
+def _set(
+    lines: list[str],
+    start: int,
+    end: int,
+    indent: int,
+    path: list[str],
+    value,
+    before: str | None = None,
+) -> None:
     key, rest = path[0], path[1:]
     i = _find(lines, start, end, indent, key)
     if i is None:
         if value is None:
             return
         at = _last_real(lines, start, end)
+        if before is not None and not rest:
+            # a new leaf placed BEFORE a sibling (the order of a room's looks is
+            # the page's row): above the sibling and the notes written over it
+            j = _find(lines, start, end, indent, before)
+            if j is not None:
+                at = j
+                while at > start and lines[at - 1].strip().startswith("#"):
+                    at -= 1
         lines[at:at] = _block_lines(indent, path, value)
         return
     m = _KEY.match(lines[i])
@@ -206,7 +231,7 @@ def _set(lines: list[str], start: int, end: int, indent: int, path: list[str], v
         if stripped:
             raise HouseError(f"{key}: holds a scalar ({stripped}), not a mapping")
         stop = _block_end(lines, i, end, indent)
-        _set(lines, i + 1, stop, _child_indent(lines, i + 1, stop, indent), rest, value)
+        _set(lines, i + 1, stop, _child_indent(lines, i + 1, stop, indent), rest, value, before)
         return
     stop = _block_end(lines, i, end, indent)
     if value is None:
@@ -224,13 +249,14 @@ def _set(lines: list[str], start: int, end: int, indent: int, path: list[str], v
     lines[i] = f"{head}{lead}{flow(value)}{comment}"
 
 
-def set_leaf(text: str, path: list[str], value) -> str:
+def set_leaf(text: str, path: list[str], value, before: str | None = None) -> str:
     """The text with the value at `path` replaced (None: removed; a key on the
-    way that the file lacks: created in the file's own form)."""
+    way that the file lacks: created in the file's own form). A leaf the file
+    lacks lands at its parent's end, or above the sibling `before` names."""
     if not path:
         raise HouseError("an empty path")
     lines = text.split("\n")
-    _set(lines, 0, len(lines), 0, list(path), value)
+    _set(lines, 0, len(lines), 0, list(path), value, before)
     return "\n".join(lines)
 
 

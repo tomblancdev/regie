@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.36.0 — « Garder » : une ambiance réglée sur le téléphone, rapatriée (2026-09-07)
+
+L'audit du cerveau, la suite de V5 (H50, deuxième réponse) : la QUATRIÈME
+SORTE de la règle de ce que le téléphone possède (0.33). Régler une ambiance
+se faisait au portable : un chiffre dans le fichier, une convergence, un
+aller-retour dans la pièce, et la pièce est pourtant le seul endroit où juger
+une lumière. **Un bouton par pièce, « Garder »** (`input_button.<pièce>_keep`,
+sur la page Réglages de la pièce, rendu par le pack `scenes` pour toute pièce
+qui rend une ambiance) : on prend une ambiance, on règle les ampoules dans le
+panneau lumière de Home Assistant lui-même (le dernier échelon est à l'outil,
+§1.12), on appuie. **Le bouton EST l'enregistrement** : son état est l'instant
+de l'appui, et le recorder garde déjà la luminosité et la couleur de chaque
+ampoule pendant ses jours — le chef d'orchestre lit, à cette seconde, les
+lumières de la pièce et l'ambiance qu'elle portait (`input_select.<pièce>_look`)
+dans l'historique (`look.py`, `states_at` : ce que le recorder n'a pas d'aussi
+vieux est lu tel quel quand ça n'a pas bougé depuis), et les PROJETTE sur la
+forme de l'ambiance (`pull.py`, `look_shape` · `project`) : un `on` s'accorde
+avec toute ampoule allumée, une luminosité à un point près garde le chiffre
+du fichier, une température dans le mot de la maison garde le mot, une clé que
+l'ambiance ne nomme pas est laissée tranquille, une transition tient. Les
+trois lectures et les mêmes mots : les FICHIERS = l'ambiance résolue de la
+pièce, le TÉLÉPHONE = la projection, la MÉMOIRE (`.regie/looks.json`) =
+l'appui réglé et les ambiances des fichiers à la dernière convergence qui a
+réglé la pièce — rafraîchie à chaque convergence sans appui en attente, jamais
+pendant qu'un attend (un fichier qui bouge entre-temps = une main). Une ligne
+par pièce quand quelque chose est gardé : `kept 09-07 09:12 UTC — edited on
+the phone (lamp brightness 10 → 20), kept — not yet pulled`, puis « follows
+the files » une fois ; rien sinon. **`regie pull home.yml looks`** écrit les
+rôles qui ont bougé dans le `scenes:` de la pièce elle-même (les ambiances de
+la maison ne sont jamais touchées — la pièce dit ce qui diffère, 0.35), tels
+que les ampoules les lisent, repliés par place (`look.py`, `fold_role`) ; une
+ambiance que la pièce n'écrivait pas est ajoutée LÀ OÙ L'ORDRE DE LA PAGE ET LA
+MARCHE DES FLÈCHES RESTENT (au-dessus de la première ambiance écrite qui la
+suit — `edit.py`, `set_leaf(before=)`) ; un `true` devient la ligne du rôle
+qui a bougé ; `on` / `off` s'écrivent nus (`edit.Word`). `regie push home.yml
+looks` règle un appui que les fichiers doivent gagner. Un appui pendant que la
+pièce portait `off`, une ambiance de la palette ou qui marche, ou un appui plus
+vieux que les jours du recorder, n'écrit rien et dit pourquoi, une fois. Le
+double de test apprend l'historique (`FakeHA.history`). Cinq tests neufs, le
+rendu du témoin : le bouton et sa ligne, rien d'autre.
+
 ## 0.35.0 — les ambiances de la maison, déclarées une fois (2026-09-06)
 
 L'audit du cerveau, la suite de V10 (H50, troisième réponse). Neuf fichiers de

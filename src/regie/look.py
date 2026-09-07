@@ -14,6 +14,7 @@ look may already use); anything else is said per place, in the layout's order.
 
 from __future__ import annotations
 
+from .errors import HouseError
 from .fx import KELVIN
 from .house import House
 
@@ -71,18 +72,17 @@ def fold_places(layout: list[str], per_place: dict) -> str | dict:
     return out
 
 
-def room_look(house: House, area: dict, read) -> tuple[dict, list[str]]:
-    """The room's lights as a look, by role. `read(entity)` returns Home
-    Assistant's state object (or None). Returns (look, notes) — a note per
-    light left out and why."""
-    look: dict = {}
+def room_places(house: House, area: dict, read) -> tuple[dict[str, dict], list[str]]:
+    """Every light of every filled role, read one by one: role → place (the
+    `at:` word, else the thing's id) → what the grammar says. `read(entity)`
+    returns Home Assistant's state object (or None). A light that cannot be
+    read is left out, with a note."""
+    per_role: dict[str, dict] = {}
     notes: list[str] = []
-    roles = area.get("roles") or {}
     for role, things in house.roles_in(area["id"]).items():
         lights = [t for t in things if t["kind"] == "light"]
         if not lights:
             continue
-        layout = list((roles.get(role) or {}).get("layout") or [])
         per: dict = {}
         for t in lights:
             entity = house.entity(t)
@@ -93,21 +93,70 @@ def room_look(house: House, area: dict, read) -> tuple[dict, list[str]]:
                 notes.append(f"{role}/{key}: {(st or {}).get('state') or 'not read'} — left out")
                 continue
             per[key] = v
-        if not per:
+        if per:
+            per_role[role] = per
+    return per_role, notes
+
+
+def fold_role(area: dict, role: str, per: dict, notes: list[str]):
+    """One role's per-place readings folded onto the words a look may use:
+    by the layout when the role has one; a single value when every light
+    agrees; else the first one, said."""
+    layout = list(((area.get("roles") or {}).get(role) or {}).get("layout") or [])
+    if layout:
+        return fold_places(layout, per)
+    values = list(per.values())
+    if not all(v == values[0] for v in values):
+        notes.append(
+            f"{role}: {len(values)} lights disagree and the role has no layout — "
+            "the first one is written"
+        )
+    return values[0]
+
+
+def room_look(house: House, area: dict, read) -> tuple[dict, list[str]]:
+    """The room's lights as a look, by role. `read(entity)` returns Home
+    Assistant's state object (or None). Returns (look, notes) — a note per
+    light left out and why."""
+    per_role, notes = room_places(house, area, read)
+    return {role: fold_role(area, role, per, notes) for role, per in per_role.items()}, notes
+
+
+# --- the lights at an instant (0.36, the audit's V5) --------------------------------
+def states_at(ha, entities: list[str], at: str) -> dict[str, dict]:
+    """What the recorder holds for these entities at the instant `at` (an ISO
+    timestamp, the state of an input_button — the moment « Garder » was
+    pressed): entity → the state object standing at that second, with its
+    attributes. An entity the recorder has nothing that old for is absent;
+    one whose state has not changed since is read as it stands now (the
+    recorder keeps its days, the brain keeps the present)."""
+    import datetime as dt
+    import urllib.parse
+
+    if not entities:
+        return {}
+    start = dt.datetime.fromisoformat(at)
+    end = start + dt.timedelta(seconds=1)
+    query = urllib.parse.urlencode(
+        {"filter_entity_id": ",".join(entities), "end_time": end.isoformat()}
+    )
+    status, data = ha.get(f"/api/history/period/{urllib.parse.quote(start.isoformat())}?{query}")
+    if status != 200:
+        raise HouseError(f"history at {at}: {status} {data}")
+    out: dict[str, dict] = {}
+    for series in data or []:
+        if series and isinstance(series[0], dict) and series[0].get("entity_id"):
+            out[series[0]["entity_id"]] = series[0]
+    for entity in entities:
+        if entity in out:
             continue
-        if layout:
-            look[role] = fold_places(layout, per)
-        else:
-            values = list(per.values())
-            if all(v == values[0] for v in values):
-                look[role] = values[0]
-            else:
-                look[role] = values[0]
-                notes.append(
-                    f"{role}: {len(values)} lights disagree and the role has no layout — "
-                    "the first one is written"
-                )
-    return look, notes
+        status, now = ha.get(f"/api/states/{entity}")
+        if status != 200 or not isinstance(now, dict) or not now.get("last_changed"):
+            continue
+        changed = dt.datetime.fromisoformat(now["last_changed"])
+        if changed <= start:
+            out[entity] = now
+    return out
 
 
 def _scalar(v) -> str:

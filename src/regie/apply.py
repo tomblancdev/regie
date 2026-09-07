@@ -570,6 +570,27 @@ class Conductor:
         if not self.check and marks:
             pull.write_marks(self.root, marks)
 
+    def looks(self) -> None:
+        """A look kept on the phone (pull.py, 0.36 — the audit's V5): a room's
+        « Garder » pressed is the moment; the room's bulbs and the look it wore
+        at that second, read from the recorder, are projected onto the look's
+        shape and named under the rule — kept until `regie pull home.yml
+        looks` writes the roles that moved into the room's own file, settled
+        when the files agree. The memory (<root>/.regie/looks.json) holds, per
+        room, the keep settled and the files' looks at that converge — never
+        refreshed while a keep waits, so a file that moves meanwhile is a hand."""
+        from . import pull
+
+        memory = pull.read_marks(self.root, pull.LOOKS)
+        kept, notes = pull.read_looks(self.house, self.ha, memory)
+        for n in notes:
+            self.step(n["name"], n["state"], n["detail"])
+        for o in kept:
+            state, detail = pull.settle(o, self.check)
+            self.step(o.name, state, detail)
+        if not self.check and memory:
+            pull.write_marks(self.root, memory, pull.LOOKS)
+
     # --- what the brain knows about an integration ----------------------------------
     def oauth_domains(self, ws) -> set[str]:
         """The domains born from a consent: the ones that take application
@@ -2108,6 +2129,7 @@ class Conductor:
             self.registries(ws)
             self.backup(ws)
         self.knobs()
+        self.looks()
         self.palette_slots()
         self.mqtt()
         self.matter()

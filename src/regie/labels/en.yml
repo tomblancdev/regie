@@ -203,6 +203,12 @@ ui:
   sensors: Sensors
   look_now: Current look
   look_before: Look before
+  # « Keep » (0.36): a look tuned in Home Assistant's own panel, kept
+  keep: Keep the look
+  keep_now: Keep the current look
+  keep_note: >-
+    « Keep » writes what the lights are doing now into the room's current
+    look; the house brings it home into its files.
 
   # the things that pick a look (0.18)
   when_switch: "picks the look"

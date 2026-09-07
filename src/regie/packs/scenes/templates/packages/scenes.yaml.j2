@@ -65,6 +65,15 @@ input_select:
 
 {% endif %}
 {% if plans %}
+# « Garder » (0.36, the audit's V5): tune the bulbs in Home Assistant's own
+# panel, press — the button's state is the moment. The conductor reads the
+# room's bulbs and the look it wore at that second from the recorder and
+# names what moved; `regie pull home.yml looks` writes it into the room's file.
+input_button:
+  {{ area.id }}_keep:
+    name: {{ (area.label ~ ' — ' ~ labels.ui.keep) | to_yaml }}
+    icon: mdi:content-save-outline
+
 {% if drifting %}
 # the kill-switch (H36): a look that MOVES is a look you can stop. Visible on
 # the settings view, and the loop below runs only while it is on.

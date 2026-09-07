@@ -24,8 +24,26 @@ store's seed is definitional — the conductor only ever frees one).
 (every other byte kept — edit.py), `regie push home.yml [kind …]` writes the
 files' word onto the phone, the hand's override. A KIND says how to read
 the three, how to describe the way between two readings, how to write the
-phone and how to write the files; the fourth kind (V5, a look tuned in the
-light panel and kept) will say the same four things.
+phone and how to write the files.
+
+THE FOURTH KIND (0.36, the audit's V5): a LOOK KEPT ON THE PHONE. A room has
+one button, « Garder » (input_button.<room>_keep): tune the bulbs in Home
+Assistant's own light panel, press it. The button IS the record — its state
+is the moment it was pressed, and the recorder holds every bulb's brightness
+and colour for its days — so the conductor reads the room's lights and the
+look the room wore (input_select.<room>_look) AT THAT SECOND, projects them
+onto the look's own shape (an `on` agrees with any lit bulb, a brightness
+within a point agrees, a colour temperature within the house's word agrees,
+a key the look does not name is left alone) and speaks the same words: the
+FILES are the room's resolved look, the PHONE the projection, the SEED the
+files' look at the last converge that settled the room (`.regie/looks.json`
+— refreshed at every converge with no keep pending, never while one waits).
+`regie pull home.yml looks` writes the roles that moved into the room's own
+`scenes:` (the house's looks are never touched — the room says what differs,
+0.35), a look the room did not write landing where the page's order stays;
+`regie push home.yml looks` settles a keep the files should win over. A keep
+while the room wore `off`, a palette look or a moving look, or one older
+than the recorder's days, writes nothing and says why.
 
 A knob the file only gives a BIRTH word to — a switch born on, the mode the
 house is born in, the palette's select, « Repeint les pièces » — is the
@@ -41,13 +59,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import palette as palette_mod
-from .edit import set_leaf
+from .edit import Word, flow, set_leaf
 from .errors import HouseError
 from .host import STATE
+from .house import LOOK_KEYS, SCENE_KEYS
 
-KINDS = ("knobs", "plan", "palettes")
+KINDS = ("knobs", "plan", "palettes", "looks")
 NO_MEMORY = object()  # the conductor has no memory of a seed
 MARKS = "knobs.json"
+LOOKS = "looks.json"  # the looks' memory: per room, the keep settled and the files' looks then
 
 
 # --- the rule -------------------------------------------------------------------------
@@ -138,15 +158,15 @@ def settle(o: Owned, check: bool) -> tuple[str, str]:
 
 
 # --- the knobs: a helper the file declares a value for -------------------------------------
-def read_marks(root: Path) -> dict:
-    p = Path(root) / STATE / MARKS
+def read_marks(root: Path, name: str = MARKS) -> dict:
+    p = Path(root) / STATE / name
     if p.is_file():
         return json.loads(p.read_text(encoding="utf-8"))
     return {}
 
 
-def write_marks(root: Path, marks: dict) -> None:
-    p = Path(root) / STATE / MARKS
+def write_marks(root: Path, marks: dict, name: str = MARKS) -> None:
+    p = Path(root) / STATE / name
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(marks, indent=2) + "\n", encoding="utf-8")
 
@@ -380,6 +400,386 @@ def read_stores(house, ha) -> list[Owned]:
     return out
 
 
+# --- the looks: a look kept on the phone (0.36, the audit's V5) -----------------------------
+KEEP_TOLERANCE = 1  # brightness points a bulb may quantise away and still agree
+COLOUR_TOLERANCE = 3  # per channel: a bulb's gamut rounds a colour
+
+
+def keep_button(area_id: str) -> str:
+    return f"input_button.{area_id}_keep"
+
+
+def _place(thing: dict) -> str:
+    return thing.get("at") or thing["id"]
+
+
+def _word(value):
+    """A look's value for one light as the grammar's word: `on`, `off`, or
+    the mapping of its own keys (a place key is not a look key)."""
+    if value is True or value == "on":
+        return "on"
+    if value is False or value == "off":
+        return "off"
+    if isinstance(value, dict):
+        own = {k: value[k] for k in value if k in LOOK_KEYS}
+        return own or "on"
+    return "on"
+
+
+def look_shape(house, area: dict, look_id: str) -> dict[str, dict]:
+    """The files' look, light by light: role → place (the `at:` word, else
+    the thing's id) → the grammar's word, for every LIGHT the look reaches.
+    A role the look does not name is not in it; a place a look names
+    nothing for (no base) neither — the look leaves it alone."""
+    raw = (area.get("scenes") or {}).get(look_id) or {}
+    if not isinstance(raw, dict):
+        return {}
+    filled = house.roles_in(area["id"])
+    out: dict[str, dict] = {}
+    for role, value in raw.items():
+        if role in SCENE_KEYS:
+            continue
+        lights = [t for t in filled.get(role, []) if t["kind"] == "light"]
+        if not lights:
+            continue
+        places = house.places_of(area, role)
+        per: dict = {}
+        if isinstance(value, dict) and any(k in places for k in value):
+            base = {k: v for k, v in value.items() if k in LOOK_KEYS}
+            named = {k: v for k, v in value.items() if k in places}
+            for t in lights:
+                key = _place(t)
+                v = named.get(key)
+                if v is None:
+                    for prefix, pv in named.items():
+                        spec = places.get(prefix) or {}
+                        if not spec.get("group"):
+                            continue
+                        covered = spec.get("places") or [x.get("at") for x in spec["things"]]
+                        if key in covered:
+                            v = pv
+                            break
+                if v is None:
+                    if not base:
+                        continue
+                    v = base
+                per[key] = _word(v)
+        else:
+            for t in lights:
+                per[_place(t)] = _word(value)
+        if per:
+            out[role] = per
+    return out
+
+
+def _kelvin_of(ct, kelvin: dict) -> int | None:
+    if isinstance(ct, str):
+        return kelvin.get(ct)
+    return int(ct)
+
+
+def _same_ct(a, b, kelvin: dict) -> bool:
+    from .look import CT_TOLERANCE
+
+    if a == b:
+        return True
+    ka, kb = _kelvin_of(a, kelvin), _kelvin_of(b, kelvin)
+    return ka is not None and kb is not None and abs(ka - kb) <= CT_TOLERANCE
+
+
+def _same_colour(a, b) -> bool:
+    if a == b:
+        return True
+    try:
+        ca = [int(a[i : i + 2], 16) for i in (1, 3, 5)]
+        cb = [int(b[i : i + 2], 16) for i in (1, 3, 5)]
+    except (TypeError, ValueError):
+        return False
+    return all(abs(x - y) <= COLOUR_TOLERANCE for x, y in zip(ca, cb, strict=True))
+
+
+def _project_one(f, r, kelvin: dict):
+    """One light: the file's word `f` against the bulb's reading `r`, as the
+    file would say it when they agree and as the bulb says it when they do
+    not. Not read: the file's word stands (no word against it)."""
+    if r is None:
+        return f
+    lit = r != "off"
+    if f == "off":
+        return "off" if not lit else r
+    if f == "on":
+        return "on" if lit else "off"
+    if not lit:
+        return "off"
+    if r == "on":
+        return f
+    out: dict = {}
+    for k, fv in f.items():
+        if k == "brightness":
+            rv = r.get("brightness")
+            out[k] = fv if rv is None or abs(int(rv) - int(fv)) <= KEEP_TOLERANCE else rv
+        elif k not in ("ct", "color"):
+            out[k] = fv  # a transition: the bulb cannot say it, the file's stands
+    f_key = "ct" if "ct" in f else "color" if "color" in f else None
+    r_key = "ct" if "ct" in r else "color" if "color" in r else None
+    if f_key and r_key is None:
+        out[f_key] = f[f_key]
+    elif f_key == r_key == "ct":
+        out["ct"] = f["ct"] if _same_ct(f["ct"], r["ct"], kelvin) else r["ct"]
+    elif f_key == r_key == "color":
+        out["color"] = f["color"] if _same_colour(f["color"], r["color"]) else r["color"]
+    elif f_key and r_key:
+        out[r_key] = r[r_key]  # the bulb went from white to colour, or back
+    ordered = {k: out[k] for k in f if k in out}
+    ordered.update({k: v for k, v in out.items() if k not in ordered})
+    return ordered
+
+
+def project(shape: dict, reading: dict, kelvin: dict) -> dict:
+    """The phone's reading onto the files' shape: the same roles and places,
+    the file's words where the bulbs agree, the bulbs' where they moved."""
+    out: dict = {}
+    for role, places in shape.items():
+        got = reading.get(role) or {}
+        out[role] = {p: _project_one(f, got.get(p), kelvin) for p, f in places.items()}
+    return out
+
+
+def _say(v) -> str:
+    if v is None:
+        return "—"
+    if isinstance(v, dict):
+        return flow(_bare(v))
+    return str(v)
+
+
+def _pair(a, b) -> str:
+    """The way from one light's word to another's: the keys that moved when
+    both are mappings, the two words otherwise."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        keys = [k for k in dict.fromkeys([*a, *b]) if a.get(k) != b.get(k)]
+        return " ".join(f"{k} {_say(a.get(k))} → {_say(b.get(k))}" for k in keys)
+    return f"{_say(a)} → {_say(b)}"
+
+
+def describe_look(a: dict | None, b: dict | None) -> str:
+    """The way from one shape to another in a few words: a role when all of
+    its places moved the same way, a place otherwise."""
+    a, b = a or {}, b or {}
+    moved: list[str] = []
+    for role in dict.fromkeys([*a, *b]):
+        pa, pb = a.get(role) or {}, b.get(role) or {}
+        places = [p for p in dict.fromkeys([*pa, *pb]) if pa.get(p) != pb.get(p)]
+        if not places:
+            continue
+        one_from = len({json.dumps(pa.get(p), sort_keys=True) for p in places}) == 1
+        one_to = len({json.dumps(pb.get(p), sort_keys=True) for p in places}) == 1
+        if one_from and one_to and len(places) == len(pa) == len(pb):
+            moved.append(f"{role} {_pair(pa[places[0]], pb[places[0]])}")
+        else:
+            moved += [f"{role}.{p} {_pair(pa.get(p), pb.get(p))}" for p in places]
+    return ", ".join(moved[:4]) + (f", +{len(moved) - 4}" if len(moved) > 4 else "")
+
+
+def _bare(v):
+    """`on` / `off` spelled bare in the file, the way a look reads."""
+    if v in ("on", "off"):
+        return Word(v)
+    if isinstance(v, dict):
+        return {k: _bare(x) for k, x in v.items()}
+    return v
+
+
+def _dynamic(house, area: dict, plan: dict) -> bool:
+    """A look whose bulbs are not a person's to keep: the palette paints
+    them, a drift or life moves them, or the file says so."""
+    return bool(
+        house.scene_palette(area, plan) or house.moving(area, plan) or "dynamic" in plan["tags"]
+    )
+
+
+def _when(pressed: str) -> str:
+    import datetime as dt
+
+    try:
+        return dt.datetime.fromisoformat(pressed).strftime("%m-%d %H:%M") + " UTC"
+    except ValueError:
+        return pressed
+
+
+def _newer(pressed: str, kept: str) -> bool:
+    import datetime as dt
+
+    if not kept:
+        return True
+    try:
+        return dt.datetime.fromisoformat(pressed) > dt.datetime.fromisoformat(kept)
+    except ValueError:
+        return pressed != kept
+
+
+def read_looks(house, ha, memory: dict) -> tuple[list[Owned], list[dict]]:
+    """Every room's button read: a keep newer than the memory is the room's
+    bulbs and its look at that second, projected — a thing under the rule;
+    a keep that can name nothing (the room wore `off`, a palette look, the
+    recorder holds nothing that old) is a line of its own, settled at once.
+    A room with nothing new refreshes the memory of the files' looks."""
+    from .look import room_places, states_at
+
+    owned: list[Owned] = []
+    notes: list[dict] = []
+    for a in house.areas:
+        if house.parking(a):
+            continue
+        plans = {p["id"]: p for p in house.scene_plan(a) if p["renders"]}
+        if not plans:
+            continue
+        button = keep_button(a["id"])
+        status, st = ha.get(f"/api/states/{button}")
+        if status == 404:
+            continue  # a brain before the button
+        if status != 200:
+            raise HouseError(f"{button}: {status} {st}")
+        pressed = st.get("state") or ""
+        if pressed in ("unknown", "unavailable"):
+            pressed = ""
+        mem = memory.get(a["id"]) or {}
+        static = {
+            lid: look_shape(house, a, lid)
+            for lid, p in plans.items()
+            if lid != "off" and not _dynamic(house, a, p)
+        }
+
+        def refresh(_value=None, area_id=a["id"], pressed=pressed, static=static):
+            memory[area_id] = {"kept": pressed, "looks": static}
+
+        if not pressed or not _newer(pressed, mem.get("kept", "")):
+            refresh()
+            continue
+        head = f"kept {_when(pressed)}"
+        name = f"look {a['id']}"
+        select = f"input_select.{a['id']}_look"
+        lights = [
+            e
+            for things in house.roles_in(a["id"]).values()
+            for t in things
+            if t["kind"] == "light" and (e := house.entity(t))
+        ]
+        at = states_at(ha, [select, *lights], pressed)
+        if not at:
+            notes.append(
+                {
+                    "name": name,
+                    "state": "ok",
+                    "detail": f"{head} — the recorder holds nothing that old any more: "
+                    "nothing to write (keep again)",
+                }
+            )
+            refresh()
+            continue
+        wore = (at.get(select) or {}).get("state") or ""
+        if wore in ("", "off", "unknown", "unavailable"):
+            notes.append(
+                {
+                    "name": name,
+                    "state": "ok",
+                    "detail": f"{head} while the room wore {wore or 'no look'} — nothing to "
+                    "write (take a look, tune the bulbs, keep)",
+                }
+            )
+            refresh()
+            continue
+        plan = plans.get(wore)
+        if plan is None or wore not in static:
+            why = (
+                f"« {plan['label']} », a look whose bulbs are the palette's or a walk's"
+                if plan
+                else f"« {wore} », a look the room renders no more"
+            )
+            notes.append(
+                {
+                    "name": f"{name}/{wore}",
+                    "state": "ok",
+                    "detail": f"{head} while the room wore {why} — nothing to write",
+                }
+            )
+            refresh()
+            continue
+        files = static[wore]
+        reading, _read_notes = room_places(house, a, lambda e, at=at: at.get(e))
+        phone = project(files, reading, house.kelvin())
+        seed = (mem.get("looks") or {}).get(wore, NO_MEMORY)
+        moved = {role: phone[role] for role in files if phone[role] != files[role]}
+        owned.append(
+            Owned(
+                kind="looks",
+                name=f"{name}/{wore}",
+                files=files,
+                phone=phone,
+                seed=seed,
+                describe=describe_look,
+                write=lambda _value: None,  # the script carries the file's look already
+                remember=refresh,
+                fresh="hand",
+                head=head,
+                stale=True,
+                leaf={"file": "rooms", "room": a["id"], "look": wore, "moved": moved},
+            )
+        )
+    return owned, notes
+
+
+def _folded(house, area: dict, role: str, per: dict):
+    from .look import fold_role
+
+    return fold_role(area, role, per, [])
+
+
+def pull_looks(house, owned: list[Owned], files: dict) -> list[str]:
+    """The kept looks into the rooms' own `scenes:` blocks: the roles that
+    moved, each as the bulbs read (folded by place), replacing the role's
+    line in a look the room writes, or a look the room takes as it is
+    (`true`); a look the room does not write is added where the page's
+    order stays — above the first look the room writes that follows it."""
+    import yaml
+
+    lines = []
+    for o in owned:
+        if o.kind != "looks" or o.decide() not in ("phone", "both", "hand"):
+            continue
+        leaf = o.leaf
+        path = files["rooms"].get(leaf["room"])
+        if path is None:
+            lines.append(f"  ! {o.name}: no room file to write (rooms/{leaf['room']}.yml)")
+            continue
+        area = house.area(leaf["room"])
+        look = leaf["look"]
+        moved = {
+            role: _bare(_folded(house, area, role, per)) for role, per in leaf["moved"].items()
+        }
+        was = {role: _folded(house, area, role, o.files[role]) for role in moved}
+        text = path.read_text(encoding="utf-8")
+        raw = (yaml.safe_load(text) or {}).get("scenes") or {}
+        if look not in raw:
+            order = list(area.get("scenes") or {})
+            after = order[order.index(look) + 1 :] if look in order else []
+            before = next((k for k in after if k in raw), None)
+            out = set_leaf(text, ["scenes", look], moved, before=before)
+        elif raw[look] is True:
+            out = set_leaf(text, ["scenes", look], moved)
+        else:
+            out = text
+            for role, value in moved.items():
+                out = set_leaf(out, ["scenes", look, role], value)
+        if out == text:
+            lines.append(f"  = {path.name}: scenes.{look} unchanged")
+            continue
+        path.write_text(out, encoding="utf-8")
+        for role, value in moved.items():
+            lines.append(f"  + {path.name}: scenes.{look}.{role} {_say(was[role])} → {_say(value)}")
+    return lines
+
+
 # --- the verbs -----------------------------------------------------------------------------
 def house_files(house, rooms_dir: Path | None = None, **over) -> dict:
     """Which file holds what: modes, fx, plan and the rooms by id."""
@@ -522,6 +922,12 @@ def pull(house, ha, root: Path, kinds: list[str], files: dict, link) -> list[str
         out += pull_palettes(house, ha, read_stores(house, ha), files) or [
             "  = nothing the phone moved"
         ]
+    if "looks" in kinds:
+        # the memory is read, never written here: the next converge settles a
+        # keep the files now agree with
+        kept, _ = read_looks(house, ha, read_marks(root, LOOKS))
+        out.append("looks:")
+        out += pull_looks(house, kept, files) or ["  = nothing kept on the phone"]
     written = sum(1 for line in out if line.startswith("  + "))
     out.append(f"pull: {written} leaf/file(s) written — review the diff, commit, converge")
     return out
@@ -564,4 +970,13 @@ def push(house, ha, root: Path, kinds: list[str], link) -> list[str]:
             if o.files is not None and o.phone != o.files:
                 o.write(None)
                 out.append(f"  + {o.name}: freed — the files' version stands")
+    if "looks" in kinds:
+        memory = read_marks(root, LOOKS)
+        kept, _ = read_looks(house, ha, memory)
+        out.append("looks:")
+        for o in kept:
+            if o.decide() != "agree":
+                o.remember(o.files)
+                out.append(f"  + {o.name}: settled — the files' version stands")
+        write_marks(root, memory, LOOKS)
     return out

@@ -96,6 +96,10 @@ class FakeHA(HomeAssistant):
         self.commissioned: list[str] = []
         self.states: dict[str, str] = {}  # the helpers' states (the knobs): unknown until set
         self.attributes: dict[str, dict] = {}  # a state's attributes, when a test gives some
+        self.changed: dict[str, str] = {}  # a state's last_changed, when a test gives one
+        # the recorder (0.36): entity -> the states it held, each with its
+        # last_changed — a history read at an instant answers the last one before it
+        self.history: dict[str, list[dict]] = {}
         self.version = "2026.8.3"  # what /api/config says
         self.config_result = "valid"  # what check_config says
         self.issues: list[dict] = []  # the repairs the brain opened
@@ -582,16 +586,39 @@ class FakeHA(HomeAssistant):
                 {"entity_id": e, "state": s, "attributes": self.attributes.get(e, {})}
                 for e, s in self.states.items()
             ]
+        if path.startswith("/api/history/period/"):
+            import datetime as dt
+            import urllib.parse
+
+            start_s, _, query = path[len("/api/history/period/") :].partition("?")
+            start = dt.datetime.fromisoformat(urllib.parse.unquote(start_s))
+            wanted = urllib.parse.parse_qs(query).get("filter_entity_id", [""])[0].split(",")
+            series = []
+            for e in wanted:
+                held = [
+                    h
+                    for h in self.history.get(e, [])
+                    if dt.datetime.fromisoformat(h["last_changed"]) <= start
+                ]
+                if held:
+                    series.append([{"entity_id": e, **held[-1]}])
+            return 200, series
         if path.startswith("/api/states/"):
             entity = path.rsplit("/", 1)[1]
             if entity in self.states:
-                return 200, {"entity_id": entity, "state": self.states[entity]}
+                out = {"entity_id": entity, "state": self.states[entity]}
+                if entity in self.attributes:
+                    out["attributes"] = self.attributes[entity]
+                if entity in self.changed:
+                    out["last_changed"] = self.changed[entity]
+                return 200, out
             if entity.split(".")[0] not in (
                 "input_datetime",
                 "input_select",
                 "input_boolean",
                 "input_number",
                 "input_text",
+                "input_button",
             ):
                 return 404, {"message": "Entity not found."}
             fresh = {
@@ -600,6 +627,7 @@ class FakeHA(HomeAssistant):
                 "input_boolean": "off",
                 "input_number": "0.0",  # a fresh number helper reads its minimum
                 "input_text": "",
+                "input_button": "unknown",  # never pressed
             }[entity.split(".")[0]]
             return 200, {"entity_id": entity, "state": self.states.get(entity, fresh)}
         if path.startswith("/api/config/config_entries/entry?domain="):

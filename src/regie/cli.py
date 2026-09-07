@@ -792,11 +792,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser(
         "pull",
         help="what the phone owns, into the house files (0.33): the knobs the phone moved, "
-        "the plan's draft, the kept palettes and the day's rules — every other byte kept; "
-        "what the converge named « edited on the phone, not yet pulled »",
+        "the plan's draft, the kept palettes and the day's rules, the looks kept with "
+        "« Garder » (0.36) — every other byte kept; what the converge named « edited on "
+        "the phone, not yet pulled »",
     )
     s.add_argument("home", type=Path)
-    s.add_argument("kinds", nargs="*", help="knobs, plan, palettes (default: all three)")
+    s.add_argument("kinds", nargs="*", help="knobs, plan, palettes, looks (default: all four)")
     s.add_argument(
         "--rooms", type=Path, help="the room files to rewrite (default: the house's own include)"
     )
@@ -813,10 +814,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser(
         "push",
         help="the files' word onto the phone (0.33), the hand's override for a « by hand »: "
-        "the knobs set from the files, the plan's draft re-seeded, a store the files carry freed",
+        "the knobs set from the files, the plan's draft re-seeded, a store the files carry "
+        "freed, a kept look settled (0.36)",
     )
     s.add_argument("home", type=Path)
-    s.add_argument("kinds", nargs="*", help="knobs, plan, palettes (default: all three)")
+    s.add_argument("kinds", nargs="*", help="knobs, plan, palettes, looks (default: all four)")
     _secrets_arg(s)
     s.add_argument("--root", type=Path, help="the brain's root (the conductor's token)")
     s.add_argument("--url", default="http://127.0.0.1:8123", help="the brain's own address")
