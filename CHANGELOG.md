@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.42.1 — l'Atelier se redessine quand la main touche un document (2026-09-07)
+
+Une modification d'un document ne fait bouger aucune entité, donc rien ne
+redemandait à la fenêtre de se redessiner : le blanc choisi et « toutes »
+restaient affichés sur l'ancienne valeur jusqu'au prochain écho de la maison.
+La fenêtre se redessine maintenant sur ces deux gestes comme elle le fait
+déjà sur les formes de vie, et un store qui ne répond pas le DIT au lieu de
+se montrer vide.
+
+Avec : les dix-neuf mots que 0.42.0 a rendus orphelins sont retirés des deux
+fichiers de langue (`palette_kept`, `palette_names`, `palette_new_name`,
+`atelier_full`, les douze `store_*` des cases). Un mot qui ne nomme plus rien
+est une référence pendante.
+
 ## 0.42.0 — une palette gardée est un document, et le tirage n'est écrit qu'une fois (2026-09-07)
 
 **V8a de l'audit, deuxième marche de H51.** Une palette gardée sur le

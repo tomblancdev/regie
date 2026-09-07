@@ -671,7 +671,6 @@ def house_plan(house) -> dict:
             "try_today",
             "another",
             "saveas_prompt",
-            "full",
         )
     }
     for h in ORDER:

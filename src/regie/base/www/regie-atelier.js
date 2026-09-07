@@ -293,6 +293,7 @@
       if (this._tab === "today") this._renderRules(body);
       else if (this._tab.startsWith("named:")) this._renderNamed(body, c.named.find((n) => `named:${n.id}` === this._tab));
       else if (this._tab.startsWith("store:")) this._renderStore(body, stores.find((st) => `store:${st.id}` === this._tab));
+      if (this._error) this._note(this._error);   // a store that does not answer says so
       this._sig = this._signature();
     }
 
@@ -356,7 +357,10 @@
       this._curve(body, PERIODS.map((p) => v[`curve_${p}`]), (i, val) => this.edit(id, (x) => { x[`curve_${PERIODS[i]}`] = val; }));
       this._bindSlider(body, "saturation", (val) => this.edit(id, (x) => { x.saturation = val; }));
       this._bindSlider(body, "jitter", (val) => this.edit(id, (x) => { x.jitter = val; }));
-      body.querySelectorAll(".sel.white button").forEach((b) => b.addEventListener("click", () => this.edit(id, (x) => { x.white = b.dataset.w; })));
+      body.querySelectorAll(".sel.white button").forEach((b) => b.addEventListener("click", () => {
+        this.edit(id, (x) => { x.white = b.dataset.w; });
+        this._renderWindow();   // a document's own edit fires no state change to redraw us
+      }));
       // the NAME is the face: the select's options follow it, the component keeps
       // this palette selected across the rename (set_options would drop it)
       body.querySelector("input.name").addEventListener("change", (e) => {
@@ -366,7 +370,10 @@
         this.saveDoc(id, this._docs[id]).then(() => this._renderWindow());
       });
       body.querySelector("input.alive").addEventListener("change", (e) => this.edit(id, (x) => { x.alive = parseInt(e.target.value || "0", 10); }));
-      body.querySelector(".chip.all").addEventListener("click", () => this.edit(id, (x) => { x.alive_all = !v.alive_all; }));
+      body.querySelector(".chip.all").addEventListener("click", () => {
+        this.edit(id, (x) => { x.alive_all = !v.alive_all; });
+        this._renderWindow();
+      });
       body.querySelectorAll(".chips.shapes .chip").forEach((b) => b.addEventListener("click", () => {
         const s = b.dataset.s;
         this.edit(id, (x) => { x.shapes = v.shapes.includes(s) ? v.shapes.filter((y) => y !== s) : v.shapes.concat([s]); });

@@ -95,12 +95,6 @@ ui:
   life_none: aucune
   life_like: comme
   palette_rules: Les règles du jour
-  palette_kept: Palette
-  palette_new: Nouvelle
-  palette_new_name: Nouvelle
-  palette_random: Au hasard
-  palette_delete: Supprimer
-  palette_names: les noms
   rule_weight_degrade: Poids du dégradé
   rule_weight_duo: Poids du duo
   rule_weight_uni: Poids de l'uni
@@ -120,18 +114,6 @@ ui:
   rule_every_min: Vie, toutes les (min)
   rule_every_max: Vie, toutes les (max)
   rule_chance: Vie, part des jours
-  store_start: Début de l'arc
-  store_width: Largeur de l'arc
-  store_accent: Accent
-  store_saturation: Saturation
-  store_jitter: Éparpillement
-  store_curve_morning: Niveau le matin
-  store_curve_day: Niveau en journée
-  store_curve_evening: Niveau le soir
-  store_curve_night: Niveau la nuit
-  store_alive: Vives
-  store_every_min: Vie, toutes les (min)
-  store_every_max: Vie, toutes les (max)
   store_shapes: Formes de vie
   atelier_title: L'Atelier des palettes
   atelier_open: Ouvrir
@@ -161,7 +143,6 @@ ui:
   atelier_try_today: Essayer le jour
   atelier_another: Une autre
   atelier_saveas_prompt: Le nom de la nouvelle palette
-  atelier_full: Toutes les cases sont prises — passez une palette dans le fichier (palette-pull), ou supprimez-en une.
   mode: Mode
   period: Période
   period_begins: Début

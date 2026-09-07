@@ -88,12 +88,6 @@ ui:
   life_none: none
   life_like: like
   palette_rules: The day's rules
-  palette_kept: Palette
-  palette_new: New
-  palette_new_name: New
-  palette_random: Random
-  palette_delete: Delete
-  palette_names: the names
   rule_weight_degrade: Gradient weight
   rule_weight_duo: Duo weight
   rule_weight_uni: Mono weight
@@ -113,18 +107,6 @@ ui:
   rule_every_min: Life, every (min)
   rule_every_max: Life, every (max)
   rule_chance: Life, share of days
-  store_start: Arc start
-  store_width: Arc width
-  store_accent: Accent
-  store_saturation: Saturation
-  store_jitter: Scatter
-  store_curve_morning: Level, morning
-  store_curve_day: Level, day
-  store_curve_evening: Level, evening
-  store_curve_night: Level, night
-  store_alive: Alive
-  store_every_min: Life, every (min)
-  store_every_max: Life, every (max)
   store_shapes: Life shapes
   atelier_title: The palette workshop
   atelier_open: Open
@@ -154,7 +136,6 @@ ui:
   atelier_try_today: Try the day
   atelier_another: Another one
   atelier_saveas_prompt: The new palette's name
-  atelier_full: Every store is taken — bring a palette into the file (palette-pull), or delete one.
   mode: Mode
   period: Period
   period_begins: Begins
