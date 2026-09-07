@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.37.0 — une porte pour les deux verbes (2026-09-07)
+
+La porte standard de la voix chez Le Squat : les oreilles et la bouche
+derrière UN serveur Wyoming — le pont `wyoming_openai` devant une porte à
+la forme OpenAI (LocalAI), qui annonce la reconnaissance ET la synthèse
+depuis une seule adresse. `assist.voice` prend sa forme à une adresse,
+`voice: { url: tcp://…, voice: … }`, à côté de la forme à deux portes de
+0.34 (le schéma prend l'une ou l'autre, jamais un mélange) ; la maison lit
+les deux en une liste de portes, chacune avec les verbes qu'elle sert.
+`apply` fait UNE entrée wyoming pour une porte à deux verbes (l'étape
+`entry wyoming voice` — l'intégration du cerveau charge la plateforme stt
+et la plateforme tts depuis une même entrée, lu dans sa source), lit dans
+le registre l'entité de chaque verbe qu'elle porte (le titre est le mot du
+serveur, `openai` pour le pont, jamais deviné) ; chaque verbe se souvient
+de son entrée et de l'adresse où elle fut faite, si bien qu'une maison qui
+replie ses deux portes en une voit ses deux entrées d'avant refaites en une
+(un verbe qui a déménagé perd son entrée, la porte est faite une fois, les
+deux verbes s'en souviennent). Sans mémoire, l'entrée adoptée est celle qui
+porte déjà une entité de chaque verbe de la porte. Le double apprend un
+serveur qui annonce les deux. Au passage : un refus du schéma sur un
+`oneOf` dit ce que chaque branche voulait (« 'tts' is a required property »
+reste lisible pour des oreilles sans bouche). Deux tests neufs, un test du
+pack étendu.
 ## 0.36.1 — le recorder ne garde pas une ampoule : le journal, si (2026-09-07)
 
 Lu en direct à la première preuve de 0.36.0 : l'appui de « Garder » lu
@@ -24,6 +47,7 @@ logbook holds no line for it — nothing to write ». Le double de test apprend
 le journal (`FakeHA.logbook`) ; un test lit l'automatisation rendue dans le
 paquet du témoin (le déclencheur, l'action, chaque lumière dans le gabarit du
 message).
+||||||| parent of d01ef7f (Une porte pour les deux verbes (la porte standard de la voix chez Le Squat). assist.voice prend sa forme à une adresse, voice: { url, voice }, à côté de la forme à deux portes de 0.34 (le schéma prend l'une ou l'autre) ; la maison lit les deux en une liste de portes, chacune avec les verbes qu'elle sert (house.py). apply fait UNE entrée wyoming pour une porte à deux verbes (l'étape entry wyoming voice — l'intégration du cerveau charge la plateforme stt et la plateforme tts depuis une même entrée, lu dans sa source data.py), lit dans le registre l'entité de chaque verbe qu'elle porte (le titre est le mot du serveur : openai pour le pont wyoming_openai, jamais deviné) ; chaque verbe se souvient de son entrée et de l'adresse où elle fut faite, si bien qu'une maison qui replie ses deux portes en une voit ses deux entrées refaites en une (un verbe qui a déménagé perd son entrée, la porte est faite une fois, les deux verbes s'en souviennent) ; sans mémoire, l'entrée adoptée est celle qui porte déjà une entité de chaque verbe de la porte. Le double apprend un serveur qui annonce les deux (ha.bridges). Deux tests neufs ; la ligne Voice du README ; l'entrée 0.37.0 du CHANGELOG.)
 
 ## 0.36.0 — « Garder » : une ambiance réglée sur le téléphone, rapatriée (2026-09-07)
 

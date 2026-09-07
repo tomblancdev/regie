@@ -1715,100 +1715,133 @@ class Conductor:
         self.assist_pipeline(ws, a["pipeline"], engines)
         self.assist_mics(ws, a["mics"])
 
-    # --- the ears and the mouth (0.34) -----------------------------------------
+    # --- the ears and the mouth (0.34; one door for both, 0.37) ----------------
     def assist_voice(self, ws, voice: dict) -> dict:
-        """The ears and the mouth: one `wyoming` config entry per door (host +
-        port — the integration's one form, read in the brain's own source),
-        remembered with its address in the state; a door that MOVED is re-made
-        (the integration has no reconfigure step; the entities are re-minted
-        under the same ids once the old entry is gone); a door that does not
-        answer waits and the pipeline keeps what it has. With no memory, the
-        one wyoming entry that already holds an entity of that kind is adopted
-        (a state file rebuilt from nothing must not make a twin). Returns the
+        """The ears and the mouth: one `wyoming` config entry per DOOR (host +
+        port — the integration's one form, read in the brain's own source); a
+        door serves one verb (0.34: two servers) or both (0.37: a server
+        announcing stt and tts, such as the bridge in front of a standard
+        speech door — the integration loads both platforms from one entry).
+        Each verb remembers its entry and the address it was made at in the
+        state; a verb whose door MOVED loses its entry (the integration has no
+        reconfigure step) and the door is re-made — folding two doors into one
+        re-makes two entries into one. A door that does not answer waits and
+        the pipeline keeps what it has. With no memory, the one wyoming entry
+        that already holds an entity of every verb of the door is adopted (a
+        state file rebuilt from nothing must not make a twin). Returns the
         pipeline's fields: each engine's entity id from the registry (never a
-        guessed name — the entry's title is whatever the server calls itself),
-        its language tag as the engine spells it, the mouth's voice."""
+        guessed name — the entry's title is whatever the server calls itself:
+        `faster-whisper` serving Parakeet, `openai` for the bridge), its
+        language tag as the engine spells it, the mouth's voice."""
         remembered = read_state(self.root, "assist.json")
         memory = remembered.setdefault("voice", {})
         fields: dict = {}
         lang = self.house.data["house"].get("lang", "en")
-        for kind, what in (("stt", "the ears"), ("tts", "the mouth")):
-            door = voice[kind]
-            name = f"entry wyoming {kind}"
+        what = {"stt": "the ears", "tts": "the mouth"}
+        for door in voice["doors"]:
+            kinds = door["kinds"]
+            label = "voice" if len(kinds) > 1 else kinds[0]
+            name = f"entry wyoming {label}"
+            said = " and ".join(what[k] for k in kinds)
             have = {e["entry_id"]: e for e in self.domain_entries("wyoming")}
             entities = ws.call("config/entity_registry/list") or []
-            mine = memory.get(kind) or {}
-            entry = have.get(mine.get("entry_id"))
-            if entry is None and not mine:
-                owners = {
-                    e.get("config_entry_id")
-                    for e in entities
-                    if e["entity_id"].startswith(f"{kind}.") and e.get("config_entry_id") in have
-                }
-                if len(owners) == 1:
-                    entry = have[owners.pop()]
-                    memory[kind] = {"entry_id": entry["entry_id"], "url": door["url"]}
-                    write_state(self.root, "assist.json", remembered)
-                    self.step(name, "ok", f"{what}: adopted {entry.get('title')} as {door['url']}")
-            if entry is not None and mine.get("url") not in (None, door["url"]):
+            entry = None
+            moved = False
+            for kind in kinds:
+                mine = memory.get(kind) or {}
+                old = have.get(mine.get("entry_id"))
+                if old is None:
+                    continue
+                if mine.get("url") == door["url"]:
+                    entry = old
+                    continue
+                moved = True
                 self.step(
-                    name,
+                    f"entry wyoming {kind}",
                     "changed",
-                    f"{what} moved to {door['url']} (was {mine['url']}) — the entry re-made",
+                    f"{what[kind]} moved to {door['url']} (was {mine['url']}) — the entry re-made",
                 )
                 if self.check:
                     continue
-                status, body = self.ha.delete(f"{ENTRIES}/{entry['entry_id']}")
+                status, body = self.ha.delete(f"{ENTRIES}/{old['entry_id']}")
                 if status != 200:
                     raise HouseError(
                         f"wyoming {kind}: the old entry refused to go: {status} {body}"
                     )
-                have.pop(mine["entry_id"], None)
-                entry = None
+                have.pop(old["entry_id"], None)
                 memory.pop(kind, None)
                 write_state(self.root, "assist.json", remembered)
+            if moved and self.check:
+                continue
+            reported = False
+            if entry is None and not any(memory.get(k) for k in kinds):
+                owners: set | None = None
+                for kind in kinds:
+                    holding = {
+                        e.get("config_entry_id")
+                        for e in entities
+                        if e["entity_id"].startswith(f"{kind}.")
+                        and e.get("config_entry_id") in have
+                    }
+                    owners = holding if owners is None else owners & holding
+                if owners and len(owners) == 1:
+                    entry = have[owners.pop()]
+                    self.step(name, "ok", f"{said}: adopted {entry.get('title')} as {door['url']}")
+                    reported = True
             if entry is None:
                 if self.check:
-                    self.step(name, "changed", f"set up {what} at {door['url']}")
+                    self.step(name, "changed", f"set up {said} at {door['url']}")
                     continue
                 out = walk(self.ha, "wyoming", {"host": door["host"], "port": door["port"]})
                 if out.state == "waiting":
                     self.step(
-                        name, "waiting", f"{what} at {door['url']} does not answer — {out.detail}"
+                        name, "waiting", f"{said} at {door['url']} does not answer — {out.detail}"
                     )
                     continue
                 if out.state != "changed":
-                    raise HouseError(f"wyoming {kind}: {out.detail}")
+                    raise HouseError(f"wyoming {label}: {out.detail}")
                 fresh = [e for e in self.domain_entries("wyoming") if e["entry_id"] not in have]
                 if len(fresh) != 1:
-                    raise HouseError(f"wyoming {kind}: the entry was made and cannot be told apart")
+                    raise HouseError(
+                        f"wyoming {label}: the entry was made and cannot be told apart"
+                    )
                 entry = fresh[0]
-                memory[kind] = {"entry_id": entry["entry_id"], "url": door["url"]}
-                write_state(self.root, "assist.json", remembered)
-                self.step(name, "changed", f"set up {what} at {door['url']} — {entry.get('title')}")
+                self.step(name, "changed", f"set up {said} at {door['url']} — {entry.get('title')}")
+                reported = True
                 for _ in range(10):  # the entities land with the entry's setup, a moment later
                     entities = ws.call("config/entity_registry/list") or []
                     if any(e.get("config_entry_id") == entry["entry_id"] for e in entities):
                         break
                     time.sleep(1)
-            elif mine.get("url") == door["url"]:
-                self.step(name, "ok", f"{what} at {door['url']} — {entry.get('title')}")
-            engine = next(
-                (
-                    e["entity_id"]
-                    for e in entities
-                    if e.get("config_entry_id") == entry["entry_id"]
-                    and e["entity_id"].startswith(f"{kind}.")
-                    and not e.get("disabled_by")
-                ),
-                None,
-            )
-            if engine is None:
-                self.step(
-                    f"voice {kind}", "waiting", f"{entry.get('title')} holds no {kind} entity yet"
+            if any(
+                (memory.get(k) or {}) != {"entry_id": entry["entry_id"], "url": door["url"]}
+                for k in kinds
+            ):
+                for kind in kinds:
+                    memory[kind] = {"entry_id": entry["entry_id"], "url": door["url"]}
+                write_state(self.root, "assist.json", remembered)
+            if not reported:
+                self.step(name, "ok", f"{said} at {door['url']} — {entry.get('title')}")
+            for kind in kinds:
+                engine = next(
+                    (
+                        e["entity_id"]
+                        for e in entities
+                        if e.get("config_entry_id") == entry["entry_id"]
+                        and e["entity_id"].startswith(f"{kind}.")
+                        and not e.get("disabled_by")
+                    ),
+                    None,
                 )
-                continue
-            fields.update(self.voice_engine(ws, kind, engine, lang, door.get("voice")))
+                if engine is None:
+                    self.step(
+                        f"voice {kind}",
+                        "waiting",
+                        f"{entry.get('title')} holds no {kind} entity yet",
+                    )
+                    continue
+                spoken = door.get("voice") if kind == "tts" else None
+                fields.update(self.voice_engine(ws, kind, engine, lang, spoken))
         return fields
 
     def voice_engine(self, ws, kind: str, engine: str, lang: str, voice: str | None) -> dict:

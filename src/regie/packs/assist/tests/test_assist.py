@@ -163,20 +163,41 @@ def test_a_wrong_policy_word_is_refused(house_with):
 
 
 # --- the ears and the mouth (0.34) ------------------------------------------
-def test_the_house_resolves_the_ears_the_mouth_and_the_mics(witness):
+def test_the_house_resolves_the_ears_the_mouth_and_the_mics(witness, house_with):
+    # two doors (0.34): one verb each, the voice on the mouth's
     a = witness.assist()
-    assert a["voice"]["stt"] == {
-        "url": "tcp://192.0.2.70:10300",
-        "host": "192.0.2.70",
-        "port": 10300,
-    }
-    assert a["voice"]["tts"] == {
-        "url": "tcp://192.0.2.71:10200",
-        "host": "192.0.2.71",
-        "port": 10200,
-        "voice": "fr_FR-siwis-medium",
-    }
+    assert a["voice"]["doors"] == [
+        {
+            "url": "tcp://192.0.2.70:10300",
+            "host": "192.0.2.70",
+            "port": 10300,
+            "kinds": ["stt"],
+            "voice": None,
+        },
+        {
+            "url": "tcp://192.0.2.71:10200",
+            "host": "192.0.2.71",
+            "port": 10200,
+            "kinds": ["tts"],
+            "voice": "fr_FR-siwis-medium",
+        },
+    ]
     assert a["mics"] == [{"device": "Téléphone témoin", "room": "living"}]
+
+    # one door for both verbs (0.37): the bridge in front of a standard speech server
+    def one_door(d):
+        d["assist"]["voice"] = {"url": "tcp://192.0.2.73:10300", "voice": "fr_FR-siwis-medium"}
+
+    a = load_house(house_with(one_door)).assist()
+    assert a["voice"]["doors"] == [
+        {
+            "url": "tcp://192.0.2.73:10300",
+            "host": "192.0.2.73",
+            "port": 10300,
+            "kinds": ["stt", "tts"],
+            "voice": "fr_FR-siwis-medium",
+        }
+    ]
 
 
 def test_no_voice_means_no_engines_and_no_mics(house_with):
@@ -200,6 +221,13 @@ def test_ears_without_a_mouth_are_refused(house_with):
 
     with pytest.raises(HouseError, match="url"):
         load_house(house_with(not_a_door))
+
+    # the two forms never mix: one url AND a door per verb is neither
+    def both_forms(d):
+        d["assist"]["voice"]["url"] = "tcp://192.0.2.73:10300"
+
+    with pytest.raises(HouseError, match="url"):
+        load_house(house_with(both_forms))
 
 
 def test_a_mic_in_no_room_of_the_house_is_refused(house_with):

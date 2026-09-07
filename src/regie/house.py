@@ -336,14 +336,24 @@ class House:
         voice = None
         if raw.get("voice"):
             v = raw["voice"]
-            voice = {
-                "stt": {"url": str(v["stt"]["url"]).rstrip("/"), **wyoming_door(v["stt"]["url"])},
-                "tts": {
-                    "url": str(v["tts"]["url"]).rstrip("/"),
-                    **wyoming_door(v["tts"]["url"]),
-                    "voice": v["tts"].get("voice"),
-                },
-            }
+
+            def door(url, kinds, spoken=None):
+                url = str(url).rstrip("/")
+                return {"url": url, **wyoming_door(url), "kinds": kinds, "voice": spoken}
+
+            # the doors the pipeline speaks through: ONE serving both verbs
+            # (0.37 — a server announcing stt and tts, the bridge in front of
+            # a standard speech door) or one per verb (0.34); every reader
+            # sees the same list
+            if "url" in v:
+                voice = {"doors": [door(v["url"], ["stt", "tts"], v.get("voice"))]}
+            else:
+                voice = {
+                    "doors": [
+                        door(v["stt"]["url"], ["stt"]),
+                        door(v["tts"]["url"], ["tts"], v["tts"].get("voice")),
+                    ]
+                }
         return {
             "llm": {
                 "platform": "ollama",
@@ -1779,7 +1789,16 @@ def _validate(schema: dict, data: dict, path: Path | str) -> None:
         lines = [f"{path}: {len(errors)} schema error(s)"]
         for e in errors[:20]:
             where = "/".join(str(p) for p in e.absolute_path) or "<root>"
-            lines.append(f"  {where}: {e.message}")
+            message = e.message
+            if e.context:
+                # a oneOf/anyOf refusal names no branch by itself: say what
+                # each branch wanted (deduplicated, in the schema's order)
+                seen: list[str] = []
+                for c in sorted(e.context, key=lambda c: list(c.schema_path)):
+                    if c.message not in seen:
+                        seen.append(c.message)
+                message = f"{message} — {' · '.join(seen)}"
+            lines.append(f"  {where}: {message}")
         raise HouseError("\n".join(lines))
 
 

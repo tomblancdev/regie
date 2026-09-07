@@ -140,6 +140,10 @@ class FakeHA(HomeAssistant):
         # Assist (0.31): the LLM server's answer, its entry's subentries, what
         # Assist sees, the pipelines (Home Assistant's own English one at birth)
         self.ollama_down = False
+        # a Wyoming server announcing speech to text AND text to speech from one
+        # door (the bridge wyoming_openai in front of a standard speech server,
+        # 0.37): its hosts; the entry is titled with the server's own word
+        self.bridges = set()
         self.subentries: dict[str, list] = {}
         self.exposed: dict[str, dict] = {}
         self.pipelines: list[dict] = [
@@ -371,19 +375,27 @@ class FakeHA(HomeAssistant):
             # entity lands with the setup, keyed on the entry (unique_id
             # <entry>-stt / -tts); a satellite (10700, the witness's) holds none
             port = int(body["port"])
-            if port not in (10300, 10200):
+            if body.get("host") in self.bridges:
+                # one door, both verbs: the integration loads the stt AND the
+                # tts platform from the one entry (read in its data.py)
+                kinds, title = ("stt", "tts"), "openai"
+            elif port not in (10300, 10200):
                 return self._create(fid, flow, "Satellite témoin", body)
-            kind, title = ("stt", "faster-whisper") if port == 10300 else ("tts", "piper")
+            else:
+                kinds, title = (
+                    (("stt",), "faster-whisper") if port == 10300 else (("tts",), "piper")
+                )
             status, out = self._create(fid, flow, title, body)
             entry_id = out["result"]["entry_id"]
-            self.entities.append(
-                {
-                    "entity_id": f"{kind}.{title.replace('-', '_')}",
-                    "platform": "wyoming",
-                    "unique_id": f"{entry_id}-{kind}",
-                    "config_entry_id": entry_id,
-                }
-            )
+            for kind in kinds:
+                self.entities.append(
+                    {
+                        "entity_id": f"{kind}.{title.replace('-', '_')}",
+                        "platform": "wyoming",
+                        "unique_id": f"{entry_id}-{kind}",
+                        "config_entry_id": entry_id,
+                    }
+                )
             return status, out
         if d == "heos":
             if body.get("host") in self.off:
@@ -2661,6 +2673,70 @@ def test_assist_voice_adopts_the_one_entry_it_finds_with_no_memory(
     assert st["entry wyoming tts"] == "ok" and "adopted piper" in why["entry wyoming tts"]
     assert st["entry wyoming stt"] == "changed"
     assert len(doors(ha)) == 2 and pipeline_of(ha)["tts_engine"] == "tts.piper"
+
+
+def one_door(d):
+    """The house's voice behind ONE Wyoming door serving both verbs (0.37)."""
+    d["assist"]["voice"] = {"url": "tcp://192.0.2.73:10300", "voice": "fr_FR-siwis-medium"}
+
+
+def test_assist_voice_one_door_for_both_verbs(witness, secrets, tmp_path, models, house_with):
+    house = load_house(house_with(one_door))
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    ha.bridges.add("192.0.2.73")
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    st, why = states(steps), details(steps)
+    # one entry for the ears and the mouth, titled with the server's own word
+    assert st["entry wyoming voice"] == "changed"
+    assert (
+        "the ears and the mouth" in why["entry wyoming voice"]
+        and "openai" in why["entry wyoming voice"]
+    )
+    assert "entry wyoming stt" not in st and "entry wyoming tts" not in st
+    assert [e["_data"] for e in doors(ha)] == [{"host": "192.0.2.73", "port": 10300}]
+    # both engines read from the registry under that one entry
+    assert st["voice stt"] == "ok" and st["voice tts"] == "ok"
+    p = pipeline_of(ha)
+    assert p["stt_engine"] == "stt.openai" and p["stt_language"] == "fr"
+    assert p["tts_engine"] == "tts.openai" and p["tts_language"] == "fr_FR"
+    assert p["tts_voice"] == "fr_FR-siwis-medium"
+    # the second apply: nothing to do, no twin
+    again = states(apply(house, secrets, tmp_path, ha, check=False))
+    assert again["entry wyoming voice"] == "ok" and again["assist pipeline"] == "ok"
+    assert len(doors(ha)) == 1
+
+
+def test_assist_voice_two_doors_folded_into_one_remake_the_entries(
+    witness, secrets, tmp_path, models, house_with
+):
+    ha = FakeHA()
+    furnished_for_assist(ha)
+    ha.bridges.add("192.0.2.73")
+    apply(witness, secrets, tmp_path, ha, check=False)  # the two doors of 0.34
+    assert len(doors(ha)) == 2
+    house = load_house(house_with(one_door))
+    # check says both verbs move, touches nothing
+    planned = apply(house, secrets, tmp_path, ha, check=True)
+    st = states(planned)
+    assert st["entry wyoming stt"] == "would" and st["entry wyoming tts"] == "would"
+    assert "moved to tcp://192.0.2.73:10300" in details(planned)["entry wyoming stt"]
+    assert "entry wyoming voice" not in st and len(doors(ha)) == 2
+    # apply: the two old entries go, one is made, the pipeline speaks through it
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    st, why = states(steps), details(steps)
+    assert st["entry wyoming stt"] == "changed" and "the entry re-made" in why["entry wyoming stt"]
+    assert (
+        st["entry wyoming tts"] == "changed"
+        and "was tcp://192.0.2.71:10200" in why["entry wyoming tts"]
+    )
+    assert st["entry wyoming voice"] == "changed" and "openai" in why["entry wyoming voice"]
+    assert [e["_data"]["host"] for e in doors(ha)] == ["192.0.2.73"]
+    p = pipeline_of(ha)
+    assert p["stt_engine"] == "stt.openai" and p["tts_engine"] == "tts.openai"
+    assert st["assist pipeline"] == "changed"
+    again = states(apply(house, secrets, tmp_path, ha, check=False))
+    assert again["entry wyoming voice"] == "ok" and len(doors(ha)) == 1
 
 
 def test_assist_a_mic_the_brain_does_not_hold_waits(witness, secrets, tmp_path, models):

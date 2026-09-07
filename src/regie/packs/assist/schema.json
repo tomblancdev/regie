@@ -72,31 +72,46 @@
           }
         },
         "voice": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["stt", "tts"],
-          "description": "the house's ears and mouth (0.34): two Wyoming speech servers by their ADDRESS (a capability is an address, never a place); the pipeline speaks through them and the phone's mic appears. Both or neither: ears without a mouth answer in silence",
-          "properties": {
-            "stt": {
+          "description": "the house's ears and mouth: Wyoming speech servers by their ADDRESS (a capability is an address, never a place); the pipeline speaks through them and the phone's mic appears. Either ONE door for both verbs (0.37 — a server announcing speech to text AND text to speech, such as the bridge wyoming_openai in front of a standard OpenAI-shaped speech server) or two doors (0.34). Both verbs or neither: ears without a mouth answer in silence",
+          "oneOf": [
+            {
               "type": "object",
               "additionalProperties": false,
               "required": ["url"],
-              "description": "speech to text — a Wyoming server's door",
+              "description": "one door, both verbs (0.37): the wyoming entry it makes carries the stt and the tts entity",
               "properties": {
-                "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port> — the server's own --uri shape, an address the house resolves" }
-              }
-            },
-            "tts": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["url"],
-              "description": "text to speech — a Wyoming server's door, and the voice it speaks with",
-              "properties": {
-                "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port>" },
+                "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port> — the server's own --uri shape, an address the house resolves" },
                 "voice": { "type": "string", "minLength": 1, "description": "the voice's name as the server announces it (Piper: fr_FR-siwis-medium); default: the server's first voice for the house's language" }
               }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["stt", "tts"],
+              "description": "two doors (0.34): one Wyoming server per verb",
+              "properties": {
+                "stt": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["url"],
+                  "description": "speech to text — a Wyoming server's door",
+                  "properties": {
+                    "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port> — the server's own --uri shape, an address the house resolves" }
+                  }
+                },
+                "tts": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["url"],
+                  "description": "text to speech — a Wyoming server's door, and the voice it speaks with",
+                  "properties": {
+                    "url": { "type": "string", "pattern": "^tcp://[^:/]+:[0-9]+$", "description": "tcp://<host>:<port>" },
+                    "voice": { "type": "string", "minLength": 1, "description": "the voice's name as the server announces it (Piper: fr_FR-siwis-medium); default: the server's first voice for the house's language" }
+                  }
+                }
+              }
             }
-          }
+          ]
         },
         "mics": {
           "type": "array",
