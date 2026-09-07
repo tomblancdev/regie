@@ -381,3 +381,9 @@ def test_a_group_takes_its_members_backend(witness):
     mixed = matter + [{"kind": "light", "via": "zigbee"}]
     assert house.walk_backend("light.living_shelf", mixed)["backend"] == "ha"
     assert house.walk_backend("light.living_shelf", [])["backend"] == "ha"
+    # a role that holds exactly ONE bulb is a group in Home Assistant and a
+    # single thing in the mesh: the order goes to the bulb's own door, and the
+    # group entity follows it (0.41.2 — the house's only single-bulb role was
+    # walking the slowest rung while its own model took legs beside it)
+    alone = house.walk_backend("light.living_lamp", [house.thing("living_floor_lamp")])
+    assert alone["backend"] == "zigbee" and alone["topic"] == "zigbee2mqtt/living_floor_lamp"

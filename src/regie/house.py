@@ -1473,8 +1473,18 @@ class House:
         while its own kind had already been quietened)."""
         thing = self.thing_of(entity)
         if thing is None:
-            vias = {t.get("via") for t in (things or []) if t.get("kind") == "light"}
-            return {"backend": "matter" if vias and vias <= {"matter", "thread"} else "ha"}
+            lights = [t for t in (things or []) if t.get("kind") == "light"]
+            vias = {t.get("via") for t in lights}
+            if vias and vias <= {"matter", "thread"}:
+                return {"backend": "matter"}
+            if len(lights) != 1:
+                return {"backend": "ha"}
+            # a role that holds exactly ONE bulb is a group in Home Assistant
+            # and a single thing in the mesh: the order goes to the bulb, and
+            # the group entity follows it. Without this the house's only
+            # single-bulb role walked the slowest rung while its own model was
+            # taking legs three metres away (Le QG's console, 0.41.2)
+            thing = lights[0]
         if thing["via"] == "zigbee":
             topics = self.__dict__.setdefault("_zigbee_topics", self.zigbee_topics())
             topic = topics.get(thing["id"])

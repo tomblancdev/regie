@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.41.2 — un rôle qui ne tient qu'une ampoule EST cette ampoule (2026-09-07)
+
+Un rôle qui ne tient qu'une lampe reste un groupe pour Home Assistant
+(`light.<pièce>_<rôle>`) et n'est le *thing* de personne, donc le marcheur le
+prenait pour un groupe et lui donnait le rung le plus lent — la console du QG,
+une TRÅDFRI E27, marchait à la boucle avec sa transition (≈ 1 440 lignes de
+recorder à l'heure via l'état optimiste de Zigbee2MQTT) pendant que six
+ampoules du même modèle prenaient des jambes à trois mètres d'elle. Le seul
+marcheur du `ha` de la maison, et le seul par erreur.
+
+Un groupe qui ne tient qu'une ampoule EST cette ampoule : l'ordre part à sa
+porte à elle, et l'entité de groupe suit. 24 marcheurs Zigbee, 17 Matter, 0 sur
+le rung générique.
+
 ## 0.41.1 — un groupe prend le backend de ses membres (2026-09-07)
 
 0.41.0 a fait taire les ampoules Matter et laissé passer les GROUPES. Un
