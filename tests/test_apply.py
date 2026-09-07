@@ -97,9 +97,8 @@ class FakeHA(HomeAssistant):
         self.states: dict[str, str] = {}  # the helpers' states (the knobs): unknown until set
         self.attributes: dict[str, dict] = {}  # a state's attributes, when a test gives some
         self.changed: dict[str, str] = {}  # a state's last_changed, when a test gives one
-        # the recorder (0.36): entity -> the states it held, each with its
-        # last_changed — a history read at an instant answers the last one before it
-        self.history: dict[str, list[dict]] = {}
+        # the logbook (0.36): the lines « Garder » wrote — entity_id, when, name, message
+        self.logbook: list[dict] = []
         self.version = "2026.8.3"  # what /api/config says
         self.config_result = "valid"  # what check_config says
         self.issues: list[dict] = []  # the repairs the brain opened
@@ -586,23 +585,22 @@ class FakeHA(HomeAssistant):
                 {"entity_id": e, "state": s, "attributes": self.attributes.get(e, {})}
                 for e, s in self.states.items()
             ]
-        if path.startswith("/api/history/period/"):
+        if path.startswith("/api/logbook/"):
             import datetime as dt
             import urllib.parse
 
-            start_s, _, query = path[len("/api/history/period/") :].partition("?")
+            start_s, _, query = path[len("/api/logbook/") :].partition("?")
             start = dt.datetime.fromisoformat(urllib.parse.unquote(start_s))
-            wanted = urllib.parse.parse_qs(query).get("filter_entity_id", [""])[0].split(",")
-            series = []
-            for e in wanted:
-                held = [
-                    h
-                    for h in self.history.get(e, [])
-                    if dt.datetime.fromisoformat(h["last_changed"]) <= start
-                ]
-                if held:
-                    series.append([{"entity_id": e, **held[-1]}])
-            return 200, series
+            q = urllib.parse.parse_qs(query)
+            end = dt.datetime.fromisoformat(q["end_time"][0]) if q.get("end_time") else None
+            entity = q.get("entity", [None])[0]
+            return 200, [
+                e
+                for e in self.logbook
+                if (entity is None or e.get("entity_id") == entity)
+                and start <= dt.datetime.fromisoformat(e["when"])
+                and (end is None or dt.datetime.fromisoformat(e["when"]) <= end)
+            ]
         if path.startswith("/api/states/"):
             entity = path.rsplit("/", 1)[1]
             if entity in self.states:

@@ -122,41 +122,48 @@ def room_look(house: House, area: dict, read) -> tuple[dict, list[str]]:
     return {role: fold_role(area, role, per, notes) for role, per in per_role.items()}, notes
 
 
-# --- the lights at an instant (0.36, the audit's V5) --------------------------------
-def states_at(ha, entities: list[str], at: str) -> dict[str, dict]:
-    """What the recorder holds for these entities at the instant `at` (an ISO
-    timestamp, the state of an input_button — the moment « Garder » was
-    pressed): entity → the state object standing at that second, with its
-    attributes. An entity the recorder has nothing that old for is absent;
-    one whose state has not changed since is read as it stands now (the
-    recorder keeps its days, the brain keeps the present)."""
+# --- the keep's line (0.36, the audit's V5) -------------------------------------------
+KEEP_FIELDS = ("brightness", "color_mode", "color_temp_kelvin", "rgb_color")
+
+
+def keep_line(ha, button: str, pressed: str) -> dict | None:
+    """The logbook line « Garder » wrote when the button was pressed: the
+    keep automation logs, on the button itself, the look the room wore and
+    what every light of it did at that moment — `{"look": …, "lights":
+    [[entity, state, brightness, color_mode, color_temp_kelvin, rgb_color],
+    …]}`. The recorder does NOT hold a light's brightness or colour (the
+    light domain marks them unrecorded — read in Home Assistant 2026.8's
+    own source), so the line is the record; the logbook keeps it for the
+    recorder's days. Returns the parsed line as {"look": …, "states":
+    {entity: a state object}} or None when the logbook holds none."""
     import datetime as dt
+    import json
     import urllib.parse
 
-    if not entities:
-        return {}
-    start = dt.datetime.fromisoformat(at)
-    end = start + dt.timedelta(seconds=1)
-    query = urllib.parse.urlencode(
-        {"filter_entity_id": ",".join(entities), "end_time": end.isoformat()}
-    )
-    status, data = ha.get(f"/api/history/period/{urllib.parse.quote(start.isoformat())}?{query}")
+    start = dt.datetime.fromisoformat(pressed)
+    end = start + dt.timedelta(minutes=2)
+    query = urllib.parse.urlencode({"entity": button, "end_time": end.isoformat()})
+    status, data = ha.get(f"/api/logbook/{urllib.parse.quote(start.isoformat())}?{query}")
     if status != 200:
-        raise HouseError(f"history at {at}: {status} {data}")
-    out: dict[str, dict] = {}
-    for series in data or []:
-        if series and isinstance(series[0], dict) and series[0].get("entity_id"):
-            out[series[0]["entity_id"]] = series[0]
-    for entity in entities:
-        if entity in out:
+        raise HouseError(f"logbook at {pressed}: {status} {data}")
+    for entry in data or []:
+        if entry.get("entity_id") != button or not isinstance(entry.get("message"), str):
             continue
-        status, now = ha.get(f"/api/states/{entity}")
-        if status != 200 or not isinstance(now, dict) or not now.get("last_changed"):
+        try:
+            line = json.loads(entry["message"])
+        except ValueError:
             continue
-        changed = dt.datetime.fromisoformat(now["last_changed"])
-        if changed <= start:
-            out[entity] = now
-    return out
+        if not isinstance(line, dict) or "lights" not in line:
+            continue
+        states: dict[str, dict] = {}
+        for row in line.get("lights") or []:
+            if not isinstance(row, list) or len(row) < 2:
+                continue
+            entity, state, *rest = row
+            attributes = dict(zip(KEEP_FIELDS, rest, strict=False))
+            states[entity] = {"entity_id": entity, "state": state, "attributes": attributes}
+        return {"look": line.get("look"), "states": states, "when": entry.get("when")}
+    return None
 
 
 def _scalar(v) -> str:

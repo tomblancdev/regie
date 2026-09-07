@@ -127,6 +127,7 @@ def context(house: House, secrets: dict) -> dict:
         "daylight": DAYLIGHT,
         "declared_roles": house.declared_roles,
         "roles_in": house.roles_in,
+        "room_lights": house.room_lights,
         "role_target": house.role_target,
         "layout_groups": house.layout_groups,
         "place_labels": house.place_labels,

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.36.1 — le recorder ne garde pas une ampoule : le journal, si (2026-09-07)
+
+Lu en direct à la première preuve de 0.36.0 : l'appui de « Garder » lu
+« follows the files » alors que le plafond venait de passer de 30 à 45 %. Le
+recorder de Home Assistant 2026.8 ne tient d'une lumière que `friendly_name`
+— le domaine `light` marque `brightness`, `color_mode`, `color_temp_kelvin`
+et les couleurs comme NON ENREGISTRÉS (`_entity_component_unrecorded_attributes`,
+lu dans la source du conteneur) ; l'historique rend une ligne sans niveau, et
+la sonde d'avant le build avait lu des ampoules éteintes (un `None` qui ne
+disait rien). **Le geste ne change pas, la trace change de place :** le pack
+`scenes` rend, à côté du bouton, UNE automatisation par pièce
+(`regie_<pièce>_keep`) — l'état du bouton bouge → `logbook.log` sur le bouton
+lui-même, une ligne dont le message est ce que la pièce porte
+(`input_select.<pièce>_look`) et ce que chaque lumière fait à cet instant
+(`[entité, état, brightness, color_mode, color_temp_kelvin, rgb_color]`,
+`room_lights(area)` exposé au rendu). Le journal garde la ligne les jours du
+recorder et la rend par l'API filtrée sur le bouton (`look.py`, `keep_line`
+remplace `states_at`) ; le chef d'orchestre y lit l'ambiance ET les lumières
+— plus de lecture d'historique du tout. Une ligne absente (un appui plus vieux
+que les jours du recorder, ou l'automatisation pas encore rendue) : « the
+logbook holds no line for it — nothing to write ». Le double de test apprend
+le journal (`FakeHA.logbook`) ; un test lit l'automatisation rendue dans le
+paquet du témoin (le déclencheur, l'action, chaque lumière dans le gabarit du
+message).
+
 ## 0.36.0 — « Garder » : une ambiance réglée sur le téléphone, rapatriée (2026-09-07)
 
 L'audit du cerveau, la suite de V5 (H50, deuxième réponse) : la QUATRIÈME

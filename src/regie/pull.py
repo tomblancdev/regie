@@ -28,11 +28,13 @@ phone and how to write the files.
 
 THE FOURTH KIND (0.36, the audit's V5): a LOOK KEPT ON THE PHONE. A room has
 one button, « Garder » (input_button.<room>_keep): tune the bulbs in Home
-Assistant's own light panel, press it. The button IS the record — its state
-is the moment it was pressed, and the recorder holds every bulb's brightness
-and colour for its days — so the conductor reads the room's lights and the
-look the room wore (input_select.<room>_look) AT THAT SECOND, projects them
-onto the look's own shape (an `on` agrees with any lit bulb, a brightness
+Assistant's own light panel, press it. The press writes ONE LOGBOOK LINE on
+the button (a rendered automation, pack scenes): the look the room wore
+(input_select.<room>_look) and what every light of it did at that moment —
+the recorder itself holds no light's brightness or colour (the light domain
+marks them unrecorded, read in 2026.8's source), the logbook keeps the line
+for the recorder's days. The conductor reads that line (look.py keep_line),
+projects the lights onto the look's own shape (an `on` agrees with any lit bulb, a brightness
 within a point agrees, a colour temperature within the house's word agrees,
 a key the look does not name is left alone) and speaks the same words: the
 FILES are the room's resolved look, the PHONE the projection, the SEED the
@@ -624,7 +626,7 @@ def read_looks(house, ha, memory: dict) -> tuple[list[Owned], list[dict]]:
     a keep that can name nothing (the room wore `off`, a palette look, the
     recorder holds nothing that old) is a line of its own, settled at once.
     A room with nothing new refreshes the memory of the files' looks."""
-    from .look import room_places, states_at
+    from .look import keep_line, room_places
 
     owned: list[Owned] = []
     notes: list[dict] = []
@@ -658,26 +660,21 @@ def read_looks(house, ha, memory: dict) -> tuple[list[Owned], list[dict]]:
             continue
         head = f"kept {_when(pressed)}"
         name = f"look {a['id']}"
-        select = f"input_select.{a['id']}_look"
-        lights = [
-            e
-            for things in house.roles_in(a["id"]).values()
-            for t in things
-            if t["kind"] == "light" and (e := house.entity(t))
-        ]
-        at = states_at(ha, [select, *lights], pressed)
-        if not at:
+        line = keep_line(ha, button, pressed)
+        if line is None:
             notes.append(
                 {
                     "name": name,
                     "state": "ok",
-                    "detail": f"{head} — the recorder holds nothing that old any more: "
+                    "detail": f"{head} — the logbook holds no line for it (older than the "
+                    "recorder's days, or the keep automation not rendered yet): "
                     "nothing to write (keep again)",
                 }
             )
             refresh()
             continue
-        wore = (at.get(select) or {}).get("state") or ""
+        at = line["states"]
+        wore = line.get("look") or ""
         if wore in ("", "off", "unknown", "unavailable"):
             notes.append(
                 {

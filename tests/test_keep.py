@@ -1,8 +1,11 @@
 """A look kept on the phone (0.36, the audit's V5): the rule's FOURTH KIND.
-« Garder » pressed in a room is the moment; the room's bulbs and the look it
-wore at that second, read from the recorder, are projected onto the look's
-shape and named under the same rule as a knob — kept until `regie pull
-home.yml looks` writes the roles that moved into the room's own file."""
+« Garder » pressed in a room writes one logbook line on the button — the
+look the room wore and what every light of it did at that moment (the
+recorder holds no light's brightness or colour: the light domain marks them
+unrecorded). The conductor reads that line, projects the lights onto the
+look's shape and names it under the same rule as a knob — kept until
+`regie pull home.yml looks` writes the roles that moved into the room's
+own file."""
 
 import json
 
@@ -26,6 +29,7 @@ T3 = "2026-09-07T11:00:00.000000+00:00"
 T4 = "2026-09-07T12:00:00.000000+00:00"
 OLD = "2026-08-01T12:00:00.000000+00:00"
 K = {"warm": 2700, "neutral": 4000, "cool": 5500}
+BUTTON = "input_button.living_keep"
 
 
 def detail(steps, name):
@@ -36,17 +40,22 @@ def names(steps, prefix):
     return [s.name for s in steps if s.name.startswith(prefix)]
 
 
-def held(state, changed, **attributes):
-    return {"state": state, "attributes": attributes, "last_changed": changed}
+def warm(entity, pct):
+    """One light's row in the keep's line: on, at pct % warm."""
+    return [entity, "on", round(pct * 255 / 100), "color_temp", 2700, [255, 167, 88]]
 
 
-def warm(pct, changed="2026-09-07T09:00:00+00:00"):
-    return held(
-        "on",
-        changed,
-        brightness=round(pct * 255 / 100),
-        color_mode="color_temp",
-        color_temp_kelvin=2700,
+def off(entity):
+    return [entity, "off", None, None, None, None]
+
+
+def press(ha, when, look, *rows):
+    """« Garder » pressed at `when` while the room wore `look`: the button's
+    state, and the line the keep automation logs on it."""
+    ha.states[BUTTON] = when
+    message = json.dumps({"look": look, "lights": list(rows)}, separators=(",", ":"))
+    ha.logbook.append(
+        {"entity_id": BUTTON, "when": when, "name": "Keep the look", "message": message}
     )
 
 
@@ -107,14 +116,45 @@ def test_set_leaf_places_a_new_key_above_a_sibling_and_a_word_stays_bare():
     assert flow({"main": "on"}) == '{ main: "on" }', "a plain string is still quoted"
 
 
+def test_the_press_is_written_down_by_an_automation_on_the_button(rendered, witness):
+    """The scenes package of a room that renders a look carries the button
+    and ONE automation: the button's state moves → a logbook line on the
+    button, the look the room wears and every light of it read by template.
+    The Réglages page carries the row."""
+    text = (rendered / "home-assistant/packages/scenes_living.yaml").read_text(encoding="utf-8")
+    pkg = yaml.safe_load(text)
+    assert pkg["input_button"]["living_keep"]["name"] == "Salon — Garder l'ambiance"
+    keep = next(a for a in pkg["automation"] if a["id"] == "regie_living_keep")
+    assert keep["triggers"] == [{"trigger": "state", "entity_id": BUTTON}]
+    (action,) = keep["actions"]
+    assert action["action"] == "logbook.log"
+    assert action["data"]["entity_id"] == BUTTON
+    message = action["data"]["message"]
+    for e in witness.room_lights(witness.area("living")):
+        assert e in message, e
+    assert (
+        "state_attr(e, 'brightness')" in message and "states('input_select.living_look')" in message
+    )
+    assert message.rstrip().endswith("| to_json }}")
+    phone = (rendered / "home-assistant/dashboards/phone.yaml").read_text(encoding="utf-8")
+    assert "entity: input_button.living_keep\n        name: Garder l'ambiance en cours" in phone
+    # a room that renders no look has no button and no line
+    assert not (rendered / "home-assistant/packages/scenes_bedroom_b.yaml").exists() or (
+        "bedroom_b_keep"
+        not in (rendered / "home-assistant/packages/scenes_bedroom_b.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
 def test_a_look_kept_on_the_phone_is_named_pulled_then_follows(secrets, tmp_path, house_with):
     """The living room wore cinema, the lamp was tuned to 20 % and « Garder »
-    pressed: the keep is read from the recorder at the press, named against
-    the file at every converge until `regie pull home.yml looks` writes the
-    one role that moved into the room's own line — every other byte kept —,
+    pressed: the keep's line is read from the logbook, named against the
+    file at every converge until `regie pull home.yml looks` writes the one
+    role that moved into the room's own line — every other byte kept —,
     then it follows the files. Both moved: a hand, `push` settles. A keep
-    while the room wore off, a palette look, or one the recorder no longer
-    holds, writes nothing and says why."""
+    while the room wore off or a look that moves, or one the logbook no
+    longer holds, writes nothing and says why."""
     path = house_with(lambda d: None)
     house = load_house(path)
     living = path.parent / "rooms" / "living.yml"
@@ -131,11 +171,8 @@ def test_a_look_kept_on_the_phone_is_named_pulled_then_follows(secrets, tmp_path
         "lamp": {"living_floor_lamp": {"brightness": 10, "ct": "warm"}},
     }
     # the press: the room wore cinema, the lamp at 20 % warm, the ceilings off
-    ha.states["input_button.living_keep"] = T1
-    ha.history["input_select.living_look"] = [held("cinema", "2026-09-07T09:00:00+00:00")]
-    ha.history["light.living_floor_lamp"] = [warm(20, "2026-09-07T09:11:00+00:00")]
-    for e in ("light.living_ceiling", "light.living_ceiling_2", "light.living_ceiling_3"):
-        ha.history[e] = [held("off", "2026-09-07T09:00:00+00:00")]
+    ceilings = ("light.living_ceiling", "light.living_ceiling_2", "light.living_ceiling_3")
+    press(ha, T1, "cinema", warm("light.living_floor_lamp", 20), *(off(e) for e in ceilings))
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert states(steps)["look living/cinema"] == "ok"
     assert detail(steps, "look living/cinema") == (
@@ -165,10 +202,10 @@ def test_a_look_kept_on_the_phone_is_named_pulled_then_follows(secrets, tmp_path
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert names(steps, "look living") == [], "settled: silent"
     # both moved: the lamp kept at 30 %, the file says 15 — a hand; push settles
-    ha.states["input_button.living_keep"] = T2
-    ha.history["light.living_floor_lamp"].append(warm(30, "2026-09-07T09:59:00+00:00"))
+    press(ha, T2, "cinema", warm("light.living_floor_lamp", 30), *(off(e) for e in ceilings))
     living.write_text(
-        after.replace("brightness: 20, ct: warm }, strip", "brightness: 15, ct: warm }, strip")
+        after.replace("brightness: 20, ct: warm }, strip", "brightness: 15, ct: warm }, strip"),
+        encoding="utf-8",
     )
     house = load_house(path)
     steps = apply(house, secrets, tmp_path, ha, check=False)
@@ -184,8 +221,7 @@ def test_a_look_kept_on_the_phone_is_named_pulled_then_follows(secrets, tmp_path
     assert names(steps, "look living") == []
     assert "brightness: 15" in living.read_text(encoding="utf-8"), "the file's word stood"
     # a keep while the room wore off: nothing to write, said once
-    ha.states["input_button.living_keep"] = T3
-    ha.history["input_select.living_look"].append(held("off", "2026-09-07T10:30:00+00:00"))
+    press(ha, T3, "off", *(off(e) for e in ceilings))
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert detail(steps, "look living") == (
         "kept 09-07 11:00 UTC while the room wore off — nothing to write "
@@ -194,25 +230,24 @@ def test_a_look_kept_on_the_phone_is_named_pulled_then_follows(secrets, tmp_path
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert names(steps, "look living") == []
     # a keep while the room wore a look that moves: the bulbs are the walk's
-    ha.states["input_button.living_keep"] = T4
-    ha.history["input_select.living_look"].append(held("party", "2026-09-07T11:30:00+00:00"))
+    press(ha, T4, "party", warm("light.living_floor_lamp", 20))
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert detail(steps, "look living/party") == (
         "kept 09-07 12:00 UTC while the room wore « Fête », a look whose bulbs are the "
         "palette's or a walk's — nothing to write"
     )
-    # a keep the recorder no longer holds (the memory lost, an old press found)
+    # a press the logbook holds no line for (older than the recorder's days)
     memory = json.loads((tmp_path / ".regie/looks.json").read_text())
     memory["living"]["kept"] = ""
     (tmp_path / ".regie/looks.json").write_text(json.dumps(memory))
-    ha.states["input_button.living_keep"] = OLD
+    ha.states[BUTTON] = OLD
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert detail(steps, "look living") == (
-        "kept 08-01 12:00 UTC — the recorder holds nothing that old any more: "
-        "nothing to write (keep again)"
+        "kept 08-01 12:00 UTC — the logbook holds no line for it (older than the recorder's "
+        "days, or the keep automation not rendered yet): nothing to write (keep again)"
     )
     # a check writes no memory
-    ha.states["input_button.living_keep"] = T4
+    ha.states[BUTTON] = T4
     apply(house, secrets, tmp_path, ha, check=True)
     memory = json.loads((tmp_path / ".regie/looks.json").read_text())
     assert memory["living"]["kept"] == OLD
@@ -236,12 +271,15 @@ def test_a_kept_house_look_lands_in_the_room_where_the_order_stays(secrets, tmp_
     assert "soft" not in yaml.safe_load(living.read_text(encoding="utf-8"))["scenes"]
     ha = FakeHA()
     apply(house, secrets, tmp_path, ha, check=False)
-    ha.states["input_button.living_keep"] = T1
-    ha.history["input_select.living_look"] = [held("soft", "2026-09-07T09:00:00+00:00")]
-    ha.history["light.living_ceiling"] = [warm(45)]
-    ha.history["light.living_ceiling_2"] = [warm(45)]
-    ha.history["light.living_ceiling_3"] = [held("off", "2026-09-07T09:00:00+00:00")]
-    ha.history["light.living_floor_lamp"] = [warm(100)]
+    press(
+        ha,
+        T1,
+        "soft",
+        warm("light.living_ceiling", 45),
+        warm("light.living_ceiling_2", 45),
+        off("light.living_ceiling_3"),
+        warm("light.living_floor_lamp", 100),
+    )
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert detail(steps, "look living/soft") == (
         "kept 09-07 09:12 UTC — edited on the phone (main.front_left brightness 30 → 45, "
@@ -285,9 +323,7 @@ def test_a_look_the_room_takes_as_it_is_becomes_its_own_line(secrets, tmp_path, 
     assert order.index("soft") == order.index("cinema") - 1
     ha = FakeHA()
     apply(house, secrets, tmp_path, ha, check=False)
-    ha.states["input_button.living_keep"] = T1
-    ha.history["input_select.living_look"] = [held("soft", "2026-09-07T09:00:00+00:00")]
-    ha.history["light.living_floor_lamp"] = [held("off", "2026-09-07T09:00:00+00:00")]
+    press(ha, T1, "soft", off("light.living_floor_lamp"))
     apply(house, secrets, tmp_path, ha, check=False)
     lines = P.pull(house, ha, tmp_path, ["looks"], P.house_files(house), link)
     assert lines[1] == "  + living.yml: scenes.soft.lamp on → off"

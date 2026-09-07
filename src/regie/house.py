@@ -841,6 +841,16 @@ class House:
                 out.setdefault(t["role"], []).append(t)
         return out
 
+    def room_lights(self, area: dict) -> list[str]:
+        """Every light with a role in the room, as the entities a look aims
+        at — what « Garder » writes down (0.36) and the keep reads back."""
+        return [
+            e
+            for things in self.roles_in(area["id"]).values()
+            for t in things
+            if t["kind"] == "light" and (e := self.entity(t))
+        ]
+
     def declared_roles(self, area: dict) -> dict[str, dict]:
         """The roles a room HAS: the ones its file declares, plus the ones its things carry."""
         out = {r: dict(spec or {}) for r, spec in (area.get("roles") or {}).items()}
