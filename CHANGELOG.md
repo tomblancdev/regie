@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.40.0 — une ampoule de couleur est déclarée avec tout ce qu'elle sait dire (2026-09-07)
+
+Zigbee2MQTT ne nomme à Home Assistant **qu'un seul** mode de couleur par
+lampe, et nomme `xy` dès que la définition le cite en premier — ce que font
+toutes les ampoules couleur IKEA (son `homeassistant.js`, lu à la source).
+Tant que rien ne parlait teinte c'était un détail ; **le marcheur parle
+teinte** (`moveToHue`, 0.39), et le cerveau refusait alors le mode que
+l'ampoule annonçait : `Invalid color mode 'hs' received`, une ligne à chaque
+entrée en mode teinte, sur chaque ampoule qui marche et sur le groupe de sa
+pièce (103 lignes sur dix entités, lues en direct).
+
+**Une ampoule couleur est désormais déclarée avec TOUS les modes qu'elle peut
+annoncer** — `xy`, `hs`, `color_temp` — par la surcharge de découverte que
+Zigbee2MQTT accepte par appareil (il la recopie telle quelle) et que Home
+Assistant valide (seuls ONOFF, BRIGHTNESS et un WHITE seul ne se combinent
+pas, son `light/__init__.py`). Quel que soit le mode annoncé, il est accepté :
+l'avertissement n'a plus d'où venir. Le groupe de la pièce est déclaré pareil,
+puisqu'il annonce ce que ses membres annoncent.
+
+**Ce que ça change pour la lumière.** Home Assistant passe `hs_color` tel quel
+dès que `hs` est supporté, donc la couleur arrive chez Zigbee2MQTT en teinte
+et saturation : envoyée en `moveToHueAndSaturation` à une ampoule dont le
+convertisseur porte la teinte (la E27 LED2109G6 — fin de l'aller-retour par xy
+que H42-r pointait), et **convertie en xy par Zigbee2MQTT, avec la correction
+de gamut de cet appareil**, pour une qui ne la porte pas (le GU10 LED2110R3 —
+lu à la source, `toZigbee.js` : « convert RGB/HSV to XY color mode »). Les
+deux atterrissent ; rien ne casse.
+
+La liste des modèles est celle du produit, pas d'une maison : elle recopie ce
+que les définitions de Zigbee2MQTT disent d'un modèle. Un modèle absent garde
+`xy`, le comportement d'aujourd'hui. `check` nomme ce qui la porte — jamais en
+silence.
+
 ## 0.39.3 — un fantôme qui n'est pas le nôtre est une note (2026-09-07)
 
 Le docteur appelait « fantôme » toute entité `unavailable` que le registre

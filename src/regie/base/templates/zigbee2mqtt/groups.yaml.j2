@@ -15,8 +15,17 @@
 # is absent from `bridge/groups` until it holds a light, and that is not a
 # fault to repair.
 {% for g in coordinator.groups %}
+{% set modes = group_colour_modes(g) %}
 '{{ g.number }}':
   friendly_name: {{ g.area.id }}
+{% if modes %}
+  # a room group reports whatever its members do, so it is declared with the
+  # same modes as the colour bulbs in it (0.40) — otherwise the brain refuses
+  # the group's own reading the moment one of them walks
+  homeassistant:
+    light:
+      supported_color_modes: [{{ modes | join(', ') }}]
+{% endif %}
 {% endfor %}
 {% if not coordinator.groups %}
 {}

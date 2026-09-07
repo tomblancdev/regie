@@ -129,6 +129,43 @@ WALK_SPAN = 170.0
 # re-anchored at each leg — the GU10's fallback if its firmware's blind ramp
 # reads as a jump at the end rather than a slide (the bench, the page).
 WALK_ORDERS = ("ramp", "move")
+# THE COLOUR MODES A ZIGBEE BULB IS DECLARED WITH (0.40). Zigbee2MQTT tells
+# Home Assistant ONE colour mode per light — xy whenever the definition lists
+# it first, which for every IKEA colour bulb it does (its homeassistant.js,
+# read at the source) — so a bulb that carries hue and saturation is told its
+# colour as xy and converts it back. That was a wart while nothing spoke hue;
+# the WALK does (`moveToHue`, 0.39), and the brain then refuses the very mode
+# the bulb reports: `Invalid color mode 'hs' received`, once per entry into
+# hue mode, on every walking bulb and its room group (read live 2026-09-07).
+#
+# A model here is declared to Home Assistant with BOTH — Zigbee2MQTT copies a
+# per-device `homeassistant:` override into the discovery payload verbatim
+# (its homeassistant.js), and Home Assistant accepts any set of colour modes
+# (its light/__init__.py: only ONOFF, BRIGHTNESS and a bare WHITE may not be
+# combined). So whichever mode a bulb reports is accepted, and the warning has
+# nowhere to come from. What it changes: Home Assistant hands `hs_color`
+# straight down when hs is supported, so colour reaches Zigbee2MQTT as hue and
+# saturation — sent as `moveToHueAndSaturation` to a bulb whose converter
+# carries hue (the E27), and converted to xy by Zigbee2MQTT, with that
+# device's own gamut correction, for one that does not (the GU10). Both land;
+# the first stops making the round trip through xy that H42-r warned about.
+#
+# The list is the product's, not a house's: it mirrors what Zigbee2MQTT's own
+# definitions say a model can do. A model absent from it keeps xy, which is
+# today's behaviour — the safe default. `check` names what carries it.
+COLOUR_MODES = ["xy", "hs", "color_temp"]
+ZIGBEE_COLOUR_MODELS = {
+    # IKEA TRÅDFRI, the CWS family: `color: {modes: [xy, hs]}` in
+    # zigbee-herdsman-converters (ikea.js) — the bulb speaks hue itself
+    "LED2109G6",  # E26/E27 globe, colour/white spectrum
+    "LED2111G6",  # E14/E12 globe, colour/white spectrum
+    # IKEA TRÅDFRI, `color: true` — xy in the converter, though the bulb
+    # declares hue and enhanced hue (capabilities 31, read at the V7 bench):
+    # declared with both all the same, so the walk's own hue mode is accepted;
+    # Zigbee2MQTT converts a hue command to xy for them
+    "LED2110R3",  # GU10 spot, colour/white spectrum
+    "LED1624G9",  # E14/E26/E27 globe, colour
+}
 # a group of lights earns a PAGE of its own at this many things, or as soon as it
 # holds groups (its layout's places). Below it the group is drawn where it stands,
 # its members under it: a step with one way on is not a step.
@@ -711,6 +748,18 @@ class House:
             if alias not in out:
                 out.append(alias)
         return out
+
+    def colour_modes(self, thing: dict) -> list[str] | None:
+        """The colour modes a Zigbee light is DECLARED with, or None to leave
+        Zigbee2MQTT's own choice alone (every bulb whose model the product does
+        not know to carry colour)."""
+        if thing.get("via") != "zigbee" or thing.get("kind") != "light":
+            return None
+        return COLOUR_MODES if thing.get("model") in ZIGBEE_COLOUR_MODELS else None
+
+    def colour_things(self) -> list[dict]:
+        """Every Zigbee light the house declares both colour modes for."""
+        return [t for t in self.things if self.colour_modes(t)]
 
     def coordinator_topics(self) -> dict[str, str]:
         """Each radio's base topic, by radio id — the naming rule, written once
@@ -2039,6 +2088,18 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
     zigbee_things = [t for t in house.things if t["via"] == "zigbee"]
     if zigbee_things and not coordinator_ids:
         errors.append(f"{len(zigbee_things)} zigbee thing(s) but no zigbee.coordinators")
+    # what colour language a bulb is told in (0.40) — never silence: a house
+    # reads here which of its lights are declared with every mode they can
+    # report, and every other Zigbee light keeps Zigbee2MQTT's own choice
+    colour = house.colour_things()
+    if colour:
+        hints.append(
+            f"{len(colour)} zigbee colour light(s) declared with "
+            f"{', '.join(COLOUR_MODES)} — their colour reaches the mesh as hue and "
+            f"saturation, and the walk's own hue mode is read back without a word "
+            f"({', '.join(sorted({t['model'] for t in colour}))}); every other "
+            "zigbee light keeps xy, which is Zigbee2MQTT's own choice"
+        )
     # the derived group numbers, checked for the collision they can have: two
     # rooms on one number would share a switch and a scene, in the bulbs'
     # own group tables, where nothing in this file would show it

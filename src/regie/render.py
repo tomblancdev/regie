@@ -157,6 +157,11 @@ def context(house: House, secrets: dict) -> dict:
         "place_labels": house.place_labels,
         "scene_plan": house.scene_plan,
         "drift_plan": house.drift_plan,
+        # a Zigbee light's declared colour modes, and a room group's (0.40)
+        "colour_modes": house.colour_modes,
+        "group_colour_modes": lambda g: house.colour_modes(
+            next((t for t in g["things"] if house.colour_modes(t)), {})
+        ),
         "scene_palette": house.scene_palette,
         "life_plan": house.life_plan,
         "moving": house.moving,

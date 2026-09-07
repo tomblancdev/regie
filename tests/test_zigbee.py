@@ -6,6 +6,7 @@ idempotence rather than asserting it."""
 from contextlib import contextmanager
 
 import pytest
+import yaml
 
 from regie.apply import Conductor, apply, pair_zigbee, zigbee_bindable, zigbee_kind
 from regie.errors import HouseError
@@ -601,3 +602,43 @@ def test_a_styrbar_bound_to_its_room_carries_one_binding_and_the_coordinator_lis
         "never removed as a member no row names"
     )
     assert not any(c[0] == "device/unbind" for c in z.calls[n:]), "nothing to strip twice"
+
+
+def test_a_colour_bulb_is_declared_with_every_mode_it_can_report(rendered):
+    """0.40: Zigbee2MQTT names ONE colour mode per light and names xy, and the
+    walk speaks hue (`moveToHue`, 0.39) — so the brain refused the very mode
+    the bulb reported, once per leg. A model the product knows to carry colour
+    is declared with both, through Zigbee2MQTT's own per-device discovery
+    override, and the room group holding it with the same."""
+    devices = yaml.safe_load(
+        (rendered / "zigbee2mqtt/main/devices.yaml").read_text(encoding="utf-8")
+    )
+    bulb = devices["0x000d6ffffe0000f1"]  # the witness's spare LED2109G6
+    assert bulb["friendly_name"] == "spare_bulb"
+    assert bulb["homeassistant"] == {"light": {"supported_color_modes": ["xy", "hs", "color_temp"]}}
+    # every other light keeps Zigbee2MQTT's own choice: a model the product
+    # does not know to carry colour is not declared anything
+    plain = [k for k, v in devices.items() if "homeassistant" not in v]
+    assert len(plain) == len(devices) - 1
+    assert "homeassistant" not in devices["0x000d6ffffe000002"]  # the floor lamp
+    groups = yaml.safe_load((rendered / "zigbee2mqtt/main/groups.yaml").read_text(encoding="utf-8"))
+    spare = next(g for g in groups.values() if g["friendly_name"] == "spare")
+    assert spare["homeassistant"]["light"]["supported_color_modes"] == [
+        "xy",
+        "hs",
+        "color_temp",
+    ], "a group reports what its members do"
+    living = next(g for g in groups.values() if g["friendly_name"] == "living")
+    assert "homeassistant" not in living, "no colour bulb in it: nothing declared"
+
+
+def test_the_house_says_which_lights_speak_hue(witness):
+    from regie.house import COLOUR_MODES
+
+    colour = witness.colour_things()
+    assert [t["id"] for t in colour] == ["spare_bulb"]
+    assert witness.colour_modes(colour[0]) == COLOUR_MODES
+    # a light of an unknown model, a remote, a Matter bulb: nothing
+    assert witness.colour_modes(witness.thing("living_floor_lamp")) is None
+    assert witness.colour_modes(witness.thing("spare_remote")) is None
+    assert witness.colour_modes(witness.thing("living_bulb")) is None

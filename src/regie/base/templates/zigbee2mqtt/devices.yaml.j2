@@ -8,8 +8,18 @@
 # `description:` (1.x) is dropped the next time Zigbee2MQTT writes the file,
 # and the two would disagree for ever.
 {% for t in coordinator.things %}
+{% set modes = colour_modes(t) %}
 '{{ t.ieee }}':
   friendly_name: {{ t.id }}
+{% if modes %}
+  # a colour bulb is declared with EVERY mode it can report (0.40): Zigbee2MQTT
+  # names one and would name xy, and the walk speaks hue — so the brain refused
+  # the mode the bulb reported and said so at every leg. This block is copied
+  # into the discovery payload as it stands (its homeassistant.js).
+  homeassistant:
+    light:
+      supported_color_modes: [{{ modes | join(', ') }}]
+{% endif %}
 {% endfor %}
 {% if not coordinator.things %}
 {}
