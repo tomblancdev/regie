@@ -131,10 +131,31 @@ def test_every_disagreement_is_a_red_line(witness, rendered_fresh, converged):
         },
         {"domain": "heos", "issue_id": "ignored", "ignored": True, "severity": "warning"},
     ]
-    ha.states["input_text.house_palette_perso1_name"] = "unavailable"
-    ha.attributes["input_text.house_palette_perso1_name"] = {"restored": True}
-    ha.states["input_number.house_palette_perso1_start"] = "unavailable"
-    ha.attributes["input_number.house_palette_perso1_start"] = {"restored": True}
+    # two of ours: a package rendered once and gone. A restored entity always
+    # HAS a registry row — that is what restored means — and the row is what
+    # tells ours from another integration's (0.39.3), so the double carries it:
+    # a YAML helper's row is keyed on its object id, never a `regie_` id (0.26.2)
+    for entity, platform in (
+        ("input_text.house_palette_perso1_name", "input_text"),
+        ("input_number.house_palette_perso1_start", "input_number"),
+    ):
+        ha.states[entity] = "unavailable"
+        ha.attributes[entity] = {"restored": True}
+        ha.entities.append(
+            {"entity_id": entity, "platform": platform, "unique_id": entity.split(".", 1)[1]}
+        )
+    # and one that is NOT ours: a cloud appliance's setting, whose integration
+    # came up without it. Named, never a red — the house did not mint that row
+    # and `apply` will never remove it
+    ha.states["select.hood_functional_light_color_temperature"] = "unavailable"
+    ha.attributes["select.hood_functional_light_color_temperature"] = {"restored": True}
+    ha.entities.append(
+        {
+            "entity_id": "select.hood_functional_light_color_temperature",
+            "platform": "home_connect",
+            "unique_id": "305030540342002302-Cooking.Hood.Setting.ColorTemperature",
+        }
+    )
     ha.states["switch.zigbee2mqtt_bridge_permit_join"] = "on"
     silent = witness.entity(next(t for t in witness.things if t["kind"] == "light"))
     ha.states[silent] = "unavailable"  # unplugged, still provided: a note
@@ -176,6 +197,13 @@ def test_every_disagreement_is_a_red_line(witness, rendered_fresh, converged):
         "input_number ×1: house_palette_perso1_start",
         "input_text ×1: house_palette_perso1_name",
     ]
+    # the appliance's row is said in full and is a NOTE: a converge does not
+    # die on a registry row the house never minted (0.39.3, read live on the
+    # hood — it cost every restart a red)
+    assert by["restored"].state == "note"
+    assert by["restored"].detail.startswith("1 row(s) another integration keeps")
+    assert "select ×1: hood_functional_light_color_temperature" in by["restored"].more[0]
+    assert "not ours to remove" in by["restored"].more[-1]
     assert by["mesh"].state == "red" and "the join window is open" in by["mesh"].detail
     assert by["things"].state == "note" and "1 of " in by["things"].detail
     assert silent in by["things"].detail

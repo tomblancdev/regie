@@ -26,7 +26,7 @@ from .errors import HouseError
 from .ha import HomeAssistant
 from .host import STATE, Runner, read_state
 from .house import House
-from .render import MANIFEST
+from .render import MANIFEST, OBJECT_DOMAINS
 from .up import HA_URL, _HaYaml, image_of, up
 
 MARKS = {"ok": "=", "red": "!", "note": "~"}
@@ -300,6 +300,7 @@ def brain(house: House, root: Path, ha: HomeAssistant, report: Report) -> None:
     with ha.ws() as ws:
         issues = (ws.call("repairs/list_issues") or {}).get("issues") or []
         log = ws.call("system_log/list") or []
+        registry = {e["entity_id"]: e for e in (ws.call("config/entity_registry/list") or [])}
 
     # the repairs the brain opened
     open_issues = [i for i in issues if not i.get("ignored")]
@@ -319,22 +320,57 @@ def brain(house: House, root: Path, ha: HomeAssistant, report: Report) -> None:
     else:
         report.add("ok", "repairs", "none open")
 
-    # the ghosts: what the registry keeps and nothing provides any more
-    ghosts: dict[str, list[str]] = {}
+    # the ghosts: what the registry keeps and nothing provides any more.
+    #
+    # OURS is a red — a package rendered once and gone leaves its entities
+    # behind (0.17's rule, and the 36 this doctor's first read found). ANOTHER
+    # INTEGRATION'S is a note, and 0.39.3 is where that was learnt: the hood's
+    # `select.hood_functional_light_color_temperature` reads restored whenever
+    # Home Connect comes up while the appliance is not reporting that setting —
+    # seven of that entry's sixteen entities were unavailable and only this one
+    # had no provider in the run — so every converge that restarted the brain
+    # failed on a registry row the house never minted and `apply` will never
+    # remove (the orphan rule touches ours alone). The line is still said, in
+    # full, with what to do about it; the play no longer dies on it.
+    ours: dict[str, list[str]] = {}
+    theirs: dict[str, list[str]] = {}
     for s in states:
-        if s.get("state") == "unavailable" and (s.get("attributes") or {}).get("restored"):
-            domain, obj = s["entity_id"].split(".", 1)
-            ghosts.setdefault(domain, []).append(obj)
-    if ghosts:
-        n = sum(len(v) for v in ghosts.values())
+        if s.get("state") != "unavailable" or not (s.get("attributes") or {}).get("restored"):
+            continue
+        row = registry.get(s["entity_id"]) or {}
+        domain, obj = s["entity_id"].split(".", 1)
+        mine = str(row.get("unique_id") or "").startswith("regie_") or (
+            row.get("platform") in OBJECT_DOMAINS
+        )
+        (ours if mine else theirs).setdefault(domain, []).append(obj)
+    if ours:
+        n = sum(len(v) for v in ours.values())
         report.add(
             "red",
             "ghosts",
             f"{n} the registry keeps and nothing provides any more (restored)",
-            [f"{d} ×{len(v)}: {', '.join(sorted(v))}" for d, v in sorted(ghosts.items())],
+            [f"{d} ×{len(v)}: {', '.join(sorted(v))}" for d, v in sorted(ours.items())],
+        )
+    elif theirs:
+        report.add(
+            "ok",
+            "ghosts",
+            "none of ours — the registry holds what the files render",
         )
     else:
         report.add("ok", "ghosts", "none — the registry holds what the files render")
+    if theirs:
+        n = sum(len(v) for v in theirs.values())
+        report.add(
+            "note",
+            "restored",
+            f"{n} row(s) another integration keeps and does not provide in this run",
+            [f"{d} ×{len(v)}: {', '.join(sorted(v))}" for d, v in sorted(theirs.items())]
+            + [
+                "not ours to remove (no regie_ id): the row goes when its integration "
+                "provides it again, or by hand in the entity registry"
+            ],
+        )
 
     # the mesh: the bridge connected, the join window closed
     if house.coordinators():

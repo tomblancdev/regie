@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.39.3 — un fantôme qui n'est pas le nôtre est une note (2026-09-07)
+
+Le docteur appelait « fantôme » toute entité `unavailable` que le registre
+garde et que rien ne fournit (`restored`) — et il est ROUGE, ce qui fait
+échouer la pièce. Lu en direct après le premier redémarrage du marcheur :
+`select.hood_functional_light_color_temperature` porte cette marque chaque
+fois que Home Connect démarre pendant que la hotte n'annonce pas ce réglage
+(sept des seize entités de cette entrée étaient indisponibles, celle-là seule
+sans fournisseur dans la session). **Chaque converge qui redémarre le cerveau
+échouait donc sur une ligne de registre que la maison n'a jamais créée et que
+`apply` n'enlèvera jamais** — sa règle d'orphelin ne touche que les nôtres.
+
+Le docteur sépare désormais les deux, en lisant le registre : **les nôtres**
+(un identifiant `regie_`, ou un domaine d'objet que la maison rend — script,
+helper, counter) restent **rouges**, c'est la règle de 0.17 et les 36
+fantômes de sa première lecture ; **celles d'une autre intégration** sont une
+**note** qui les nomme toutes et dit quoi en faire. La ligne est toujours
+dite ; la pièce ne meurt plus dessus.
+
 ## 0.39.2 — « indisponible » n'est pas « éteinte » (2026-09-07)
 
 La preuve du redémarrage, lue en direct : le cerveau revient à 13:46:39, la
