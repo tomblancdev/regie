@@ -361,3 +361,23 @@ def test_every_look_writes_the_rooms_memory_and_lets_the_sensors_go(rendered):
     assert not any(
         s.get("target", {}).get("entity_id") == "input_boolean.living_lit_by_motion" for s in living
     ), "no sensor in the living room: nothing to let go of"
+
+
+def test_a_group_takes_its_members_backend(witness):
+    """0.41: a walker may aim at a ROLE, which is a group and no thing of its
+    own. A group of Matter bulbs narrates every degree exactly like one of
+    them, so it is stepped without a transition too — read live on Le QG's
+    shelf strip, walking at 2.9 reports a second on the generic rung while its
+    own kind had already been quietened."""
+    house = witness
+    # a thing of its own resolves to the thing, group or no group
+    assert house.walk_backend("light.living_floor_lamp")["backend"] == "zigbee"
+    # a group with no thing of its own, holding Matter lights only
+    matter = [{"kind": "light", "via": "matter"}, {"kind": "light", "via": "thread"}]
+    assert house.walk_backend("light.living_shelf", matter)["backend"] == "matter"
+    # one Zigbee bulb among them and the group falls back to the slowest rung:
+    # a group is spoken to through Home Assistant, and a bulb that needs the
+    # transition to look like movement must keep it
+    mixed = matter + [{"kind": "light", "via": "zigbee"}]
+    assert house.walk_backend("light.living_shelf", mixed)["backend"] == "ha"
+    assert house.walk_backend("light.living_shelf", [])["backend"] == "ha"

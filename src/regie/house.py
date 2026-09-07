@@ -1312,9 +1312,11 @@ class House:
             self.__dict__["_shapes"] = load_shapes(self.fx().get("shapes"))
         return self.__dict__["_shapes"]
 
-    def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str]]:
-        """The (place, entity) pairs a drift walks, in layout order: the places
-        a prefix covers, an explicit list, or every filled place of the role."""
+    def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str, list]]:
+        """The (place, entity, things) a drift walks, in layout order: the
+        places a prefix covers, an explicit list, or every filled place of the
+        role. The things come along because a target that is a GROUP has no
+        thing of its own, and its backend is its members' (0.41)."""
         role = spec["role"]
         places = self.places_of(area, role)
         layout = ((area.get("roles") or {}).get(role) or {}).get("layout") or []
@@ -1332,7 +1334,7 @@ class House:
             )
         else:
             chosen = [p for p in exact if p in want]
-        return [(p, places[p]["entities"][0]) for p in chosen]
+        return [(p, places[p]["entities"][0], places[p]["things"]) for p in chosen]
 
     def drift_plan(self, area: dict, plan: dict) -> dict | None:
         cache = self.__dict__.setdefault("_drift_cache", {})
@@ -1365,7 +1367,9 @@ class House:
                 return None
             spec = dict(spec or {})
             spec.setdefault("role", movers[0]["role"])
-            pairs = [(t.get("place") or t["role"], t["entities"][0]) for t in movers]
+            pairs = [
+                (t.get("place") or t["role"], t["entities"][0], t.get("things")) for t in movers
+            ]
             gates = {t["entities"][0]: t["gate"] for t in pal["candidates"]}
             lo_expr, width_expr = "pal.lo", "pal.width"
             sat = f"{{{{ ({pal['pal']}).saturation }}}}"
@@ -1396,10 +1400,10 @@ class House:
         step = float(spec.get("step") or DRIFT["step"])
         order = (spec.get("order") or "ramp") if spec else "ramp"
         span = float((spec.get("span") if spec else None) or WALK_SPAN)
-        floor = self.colour_floor(area, spec["role"], [p for p, _ in pairs])
+        floor = self.colour_floor(area, spec["role"], [p[0] for p in pairs])
         n = len(pairs)
         walkers = []
-        for i, (place, entity) in enumerate(pairs):
+        for i, (place, entity, things) in enumerate(pairs):
             per = round(period[0] + (period[1] - period[0]) * (i / max(n - 1, 1)), 2)
             walkers.append(
                 {
@@ -1412,7 +1416,7 @@ class House:
                         per, round(i / n, 4), lo_expr, width_expr, prefix, accent_expr
                     ),
                     "gate": gates.get(entity),
-                    **self.walk_backend(entity),
+                    **self.walk_backend(entity, things),
                 }
             )
         return {
@@ -1450,18 +1454,27 @@ class House:
             "saturation": value["saturation"],
         }
 
-    def walk_backend(self, entity: str) -> dict:
+    def walk_backend(self, entity: str, things: list[dict] | None = None) -> dict:
         """How a walking bulb is spoken to, from the thing that carries it.
 
         `zigbee` — raw ZCL through Zigbee2MQTT's own `set` topic (the topic is
-        the radio's base and the thing's id, which IS its friendly name);
-        `matter` — Home Assistant's `light.turn_on` with a transition, the
-        bulb ramping by itself (Thread rides here too: same controller, same
-        service); anything else — `ha`, the stepped loop at the floor, which is
-        every walk before 0.39 and the rung a bulb with no ramp keeps."""
+        the radio's base and the thing's id, which IS its friendly name), and
+        the bulb then turns in silence; `matter` — Home Assistant's own
+        `light.turn_on`, stepped and with NO transition, because the bulb
+        narrates every degree it moves (Thread rides here too: same controller,
+        same service); anything else — `ha`, the stepped loop at the floor with
+        its transition, which is every walk before 0.39.
+
+        A walker may aim at a role or a place GROUP, which is no thing of its
+        own — `light.<room>_<role>`. It is spoken to through Home Assistant
+        whatever it holds, but a group of Matter bulbs narrates exactly like
+        one of them, so it is stepped without a transition too (0.41: Le QG's
+        shelf strip was walking at 2.9 reports a second on the generic rung
+        while its own kind had already been quietened)."""
         thing = self.thing_of(entity)
         if thing is None:
-            return {"backend": "ha"}
+            vias = {t.get("via") for t in (things or []) if t.get("kind") == "light"}
+            return {"backend": "matter" if vias and vias <= {"matter", "thread"} else "ha"}
         if thing["via"] == "zigbee":
             topics = self.__dict__.setdefault("_zigbee_topics", self.zigbee_topics())
             topic = topics.get(thing["id"])

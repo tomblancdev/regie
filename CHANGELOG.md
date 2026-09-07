@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.41.1 — un groupe prend le backend de ses membres (2026-09-07)
+
+0.41.0 a fait taire les ampoules Matter et laissé passer les GROUPES. Un
+marcheur peut viser un RÔLE — `light.<pièce>_<rôle>` —, qui n'est le *thing*
+de personne : il tombait sur le rung générique, avec sa transition, et un
+groupe de Govee raconte chaque degré exactement comme un Govee. Lu en direct :
+le ruban des étagères du QG marchait à **2,9 changements d'état par seconde**
+(1 014 lignes en cinq minutes, avec ses deux groupes en écho) pendant que le
+couloir, lui, était déjà passé à 0,32/s.
+
+Un groupe dont toutes les lumières sont Matter (ou Thread) est un marcheur
+Matter : pas à pas, sans transition. Une seule Zigbee parmi elles et le groupe
+garde le rung le plus lent avec sa transition — un groupe se parle par Home
+Assistant, et une ampoule sans rampe à elle a besoin de la transition pour que
+ce soit un mouvement.
+
 ## 0.41.0 — une ampoule qui raconte ses pas n'est pas priée de marcher (2026-09-07)
 
 Une jambe est UN ordre parce que l'ampoule bouge ensuite **en silence** : une
