@@ -15,7 +15,6 @@ from regie.dash import link
 from regie.edit import flow, set_leaf
 from regie.errors import HouseError
 from regie.house import load_house
-from regie.palette import PERIODS
 from tests.test_apply import (  # noqa: F401 — the two autouse stubs ride along
     FakeHA,
     _door_answers,
@@ -226,30 +225,24 @@ def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
         "edited on the phone (weight_libre 0.0 → 1.0), kept — not yet pulled: "
         "`regie pull home.yml palettes` writes it"
     )
-    store = {
-        "input_text.house_palette_k1_name": "Nuit rouge",
-        "input_number.house_palette_k1_start": "330.0",
-        "input_number.house_palette_k1_width": "60.0",
-        "input_number.house_palette_k1_accent": "200.0",
-        "input_number.house_palette_k1_saturation": "95.0",
-        "input_select.house_palette_k1_white": "warm",
-        "input_number.house_palette_k1_jitter": "0.0",
-        "input_number.house_palette_k1_alive": "0.0",
-        "input_boolean.house_palette_k1_alive_all": "off",
-        "input_text.house_palette_k1_shapes": "",
-        **{f"input_number.house_palette_k1_curve_{p}": "100.0" for p in PERIODS},
+    doc = {
+        "label": "Nuit rouge",
+        "band": [330, 30],
+        "accent": 200,
+        "saturation": 95,
+        "white": "warm",
     }
-    ha.states.update(store)
+    ha.palettes["nuit_rouge"] = dict(doc)
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert states(steps)["store k1 « Nuit rouge »"] == "ok"
-    assert detail(steps, "store k1 « Nuit rouge »") == (
+    assert states(steps)["palette « Nuit rouge »"] == "ok"
+    assert detail(steps, "palette « Nuit rouge »") == (
         "edited on the phone (kept as `nuit_rouge`), kept — not yet pulled: "
         "`regie pull home.yml palettes` writes it"
     )
     before = fx.read_text(encoding="utf-8")
     lines = P.pull(house, ha, tmp_path, ["palettes"], P.house_files(house), link)
     assert any(line.startswith("  + fx.yml: palettes.today.harmonies ") for line in lines)
-    assert "  + fx.yml: palettes.nuit_rouge ← store k1 « Nuit rouge »" in lines
+    assert "  + fx.yml: palettes.nuit_rouge ← palette « Nuit rouge »" in lines
     after = fx.read_text(encoding="utf-8")
     assert "    harmonies: { degrade: 5, duo: 3, uni: 2, libre: 1 }\n" in after
     assert (
@@ -257,7 +250,7 @@ def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
         "    saturation: 95\n    white: warm\n"
     ) in after
     assert "# signs of life" in after, "the file's notes kept"
-    assert after.count("\n") == before.count("\n") + 6, "the store's block and nothing else"
+    assert after.count("\n") == before.count("\n") + 6, "the palette's block and nothing else"
     assert (
         yaml.safe_load(after)["palettes"]["nuit_bleue"]
         == yaml.safe_load(before)["palettes"]["nuit_bleue"]
@@ -265,30 +258,28 @@ def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
     house = load_house(path)
     steps = apply(house, secrets, tmp_path, ha, check=False)
     assert detail(steps, "palette rules") == "follows the files"
-    assert states(steps)["store k1 « Nuit rouge »"] == "changed"
-    assert detail(steps, "store k1 « Nuit rouge »") == "freed — the files carry `nuit_rouge` now"
-    assert ha.states["input_text.house_palette_k1_name"] == ""
+    assert states(steps)["palette « Nuit rouge »"] == "changed"
+    assert detail(steps, "palette « Nuit rouge »") == "freed — the files carry `nuit_rouge` now"
+    assert "nuit_rouge" not in ha.palettes, "the document is deleted, not blanked"
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert "store k1 « Nuit rouge »" not in states(steps), "a free store says nothing"
+    assert "palette « Nuit rouge »" not in states(steps), "a store with nothing in it says nothing"
     # kept again with a number touched: the files carry it differently — a hand
-    ha.states.update(store)
-    ha.states["input_number.house_palette_k1_accent"] = "120.0"
+    ha.palettes["nuit_rouge"] = {**doc, "accent": 120}
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert states(steps)["store k1 « Nuit rouge »"] == "hand"
-    assert detail(steps, "store k1 « Nuit rouge »") == (
+    assert states(steps)["palette « Nuit rouge »"] == "hand"
+    assert detail(steps, "palette « Nuit rouge »") == (
         "edited on the phone (kept as `nuit_rouge`) and the files moved too (accent 120 → 200) "
         "— kept, by hand: `regie pull home.yml palettes` keeps the phone's, "
         "`regie push home.yml palettes` the files'"
     )
-    assert ha.states["input_text.house_palette_k1_name"] == "Nuit rouge", "kept"
+    assert "nuit_rouge" in ha.palettes, "kept"
     lines = P.push(house, ha, tmp_path, ["palettes"], link)
-    assert "  + store k1 « Nuit rouge »: freed — the files' version stands" in lines
-    assert ha.states["input_text.house_palette_k1_name"] == ""
-    # a store the files do not carry is not push's to free
-    ha.states.update(store)
-    ha.states["input_text.house_palette_k1_name"] = "Aube"
+    assert "  + palette « Nuit rouge »: freed — the files' version stands" in lines
+    assert "nuit_rouge" not in ha.palettes
+    # a palette the files do not carry is not push's to free
+    ha.palettes["aube"] = {**doc, "label": "Aube"}
     P.push(house, ha, tmp_path, ["palettes"], link)
-    assert ha.states["input_text.house_palette_k1_name"] == "Aube"
+    assert "aube" in ha.palettes
 
 
 def test_the_plans_draft_is_the_same_thing_under_the_same_rule(secrets, tmp_path, house_with):

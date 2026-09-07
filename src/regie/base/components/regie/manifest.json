@@ -1,11 +1,11 @@
 {
   "domain": "regie",
   "name": "La Régie",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "documentation": "https://github.com/tomblancdev/regie",
   "issue_tracker": "https://github.com/tomblancdev/regie/issues",
   "codeowners": ["@tomblancdev"],
-  "dependencies": ["conversation"],
+  "dependencies": ["conversation", "sensor", "websocket_api"],
   "after_dependencies": ["light", "mqtt"],
   "integration_type": "service",
   "iot_class": "calculated",

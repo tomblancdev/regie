@@ -57,6 +57,11 @@ def test_the_porter_is_configured_and_its_component_laid_down(rendered):
         # walker is its second tenant and needs no pack to be asked for
         "walk.py",
         "walker.py",
+        # 0.42: the palette's three — the arithmetic the engine reads by path,
+        # the store behind its four websocket doors, the sensor
+        "palette.py",
+        "palettes.py",
+        "sensor.py",
         "services.yaml",
     }
 

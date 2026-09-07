@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.42.0 — une palette gardée est un document, et le tirage n'est écrit qu'une fois (2026-09-07)
+
+**V8a de l'audit, deuxième marche de H51.** Une palette gardée sur le
+téléphone, c'étaient **dix-sept helpers dans une case numérotée**, huit cases,
+plus le tirage du jour **écrit deux fois** : en Python pour `regie palette`, et
+en Jinja — deux cents lignes que le moteur générait — pour
+`sensor.house_palette`, les deux tenues d'accord par un test sur dix ans de
+jours. Deux cents entités portaient le mot *palette* dans le cerveau.
+
+**Les palettes gardées sont des documents** dans le store du composant
+(`.storage/regie.palettes`), écrits dans la forme même du fichier (`band`,
+`level`, `alive`, `life`) : `regie pull` en pose un dans `fx.yml` tel quel, et
+le capteur les lit par la même porte qu'une palette nommée dans le fichier.
+Plus de plafond, plus de case, plus de helper fantôme après une suppression,
+plus rien à semer au converge. L'Atelier les lit et les écrit par **quatre
+commandes websocket** — `regie/palettes/list · save · delete · random` —
+derrière « Nouvelle », « Enregistrer sous », « Supprimer » et « Au hasard ».
+
+**Le tirage n'est écrit qu'une fois.** Il vit dans le `palette.py` du
+composant : le cerveau l'importe comme un de ses modules, le moteur le lit
+**par chemin** (`regie.component`, le chargeur des hooks de pack, 0.38).
+`sensor.house_palette` est le capteur du composant, son état la SOURCE que le
+select nomme, ses attributs la palette, le mot affiché et **les tirages de
+chaque pièce** — que le script d'une ambiance lit à la clé que le rendu a
+frappée, au lieu de refaire l'arithmétique en Jinja. Le select tient ses
+options du composant (l'automatisation « les noms » part avec le reste).
+
+**La preuve, des deux côtés.** `tests/frozen_0_41.py` garde les générateurs de
+0.41 tels quels, et l'arithmétique restée dit **octet pour octet** ce que celle
+qui est partie disait, sur dix ans de jours et deux tirages — pour le jour
+comme pour les tirages de pièce. Sur le cerveau, `palette_proof.py` (le-squat)
+écrit la valeur du capteur pour onze tirages avant la marche et la relit après.
+
+Ce qui reste des helpers : **les cinq commandes de la famille** — le select,
+« Change à », « Une autre », « Repeint les pièces », l'interrupteur « Palette du
+jour » — et **les règles du jour**, que V8b déplacera dans le même store.
+
+**En montant depuis 0.41 :** une palette encore gardée dans une case au moment
+de la marche part avec les helpers (le store commence vide, et les cases sont
+retirées comme orphelines). `regie pull home.yml palettes` AVANT la montée la
+pose dans `fx.yml` — c'est la porte qui existe pour ça. Sur la maison où c'est
+né les huit cases étaient vides, lu en direct avant de commencer.
+
+**Le piège lu à la source :** Home Assistant fusionne la config d'un package
+**récursivement** et passe **chaque liste** par `cv.remove_falsy` — `avoid:
+[0, 60]` serait arrivé `[60]` et `alive: [0, all]` serait arrivé `[all]`, sans
+une ligne d'erreur nulle part. Le bloc `regie: palette:` est donc **un scalaire
+JSON** (un bloc littéral, qui se lit encore), que le composant parse lui-même.
+
+Trouvé à côté : le tirage d'une pièce prenait son `alive` des règles du
+FICHIER même quand une palette nommée était en force ; il le prend maintenant
+de la palette en force, comme il prenait déjà son éparpillement.
+`controls.palette: { keep: N }` ne borne plus rien — `check` le dit, `palette:
+true` suffit.
+
 ## 0.41.2 — un rôle qui ne tient qu'une ampoule EST cette ampoule (2026-09-07)
 
 Un rôle qui ne tient qu'une lampe reste un groupe pour Home Assistant

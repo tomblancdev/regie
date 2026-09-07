@@ -351,42 +351,44 @@ def read_plan(house, root: Path, draft: dict | None, ws, link) -> Owned | None:
 
 
 # --- the palette stores ------------------------------------------------------------------
-def read_stores(house, ha) -> list[Owned]:
-    """Every store that holds a palette: the phone's reading is the store, the
-    files' is the named palette of that slug (or nothing), the seed is free —
-    a store the files carry as it stands is freed, one the files carry
-    differently waits for a hand."""
+def read_stores(house, ws) -> list[Owned]:
+    """Every palette kept on the phone: the phone's reading is the document in
+    the component's store, the files' is the named palette of that slug (or
+    nothing), the seed is free — a document the files carry as it stands is
+    freed, one the files carry differently waits for a hand.
+
+    The eight numbered slots became documents at 0.42 (the audit's V8a): the
+    reading is one websocket call instead of a hundred and thirty-six REST
+    reads, and freeing one is a delete instead of a name blanked."""
     if not house.has_pack("palette"):
         return []
-
-    def read(e):
-        status, st = ha.get(f"/api/states/{e}")
-        return st if status == 200 else None
-
+    try:
+        answer = ws.call("regie/palettes/list") or {}
+    except HouseError as exc:
+        raise HouseError(
+            "the palette's store does not answer — the pack renders `regie: palette:` and the "
+            "brain reads it once at start: has it restarted since the last `regie up`? "
+            f"({exc})"
+        ) from exc
+    docs = answer.get("palettes") or {}
     named = house.palettes()["named"]
     out = []
-    for i in range(1, palette_mod.keep_of(house) + 1):
-        prefix = palette_mod.store_prefix(i)
-        p = palette_mod.store_from_helpers(prefix, read)
-        if not p:
-            continue
+    for pid, doc in sorted(docs.items()):
+        p = palette_mod.store_clean(doc)
         slug = palette_mod.slug(p["label"])
         theirs = named.get(slug)
         if theirs is None:
             theirs = next((v for v in named.values() if v.get("label") == p["label"]), None)
             slug = next((k for k, v in named.items() if v is theirs), slug)
 
-        def write(_value, prefix=prefix):
-            ha.post(
-                "/api/services/input_text/set_value",
-                {"entity_id": f"input_text.{prefix}_name", "value": ""},
-            )
+        def write(_value, pid=pid):
+            ws.call("regie/palettes/delete", palette_id=pid)
 
         mine, yours = palette_mod.store_normal(p), palette_mod.store_normal(theirs)
         out.append(
             Owned(
                 kind="palettes",
-                name=f"store {prefix.rsplit('_', 1)[1]} « {p['label']} »",
+                name=f"palette « {p['label']} »",
                 files=yours,
                 phone=mine,
                 seed=None,
@@ -916,9 +918,9 @@ def pull(house, ha, root: Path, kinds: list[str], files: dict, link) -> list[str
             out += pull_plan(house, ws, files)
     if "palettes" in kinds and house.has_pack("palette"):
         out.append("palettes:")
-        out += pull_palettes(house, ha, read_stores(house, ha), files) or [
-            "  = nothing the phone moved"
-        ]
+        with ha.ws() as ws:
+            kept = read_stores(house, ws)
+        out += pull_palettes(house, ha, kept, files) or ["  = nothing the phone moved"]
     if "looks" in kinds:
         # the memory is read, never written here: the next converge settles a
         # keep the files now agree with
@@ -963,10 +965,11 @@ def push(house, ha, root: Path, kinds: list[str], link) -> list[str]:
                 o.remember(o.files)
                 out.append(f"  + {o.name}: seeded from the files")
         write_marks(root, marks)
-        for o in read_stores(house, ha):
-            if o.files is not None and o.phone != o.files:
-                o.write(None)
-                out.append(f"  + {o.name}: freed — the files' version stands")
+        with ha.ws() as ws:
+            for o in read_stores(house, ws):
+                if o.files is not None and o.phone != o.files:
+                    o.write(None)
+                    out.append(f"  + {o.name}: freed — the files' version stands")
     if "looks" in kinds:
         memory = read_marks(root, LOOKS)
         kept, _ = read_looks(house, ha, memory)

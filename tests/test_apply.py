@@ -99,6 +99,8 @@ class FakeHA(HomeAssistant):
         self.changed: dict[str, str] = {}  # a state's last_changed, when a test gives one
         # the logbook (0.36): the lines « Garder » wrote — entity_id, when, name, message
         self.logbook: list[dict] = []
+        # the palette's store (0.42): the component's documents, by id
+        self.palettes: dict[str, dict] = {}
         self.version = "2026.8.3"  # what /api/config says
         self.config_result = "valid"  # what check_config says
         self.issues: list[dict] = []  # the repairs the brain opened
@@ -1030,6 +1032,22 @@ class FakeHA(HomeAssistant):
             assert any(p["id"] == payload["pipeline_id"] for p in self.pipelines)
             self.preferred = payload["pipeline_id"]
             return None
+        # the palette's store (0.42): the four doors the Atelier and the pull use
+        if type_ == "regie/palettes/list":
+            return {
+                "palettes": {k: dict(v) for k, v in self.palettes.items()},
+                "source": "today",
+                "auto": "Auto",
+            }
+        if type_ == "regie/palettes/save":
+            from regie import palette as palette_mod
+
+            doc = palette_mod.store_clean(payload["palette"])
+            pid = payload.get("palette_id") or palette_mod.slug(doc["label"])
+            self.palettes[pid] = doc
+            return {"palette_id": pid, "palette": doc}
+        if type_ == "regie/palettes/delete":
+            return {"deleted": self.palettes.pop(payload["palette_id"], None) is not None}
         raise AssertionError(type_)
 
 

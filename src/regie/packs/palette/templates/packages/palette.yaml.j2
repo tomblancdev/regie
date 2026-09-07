@@ -1,12 +1,28 @@
-# rendered by La Régie — the palette (pack palette, 0.20 → 0.24): ONE value every look
-# may read, sensor.house_palette. The select says which source fills it: Auto =
-# the day's draw within the rules the family edits on the phone (seeded from
-# fx.yml, following the file until the phone touches them), a palette named in
-# fx.yml, or a palette KEPT on the phone under a free name (a store; its number
-# is plumbing, its name is the face). `regie palette pull` brings the stores and
-# the rules into the file; a store the file carries is freed at the converge.
+# rendered by La Régie — the palette (pack palette, 0.20 → 0.42): ONE value every
+# look may read, sensor.house_palette. The select says which source fills it:
+# Auto = the day's draw within the rules the family edits on the phone (seeded
+# from fx.yml, following the file until the phone touches them), a palette named
+# in fx.yml, or a palette KEPT on the phone under a free name.
+#
+# WHAT LEFT THIS FILE AT 0.42 (the audit's V8a): a kept palette was seventeen
+# helpers in one of eight numbered slots and the sensor a two-hundred-line
+# generated template. Both are the COMPONENT's now — the documents live in
+# `.storage/regie.palettes` behind four websocket commands the Atelier calls,
+# and the sensor is computed in Python from the arithmetic the engine reads by
+# path. The block `regie: palette:` below is what only the FILES can say.
+# What stays here is the family's own: the select, « Change à », « Une autre »,
+# « Repeint les pièces », the switch « Palette du jour » — and the day's RULES,
+# still helpers (V8b moves them into the same store).
 {% set h = palette.house %}
 {% set px = h.rules_prefix %}
+regie:
+  # ONE JSON SCALAR, not a YAML block: Home Assistant merges a package's config
+  # recursively and passes every LIST it meets through `cv.remove_falsy`, so
+  # `avoid: [0, 60]` would arrive `[60]` and `alive: [0, all]` would arrive
+  # `[all]` (config.py `_recursive_merge`, read at the source). A scalar crosses
+  # the merge untouched — the component parses it itself.
+  palette: |
+{{ palette.config | indent(4, first=True) }}
 input_select:
   house_palette:
     name: {{ labels.ui.palette | to_yaml }}
@@ -14,15 +30,6 @@ input_select:
     options:
 {% for opt in palette.options %}
       - {{ opt.label | to_yaml }}
-{% endfor %}
-{% for st in h.stores %}
-  {{ st.prefix }}_white:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.atelier_white) | to_yaml }}
-    icon: mdi:white-balance-sunny
-    options:
-{% for w in h.whites %}
-      - {{ w }}
-{% endfor %}
 {% endfor %}
 input_datetime:
   house_palette_turns:
@@ -48,11 +55,6 @@ input_boolean:
   {{ px }}_alive_all:
     name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
     icon: mdi:motion
-{% for st in h.stores %}
-  {{ st.prefix }}_alive_all:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
-    icon: mdi:motion
-{% endfor %}
 counter:
   house_palette_roll:
     name: {{ labels.ui.palette_roll | to_yaml }}
@@ -64,19 +66,6 @@ input_button:
   house_palette_another:
     name: {{ labels.ui.palette_another | to_yaml }}
     icon: mdi:dice-multiple
-{% if h.stores %}
-  house_palette_new:
-    name: {{ labels.ui.palette_new | to_yaml }}
-    icon: mdi:plus-circle-outline
-{% for st in h.stores %}
-  {{ st.prefix }}_random:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_random) | to_yaml }}
-    icon: mdi:dice-5-outline
-  {{ st.prefix }}_delete:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_delete) | to_yaml }}
-    icon: mdi:delete-outline
-{% endfor %}
-{% endif %}
 input_number:
 {% for key, spec in h.rule_numbers.items() %}
   {{ px }}_{{ key }}:
@@ -87,33 +76,11 @@ input_number:
     mode: box
     icon: mdi:tune-variant
 {% endfor %}
-{% for st in h.stores %}
-{% for key, spec in h.store_numbers.items() %}
-  {{ st.prefix }}_{{ key }}:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui['store_' ~ key]) | to_yaml }}
-    min: {{ spec[0] }}
-    max: {{ spec[1] }}
-    step: {{ spec[2] }}
-    initial: {{ spec[3] }}
-    mode: box
-    icon: mdi:tune-variant
-{% endfor %}
-{% endfor %}
 input_text:
   {{ px }}_shapes:
     name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.store_shapes) | to_yaml }}
     icon: mdi:flash-alert-outline
     max: 120
-{% for st in h.stores %}
-  {{ st.prefix }}_name:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_name) | to_yaml }}
-    icon: mdi:tag-outline
-    max: 40
-  {{ st.prefix }}_shapes:
-    name: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.store_shapes) | to_yaml }}
-    icon: mdi:flash-alert-outline
-    max: 120
-{% endfor %}
 automation:
   # « Une autre »: the roll moves, the day's draw changes — for the day (La Régie, pack palette)
   - id: regie_house_palette_another
@@ -128,149 +95,6 @@ automation:
       - action: counter.increment
         target:
           entity_id: counter.house_palette_roll
-{% if h.stores %}
-  # THE NAMES ARE THE FACE (0.24): the select lists the day, the file's palettes
-  # and every kept name — kept in step here whenever a name moves, and at start
-  - id: regie_house_palette_names
-    alias: {{ (labels.ui.palette ~ ' — ' ~ labels.ui.palette_names) | to_yaml }}
-    description: the select « La palette » offers the kept palettes by name (La Régie, pack palette)
-    mode: queued
-    triggers:
-      - trigger: homeassistant
-        event: start
-{% for st in h.stores %}
-      - trigger: state
-        entity_id: input_text.{{ st.prefix }}_name
-{% endfor %}
-    actions:
-      - variables:
-          was: "{{ '{{' }} states('input_select.house_palette') {{ '}}' }}"
-          names: >-
-            {{ '{%' }} set ns = namespace(o={{ palette.options | map(attribute='label') | list | tojson | replace('"', "'") }}) {{ '%}' }}
-{% for st in h.stores %}
-            {{ '{%' }} set n = states('input_text.{{ st.prefix }}_name') {{ '%}' }}{{ '{%' }} if n not in ['', 'unknown', 'unavailable'] and n not in ns.o {{ '%}' }}{{ '{%' }} set ns.o = ns.o + [n] {{ '%}' }}{{ '{%' }} endif {{ '%}' }}
-{% endfor %}
-            {{ '{{' }} ns.o {{ '}}' }}
-      - action: input_select.set_options
-        target:
-          entity_id: input_select.house_palette
-        data:
-          options: "{{ '{{' }} names {{ '}}' }}"
-      # a kept palette RENAMED while selected stays selected under its new name
-      # (set_options falls back to the first option otherwise — read live)
-      - if:
-          - condition: template
-            value_template: "{{ '{{' }} trigger.platform == 'state' and trigger.from_state is not none and trigger.from_state.state == was and trigger.to_state.state in names {{ '}}' }}"
-        then:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.house_palette
-            data:
-              option: "{{ '{{' }} trigger.to_state.state {{ '}}' }}"
-  # « Nouvelle » (0.24): the first free store takes a copy of the palette in force,
-  # under a name to change; the select takes it
-  - id: regie_house_palette_new
-    alias: {{ (labels.ui.palette ~ ' — ' ~ labels.ui.palette_new) | to_yaml }}
-    description: keep a copy of the palette in force in the first free store, to edit (La Régie, pack palette)
-    mode: single
-    triggers:
-      - trigger: state
-        entity_id: input_button.house_palette_new
-        not_from: [unavailable]
-    actions:
-      - variables:
-          p: "{{ '{{' }} state_attr('sensor.house_palette', 'palette') {{ '}}' }}"
-      - choose:
-{% for st in h.stores %}
-          - conditions:
-              - condition: template
-                value_template: "{{ '{{' }} states('input_text.{{ st.prefix }}_name') in ['', 'unknown', 'unavailable'] {{ '}}' }}"
-            sequence:
-{% for key, expr in {'start': 'p.lo', 'width': 'p.width', 'accent': '(p.accent if p.accent is not none else p.lo)', 'saturation': 'p.saturation', 'jitter': '(p.jitter | int(0))', 'curve_morning': "(p.curve.morning if p.curve else 100)", 'curve_day': "(p.curve.day if p.curve else 100)", 'curve_evening': "(p.curve.evening if p.curve else 100)", 'curve_night': "(p.curve.night if p.curve else 100)", 'alive': "(p.alive if p.alive is number else (p.alive[1] if p.alive is sequence and p.alive[1] is number else 0))", 'every_min': "(p.life.every[0] if p.life else 120)", 'every_max': "(p.life.every[1] if p.life else 600)"}.items() %}
-              - action: input_number.set_value
-                target:
-                  entity_id: input_number.{{ st.prefix }}_{{ key }}
-                data:
-                  value: "{{ '{{' }} {{ expr }} {{ '}}' }}"
-{% endfor %}
-              - action: input_select.select_option
-                target:
-                  entity_id: input_select.{{ st.prefix }}_white
-                data:
-                  option: "{{ '{{' }} p.white if p.white in {{ h.whites | tojson | replace('"', "'") }} else 'warm' {{ '}}' }}"
-              - action: "input_boolean.turn_{{ '{{' }} 'on' if p.alive == 'all' else 'off' {{ '}}' }}"
-                target:
-                  entity_id: input_boolean.{{ st.prefix }}_alive_all
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.{{ st.prefix }}_shapes
-                data:
-                  value: "{{ '{{' }} (p.life.shapes | join(', ')) if p.life else '' {{ '}}' }}"
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.{{ st.prefix }}_name
-                data:
-                  value: {{ (labels.ui.palette_new_name ~ ' ' ~ st.n) | to_yaml }}
-              - delay:
-                  seconds: 1
-              - action: input_select.select_option
-                target:
-                  entity_id: input_select.house_palette
-                data:
-                  option: {{ (labels.ui.palette_new_name ~ ' ' ~ st.n) | to_yaml }}
-{% endfor %}
-{% for st in h.stores %}
-  # « Au hasard » on a store: the day's draw from a random seed, with the day's rules
-  - id: regie_{{ st.prefix }}_random
-    alias: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_random) | to_yaml }}
-    description: draw this kept palette again at random, within the day's rules (La Régie, pack palette)
-    mode: single
-    triggers:
-      - trigger: state
-        entity_id: input_button.{{ st.prefix }}_random
-        not_from: [unavailable]
-    actions:
-      - variables:
-          p: >-
-{{ palette.random | indent(12, first=True) }}
-{% for key, expr in {'start': 'p.lo', 'width': 'p.width', 'accent': 'p.accent', 'saturation': 'p.saturation', 'jitter': 'p.jitter'}.items() %}
-      - action: input_number.set_value
-        target:
-          entity_id: input_number.{{ st.prefix }}_{{ key }}
-        data:
-          value: "{{ '{{' }} {{ expr }} {{ '}}' }}"
-{% endfor %}
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.{{ st.prefix }}_white
-        data:
-          option: "{{ '{{' }} p.white {{ '}}' }}"
-  # « Supprimer » on a store: its name goes, the select forgets it
-  - id: regie_{{ st.prefix }}_delete
-    alias: {{ (labels.ui.palette_kept ~ ' ' ~ st.n ~ ' — ' ~ labels.ui.palette_delete) | to_yaml }}
-    description: forget this kept palette (La Régie, pack palette)
-    mode: single
-    triggers:
-      - trigger: state
-        entity_id: input_button.{{ st.prefix }}_delete
-        not_from: [unavailable]
-    actions:
-      - if:
-          - condition: template
-            value_template: "{{ '{{' }} is_state('input_select.house_palette', states('input_text.{{ st.prefix }}_name')) {{ '}}' }}"
-        then:
-          - action: input_select.select_option
-            target:
-              entity_id: input_select.house_palette
-            data:
-              option: {{ palette.options[0].label | to_yaml }}
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.{{ st.prefix }}_name
-        data:
-          value: ""
-{% endfor %}
-{% endif %}
 {% if h.repaint %}
   # « Repeint les pièces » (0.23): when the palette changes — the hour, the roll,
   # the select — every room LIT in a look that reads it takes it again; a dark
@@ -325,41 +149,3 @@ automation:
                 continue_on_error: true
 {% endfor %}
 {% endif %}
-template:
-  # the palette: re-read every minute (the hour it turns), at start, and when
-  # the select, the hour, the roll, the rules or a store's helpers move
-  - triggers:
-      - trigger: time_pattern
-        minutes: "/1"
-      - trigger: homeassistant
-        event: start
-      - trigger: state
-        entity_id:
-          - input_select.house_palette
-          - input_datetime.house_palette_turns
-          - counter.house_palette_roll
-          - input_text.{{ px }}_shapes
-          - input_boolean.{{ px }}_alive_all
-{% for key in h.rule_numbers %}
-          - input_number.{{ px }}_{{ key }}
-{% endfor %}
-{% for st in h.stores %}
-{% for key in h.store_numbers %}
-          - input_number.{{ st.prefix }}_{{ key }}
-{% endfor %}
-          - input_select.{{ st.prefix }}_white
-          - input_boolean.{{ st.prefix }}_alive_all
-          - input_text.{{ st.prefix }}_name
-          - input_text.{{ st.prefix }}_shapes
-{% endfor %}
-    sensor:
-      - name: house_palette
-        unique_id: regie_house_palette
-        icon: mdi:palette
-        state: >-
-{{ palette.state | indent(10, first=True) }}
-        attributes:
-          label: >-
-{{ palette.label | indent(12, first=True) }}
-          palette: >-
-{{ palette.attr | indent(12, first=True) }}

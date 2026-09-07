@@ -1,5 +1,13 @@
-"""La Palette du jour (0.20) — the value, the draw, the template, the checks."""
+"""La Palette du jour (0.20) — the value, the draw, the store, the checks.
 
+Since 0.42 (the audit's V8a) the draw is written ONCE, in the component's own
+`palette.py`; the sensor is the component's and the two-hundred-line generated
+template is gone. The proof H51 asked for is here: `frozen_0_41.py` carries the
+generators as they stood, and the arithmetic that stayed must say byte for byte
+what the arithmetic that went said, over ten years of days and every roll.
+"""
+
+import ast
 import datetime as dt
 import json
 
@@ -10,6 +18,8 @@ import yaml
 from regie import palette as P
 from regie.errors import HouseError
 from regie.house import load_house
+
+from . import frozen_0_41 as OLD
 
 RULES = P.normalise(
     {
@@ -65,9 +75,11 @@ def test_life_comes_on_about_half_the_days():
     assert p["life"] == {"shapes": ["glitch"], "every": [120, 600]}
 
 
-def test_the_template_agrees_with_python_over_ten_years():
-    """One arithmetic, two runtimes: the sensor's Jinja and `regie palette`."""
-    body = P.jinja_body(RULES, SALT)
+def test_the_draw_is_byte_for_byte_the_template_it_replaced():
+    """V8a's proof: the sensor left its generated Jinja and became Python, and
+    the value did not move — the 0.41 template, frozen, against the draw the
+    component runs now, over ten years of days and two rolls."""
+    body = OLD.jinja_body(RULES, SALT)
     tpl = jinja2.Environment().from_string(
         "{% set day = D %}{% set roll = R %}" + body + "{{ palette | tojson }}"
     )
@@ -145,54 +157,117 @@ def test_check_on_a_named_palette():
     assert any("crosses the avoided quarter" in h for h in hints)
 
 
-def test_the_witness_renders_the_sensor_and_the_helpers(rendered, witness):
+def test_the_witness_renders_the_component_and_the_familys_helpers(rendered, witness):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/palette.yaml").read_text())
-    # the day, the named one, then the Atelier and its slots (0.23)
+    # the day, the named one; the kept names join at runtime (the component)
     assert pkg["input_select"]["house_palette"]["options"][:2] == ["Du jour", "Nuit bleue"]
     assert pkg["counter"]["house_palette_roll"]["restore"] is True
     another = pkg["automation"][0]
     assert another["id"] == "regie_house_palette_another"
     # the first press ever comes from `unknown` — it must count (0.20.1)
     assert another["triggers"][0]["not_from"] == ["unavailable"]
-    sensor = pkg["template"][0]["sensor"][0]
-    assert sensor["unique_id"] == "regie_house_palette"
-    attr = sensor["attributes"]["palette"]
-    assert "namespace(" in attr and "{{ palette }}" in attr
-    assert "source == 'nuit_bleue'" in attr
-    assert str(witness.palette_salt()) in attr
+    # 0.42: no template sensor and no store helper — the component's block instead
+    assert "template" not in pkg
+    # ONE JSON scalar: Home Assistant's package merge passes every list through
+    # `cv.remove_falsy`, so a YAML block would arrive with its zeros gone
+    raw = pkg["regie"]["palette"]
+    assert isinstance(raw, str), "a scalar crosses the package merge untouched"
+    conf = json.loads(raw)
+    assert conf["rules"]["alive"] == [0, "all"], "the zero the merge would have eaten"
+    assert conf["rules"]["level"]["jitter"] == [0, 15]
+    assert conf["salt"] == witness.palette_salt() and conf["auto"] == "Du jour"
+    assert conf["named"]["nuit_bleue"]["band"] == [200, 250]
+    assert conf["rules"]["turns"] == "06:30" and conf["kelvin"]["warm"] == 2700
+    assert {r["key"] for r in conf["rooms"]} == {r["key"] for r in P.rooms_plan(witness)}
+    assert any(r["room"] == "living" and r["source"] == "today" for r in conf["rooms"])
+    helpers = [
+        e
+        for domain in (
+            "input_number",
+            "input_text",
+            "input_select",
+            "input_boolean",
+            "input_button",
+        )
+        for e in (pkg.get(domain) or {})
+    ]
+    assert not [e for e in helpers if "_k1_" in e or "_k2_" in e], "the eight slots are gone"
     knobs = {k["entity"]: k["value"] for k in witness.knobs()}
     assert knobs["input_datetime.house_palette_turns"] == "06:30"
     assert knobs["input_select.house_palette"] == "Du jour"
 
 
-def test_the_witness_sensor_template_evaluates_to_the_draw(witness):
-    """The rendered attribute template, run with the brain's inputs stubbed:
-    the day's draw, then the named one when the select holds it."""
-    from regie.palette import render_context
-
-    ctx = render_context(witness)
-    attr = ctx["attr"].replace("{{ palette }}", "{{ palette | tojson }}")
-    env = jinja2.Environment()
+def test_the_sensor_value_is_the_draw_the_named_one_and_the_kept_one(witness):
+    """What `sensor.house_palette` says, computed the way the component does:
+    the state is the SOURCE the select names, the attributes the palette, its
+    label and the rooms' draws. Three readings on the brain, arithmetic here."""
     rules = witness.palettes()["today"]
-    values = {
-        "input_select.house_palette": "Du jour",
-        "counter.house_palette_roll": "2",
-        "input_datetime.house_palette_turns": "06:30:00",
-    }
-    values.update(_rules_values(rules))  # the day's rules live in helpers since 0.24
-    env.globals["states"] = lambda e: values.get(e, "unknown")
-    env.globals["is_state"] = lambda e, v: values.get(e, "unknown") == v
-    now = dt.datetime(2026, 9, 5, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=2)))
-    env.globals["now"] = lambda: now
-    env.globals["as_timestamp"] = lambda t: t.timestamp()
-    got = json.loads(env.from_string(attr).render())
-    day = P.day_of(now, "06:30")
-    assert got == P.draw(day, 2, witness.palette_salt(), rules)
-    values["input_select.house_palette"] = "Nuit bleue"
-    got = json.loads(env.from_string(attr).render())
-    assert got["lo"] == 200 and got["accent"] == 30 and got["day"] == day and got["roll"] == 2
-    assert env.from_string(ctx["state"]).render().strip() == "nuit_bleue"
-    assert env.from_string(ctx["label"]).render().strip() == "Nuit bleue"
+    named = witness.palettes()["named"]
+    salt = witness.palette_salt()
+    kelvin = witness.kelvin()
+    rooms = P.rooms_plan(witness)
+    docs = {"nuit_rouge": {"label": "Nuit rouge", "band": [330, 30], "accent": 200}}
+    day = P.day_of(
+        dt.datetime(2026, 9, 5, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=2))), "06:30"
+    )
+
+    def value(selected):
+        source = P.source_of(selected, "Du jour", named, docs)
+        return P.value(source, day, 2, salt, rules, named, docs, rooms, "Du jour", kelvin)
+
+    state, attrs = value("Du jour")
+    assert state == "today" and attrs["label"] == "Du jour"
+    assert attrs["palette"] == P.draw(day, 2, salt, rules, kelvin)
+    state, attrs = value("Nuit bleue")
+    assert state == "nuit_bleue" and attrs["label"] == "Nuit bleue"
+    assert attrs["palette"]["lo"] == 200 and attrs["palette"]["accent"] == 30
+    assert attrs["palette"]["day"] == day and attrs["palette"]["roll"] == 2
+    # a name the select holds that nobody knows any more falls back to the day
+    assert value("Brume")[0] == "today"
+    # a KEPT palette answers by its name, through the same door as a file's
+    state, attrs = value("Nuit rouge")
+    assert state == "nuit_rouge" and attrs["label"] == "Nuit rouge"
+    assert attrs["palette"]["lo"] == 330 and attrs["palette"]["hi"] == 30
+    # the select's options: the day, the file's, the kept ones — in that order
+    assert P.option_labels("Du jour", named, docs) == ["Du jour", "Nuit bleue", "Nuit rouge"]
+    # a kept palette never steals a rendered name
+    assert P.source_of("Nuit bleue", "Du jour", named, {"x": {"label": "Nuit bleue"}}) == (
+        "nuit_bleue"
+    )
+
+
+def test_the_rooms_draws_ride_on_the_sensor(witness):
+    """Each room's own draws for the day are attributes now, one entry per
+    (room, palette, candidates, targets) a look reads — and the entry a look
+    asks for is the entry the render declared."""
+    rooms = P.rooms_plan(witness)
+    living = next(r for r in rooms if r["room"] == "living")
+    assert living["key"] == P.room_key("living", "today", living["candidates"], living["targets"])
+    day, roll, salt = 20700, 0, witness.palette_salt()
+    rules = witness.palettes()["today"]
+    _, attrs = P.value(
+        "today",
+        day,
+        roll,
+        salt,
+        rules,
+        witness.palettes()["named"],
+        {},
+        rooms,
+        "Du jour",
+        witness.kelvin(),
+    )
+    pal = attrs["palette"]
+    assert attrs["rooms"][living["key"]] == P.room_draw(
+        day,
+        roll,
+        salt,
+        "living",
+        pal["alive"],
+        living["candidates"],
+        living["targets"],
+        pal["jitter"],
+    )
 
 
 def test_a_house_writing_palettes_without_the_pack_is_told(house_with):
@@ -228,9 +303,11 @@ def _room_env(sensor: dict):
 
 
 @pytest.mark.parametrize("alive", [None, "all", 2, [0, "all"], [1, 3]])
-def test_the_rooms_draws_agree_between_python_and_the_template(alive):
+def test_the_rooms_draw_is_byte_for_byte_the_template_it_replaced(alive):
+    """The other half of V8a's proof: a room's draws left their generated Jinja
+    too, and say the same thing."""
     env = _room_env({})
-    body = P.room_jinja(SALT, "living", alive, 4, 6, "12")
+    body = OLD.room_jinja(SALT, "living", alive, 4, 6, "12")
     for day in range(20700, 20700 + 120):
         for roll in (0, 5):
             env.globals["state_attr"] = lambda e, a, d=day, r=roll: {
@@ -269,7 +346,15 @@ def test_the_witness_look_that_reads_the_palette_renders_as_templates(rendered, 
     seq = today["sequence"]
     variables = next(s for s in seq if "variables" in s)["variables"]
     assert variables["pal"] == "{{ state_attr('sensor.house_palette', 'palette') }}"
-    assert "namespace(" in variables["room"]
+    # 0.42: the room's draws are an attribute of the same sensor, at the key the
+    # render minted — no generated arithmetic in the script any more
+    assert "state_attr('sensor.house_palette', 'rooms')" in variables["room"]
+    # a room may ask the sensor more than one draw — one per look, since the
+    # counts decide how many randoms are drawn; the key the script reads is one
+    # the render declared to the component
+    keys = {r["key"] for r in P.rooms_plan(witness)}
+    asked = variables["room"].split(".get('")[1].split("')")[0]
+    assert asked in keys and asked == "living.today.3.4"
     par = next(s for s in seq if "parallel" in s)["parallel"]
     by_entity = {tuple(s["target"]["entity_id"]): s for s in par}
     # the front row, spread along the arc: its two paired places, each its own hue
@@ -307,12 +392,17 @@ def test_the_witness_templates_evaluate_with_the_brains_inputs(rendered):
     seq = pkg["script"]["living_today"]["sequence"]
     variables = next(s for s in seq if "variables" in s)["variables"]
     sensor = P.draw(20700, 0, SALT, RULES)
-    env = _room_env(sensor)
+    key = next(k for k in variables["room"].split("'") if k.startswith("living."))
+    rooms = {key: P.room_draw(20700, 0, SALT, "living", RULES["alive"], 3, 6, sensor["jitter"])}
+    env = jinja2.Environment()
+    env.globals["state_attr"] = lambda e, a: {"palette": sensor, "rooms": rooms}.get(a)
+    env.globals["states"] = lambda e: {"sensor.house_period": "evening"}.get(e, "unknown")
     pal = env.from_string(variables["pal"].replace("}}", "| tojson }}")).render()
-    room = env.from_string(
-        variables["room"].replace("{{ {", "{{ ({").replace("} }}", "}) | tojson }}")
-    ).render()
-    ctx = {"pal": json.loads(pal), "room": json.loads(room), "period": "evening"}
+    # Home Assistant renders a `variables:` step natively: the room's entry
+    # comes back a dict, which is what a Python literal of it is here
+    room = ast.literal_eval(env.from_string(variables["room"]).render())
+    ctx = {"pal": json.loads(pal), "room": room, "period": "evening"}
+    assert ctx["room"]["scatter"], "the sensor's entry, not the empty fallback"
     par = next(s for s in seq if "parallel" in s)["parallel"]
     for step in par:
         for key, tpl in (step.get("data") or {}).items():
@@ -479,7 +569,7 @@ def test_a_today_look_gets_life_when_only_a_named_palette_has_it(house_with):
 
 
 # --- step 4 (0.23) → the Atelier's step 1 (0.24): the house, the stores, the rules ------
-def test_the_witness_house_gets_the_switch_the_flip_the_repaint_and_the_stores(rendered, witness):
+def test_the_witness_house_gets_the_switch_the_flip_and_the_repaint(rendered, witness):
     pkg = yaml.safe_load((rendered / "home-assistant/packages/palette.yaml").read_text())
     # the rendered options: the day and the file's names; the kept names join at runtime
     assert pkg["input_select"]["house_palette"]["options"] == ["Du jour", "Nuit bleue"]
@@ -516,20 +606,7 @@ def test_the_witness_house_gets_the_switch_the_flip_the_repaint_and_the_stores(r
         "states('input_select.living_look') in ['evening', 'today']"
         in branch["if"][0]["value_template"]
     )
-    # four stores, every part of a palette each, and the day's rules
-    for key in (
-        "start",
-        "width",
-        "accent",
-        "saturation",
-        "jitter",
-        "curve_night",
-        "alive",
-        "every_max",
-    ):
-        assert f"house_palette_k1_{key}" in pkg["input_number"]
-        assert f"house_palette_k4_{key}" in pkg["input_number"]
-    assert "house_palette_k5_start" not in pkg["input_number"]
+    # the day's rules, still the family's helpers (V8b moves them to the store)
     for key in (
         "weight_degrade",
         "avoid_from",
@@ -542,29 +619,15 @@ def test_the_witness_house_gets_the_switch_the_flip_the_repaint_and_the_stores(r
     ):
         assert f"house_palette_today_{key}" in pkg["input_number"]
     assert "house_palette_today_shapes" in pkg["input_text"]
-    assert (
-        "house_palette_k2_name" in pkg["input_text"]
-        and "house_palette_k2_shapes" in pkg["input_text"]
-    )
-    # the names are the face: the select follows the kept names
-    names = autos["regie_house_palette_names"]
-    assert names["actions"][-2]["action"] == "input_select.set_options"
-    # a kept palette renamed while selected stays selected under its new name
-    assert names["actions"][-1]["then"][0]["data"]["option"] == "{{ trigger.to_state.state }}"
-    assert "states('input_text.house_palette_k3_name')" in names["actions"][0]["variables"]["names"]
-    # « Nouvelle », « Au hasard », « Supprimer »
-    assert (
-        autos["regie_house_palette_new"]["actions"][1]["choose"][0]["sequence"][-1]["data"][
-            "option"
-        ]
-        == "Nouvelle 1"
-    )
-    rnd = autos["regie_house_palette_k2_random"]
-    assert "namespace(" in rnd["actions"][0]["variables"]["p"]
-    # the sandbox refuses a range over 100 000: the seed is the clock's millisecond
-    assert "range(1, 2147483647)" not in rnd["actions"][0]["variables"]["p"]
-    assert "as_timestamp(now()) * 1000" in rnd["actions"][0]["variables"]["p"]
-    assert autos["regie_house_palette_k4_delete"]["actions"][-1]["data"]["value"] == ""
+    # 0.42: no slot, no « les noms », no « Nouvelle » / « Au hasard » / « Supprimer »
+    # automation — the documents and the select's options are the component's
+    assert not [e for e in pkg["input_number"] if "_k" in e.split("palette")[-1][:3]]
+    assert "house_palette_k2_name" not in pkg["input_text"]
+    assert set(autos) == {
+        "regie_house_palette_another",
+        "regie_house_palette_repaint",
+        "regie_house_palette_flip",
+    }
     knobs = {k["entity"]: k for k in witness.knobs()}
     assert knobs["input_boolean.house_palette_repaint"]["value"] == "on"
     assert knobs["input_number.house_palette_today_weight_degrade"]["value"] == "5.0"
@@ -589,97 +652,53 @@ def _rules_values(rules: dict) -> dict:
     return {e: (v if isinstance(v, str) else str(v)) for e, v in P.rule_seeds(rules).items()}
 
 
-def test_the_sensor_reads_the_rules_from_the_helpers_and_agrees_with_python(witness):
-    from regie.palette import render_context
-
-    ctx = render_context(witness)
-    attr = ctx["attr"].replace("{{ palette }}", "{{ palette | tojson }}")
+def test_the_rules_come_from_the_helpers_and_the_draw_follows(witness):
+    """The day's rules are still the family's helpers (V8b moves them into the
+    store): the sensor reads them at every draw, and so does the command that
+    compares."""
     rules = witness.palettes()["today"]
-    values = {
-        "input_select.house_palette": "Du jour",
-        "counter.house_palette_roll": "0",
-        "input_datetime.house_palette_turns": "06:30:00",
-    }
+    values = {"input_datetime.house_palette_turns": "06:30:00"}
     values.update(_rules_values(rules))
-    env, now = _brain(values)
-    got = json.loads(env.from_string(attr).render())
-    day = P.day_of(now, "06:30")
-    assert got == P.draw(day, 0, witness.palette_salt(), rules)
-    # the family edits a rule on the phone: the draw follows the helper, and so does
-    # `rules_from_helpers` for the command that compares
-    values["input_number.house_palette_today_weight_degrade"] = "0.0"
-    values["input_number.house_palette_today_weight_uni"] = "9.0"
-    got = json.loads(env.from_string(attr).render())
-    live = P.rules_from_helpers(lambda e: {"state": values[e]} if e in values else None, rules)
-    assert live["harmonies"]["uni"] == 9 and live["harmonies"]["degrade"] == 0
-    assert got == P.draw(day, 0, witness.palette_salt(), live)
-    assert got["harmony"] in ("uni", "duo")
-
-
-def test_the_sensor_reads_a_kept_store_by_its_name(witness):
-    from regie.palette import render_context
-
-    ctx = render_context(witness)
-    attr = ctx["attr"].replace("{{ palette }}", "{{ palette | tojson }}")
-    values = {
-        "input_select.house_palette": "Nuit rouge",
-        "counter.house_palette_roll": "0",
-        "input_datetime.house_palette_turns": "06:30:00",
-        "input_text.house_palette_k1_name": "Brume",
-        "input_text.house_palette_k2_name": "Nuit rouge",
-        "input_number.house_palette_k2_start": "330.0",
-        "input_number.house_palette_k2_width": "60.0",
-        "input_number.house_palette_k2_accent": "200.0",
-        "input_number.house_palette_k2_saturation": "95.0",
-        "input_number.house_palette_k2_jitter": "8.0",
-        "input_number.house_palette_k2_curve_morning": "50.0",
-        "input_number.house_palette_k2_curve_day": "30.0",
-        "input_number.house_palette_k2_curve_evening": "100.0",
-        "input_number.house_palette_k2_curve_night": "40.0",
-        "input_select.house_palette_k2_white": "warm",
-        "input_number.house_palette_k2_alive": "2.0",
-        "input_boolean.house_palette_k2_alive_all": "off",
-        "input_text.house_palette_k2_shapes": "glitch, lightning",
-        "input_number.house_palette_k2_every_min": "90.0",
-        "input_number.house_palette_k2_every_max": "400.0",
-    }
-    env, _ = _brain(values)
-    got = json.loads(env.from_string(attr).render())
-    assert got["lo"] == 330 and got["hi"] == 30 and got["width"] == 60 and got["accent"] == 200
-    assert got["curve"] == {"morning": 50, "day": 30, "evening": 100, "night": 40}
-    assert got["jitter"] == 8 and got["alive"] == 2
-    assert got["life"] == {"shapes": ["glitch", "lightning"], "every": [90, 400]}
-    assert env.from_string(ctx["state"]).render().strip() == "k2"
-    assert env.from_string(ctx["label"]).render().strip() == "Nuit rouge"
-    values["input_boolean.house_palette_k2_alive_all"] = "on"
-    assert json.loads(env.from_string(attr).render())["alive"] == "all"
-
-
-def test_a_store_and_the_rules_read_under_the_stores_form(witness):
-    """0.33: a store and the file's named palette compare under one form
-    (`store_normal`), the day's rules under theirs (`rules_normal`, a round
-    trip through the helpers — a count under « toutes » says nothing)."""
-    values = {
-        "input_text.house_palette_k1_name": "Nuit rouge",
-        "input_number.house_palette_k1_start": "330.0",
-        "input_number.house_palette_k1_width": "60.0",
-        "input_number.house_palette_k1_accent": "200.0",
-        "input_number.house_palette_k1_saturation": "95.0",
-        "input_number.house_palette_k1_jitter": "8.0",
-        "input_number.house_palette_k1_curve_evening": "100.0",
-        "input_number.house_palette_k1_curve_night": "40.0",
-        "input_select.house_palette_k1_white": "warm",
-        "input_boolean.house_palette_k1_alive_all": "on",
-        "input_text.house_palette_k1_shapes": "glitch",
-        "input_number.house_palette_k1_every_min": "90.0",
-        "input_number.house_palette_k1_every_max": "400.0",
-    }
 
     def read(e):
         return {"state": values[e]} if e in values else None
 
-    store = P.store_from_helpers("house_palette_k1", read)
-    assert store == {
+    live = P.rules_from_helpers(read, rules)
+    assert P.rules_normal(live) == P.rules_normal(rules), "untouched helpers say the file"
+    # the family edits a rule on the phone: the draw follows the helper
+    values["input_number.house_palette_today_weight_degrade"] = "0.0"
+    values["input_number.house_palette_today_weight_uni"] = "9.0"
+    live = P.rules_from_helpers(read, rules)
+    assert live["harmonies"]["uni"] == 9 and live["harmonies"]["degrade"] == 0
+    assert P.draw(20700, 0, SALT, live)["harmony"] in ("uni", "duo")
+    # every helper the sensor watches is one the render places, and no other
+    assert set(P.rules_entities()) == (
+        {f"input_number.house_palette_today_{k}" for k in P.RULE_NUMBERS}
+        | {
+            "input_boolean.house_palette_today_alive_all",
+            "input_text.house_palette_today_shapes",
+            "input_datetime.house_palette_turns",
+        }
+    )
+
+
+def test_a_kept_palette_is_a_document_the_file_could_have_written(witness):
+    """0.33's form, on a document now (0.42): a kept palette and the file's
+    named one compare under `store_normal`, and what the store keeps of what
+    the phone sent is what `fx.yml` would carry — `store_clean`."""
+    sent = {
+        "label": "  Nuit rouge  ",
+        "band": [330, 30],
+        "accent": 200,
+        "saturation": 95,
+        "white": "warm",
+        "level": {"curve": {"morning": 100, "day": 100, "evening": 100, "night": 40}, "jitter": 8},
+        "alive": "all",
+        "life": {"shapes": ["glitch"], "every": [90, 400]},
+        "colour": "a word the card invented",
+    }
+    doc = P.store_clean(sent)
+    assert doc == {
         "label": "Nuit rouge",
         "band": [330, 30],
         "accent": 200,
@@ -689,6 +708,17 @@ def test_a_store_and_the_rules_read_under_the_stores_form(witness):
         "alive": "all",
         "life": {"shapes": ["glitch"], "every": [90, 400]},
     }
+    # a document with nothing to say keeps nothing: no level, no alive, no life
+    assert P.store_clean({"label": "Brume", "band": [10, 40]}) == {
+        "label": "Brume",
+        "band": [10, 40],
+        "accent": 30,
+        "saturation": 100,
+        "white": "warm",
+    }
+    # a life under the floor is lifted, a white nobody knows falls back
+    odd = P.store_clean({**sent, "white": "mauve", "life": {"shapes": ["x"], "every": [5, 9]}})
+    assert odd["white"] == "warm" and odd["life"]["every"] == [60, 60]
     # the file may write the same palette shorter: the same under the form
     short = {
         "label": "Nuit rouge",
@@ -699,14 +729,19 @@ def test_a_store_and_the_rules_read_under_the_stores_form(witness):
         "alive": "all",
         "life": {"shapes": ["glitch"], "every": [90, 400]},
     }
-    assert P.store_normal(store) == P.store_normal(short)
-    assert P.describe_store(P.store_normal(store), P.store_normal({**short, "accent": 120})) == (
+    assert P.store_normal(doc) == P.store_normal(short)
+    assert P.describe_store(P.store_normal(doc), P.store_normal({**short, "accent": 120})) == (
         "accent 200 → 120"
     )
     assert P.store_normal(witness.palettes()["named"]["nuit_bleue"])["life"] == {
         "shapes": ["glitch", "lightning"],
         "every": [120, 600],
     }
+    # a document reads back out of the sensor exactly as a file's palette does
+    assert P.named_value(doc, witness.kelvin())["lo"] == 330
+
+
+def test_the_rules_round_trip_through_the_helpers(witness):
     rules = witness.palettes()["today"]
     raw = {e: (v if isinstance(v, str) else str(v)) for e, v in P.rule_seeds(rules).items()}
     raw["input_datetime.house_palette_turns"] = "06:30"
@@ -721,21 +756,6 @@ def test_a_store_and_the_rules_read_under_the_stores_form(witness):
         "curve": {"morning": 100, "day": 100, "evening": 100, "night": 100},
         "jitter": [0, 0],
     }
-
-
-def test_the_random_draw_template_yields_a_palette_within_the_rules(witness):
-    from regie.palette import render_context
-
-    ctx = render_context(witness)
-    values = _rules_values(witness.palettes()["today"])
-    env, _ = _brain(values)
-    tpl = env.from_string(ctx["random"].replace("{{ palette }}", "{{ palette | tojson }}"))
-    seen = set()
-    for _ in range(40):
-        got = json.loads(tpl.render())
-        assert not any(45 < (got["lo"] + d) % 360 < 105 for d in range(got["width"] + 1))
-        seen.add((got["lo"], got["hi"]))
-    assert len(seen) > 10
 
 
 def test_slug_and_a_look_saying_accent_is_told(house_with):
@@ -762,7 +782,7 @@ def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
     assert card["select"] == "input_select.house_palette" and card["auto_label"] == "Du jour"
     assert card["salt"] == witness.palette_salt()
     assert card["rules"] == {"prefix": "house_palette_today", "whites": ["warm", "neutral", "cool"]}
-    assert [s["prefix"] for s in card["stores"]] == [f"house_palette_k{i}" for i in (1, 2, 3, 4)]
+    assert "stores" not in card, "0.42: the kept palettes come from the store, not a slot list"
     assert card["named"][0]["id"] == "nuit_bleue" and card["named"][0]["palette"]["lo"] == 200
     assert "glitch" in card["shapes"] and "lightning" in card["shapes"]
     assert card["labels"]["title"] == "L'Atelier des palettes" and card["labels"]["all"] == "toutes"
@@ -774,7 +794,10 @@ def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
     # the card's file ships with the pack, its element named as the card's type
     js = (rendered / "home-assistant/www/regie-atelier.js").read_text()
     assert 'customElements.define("regie-palette-atelier"' in js
-    assert "const M = 2147483647, A = 16807;" in js  # the product's arithmetic, ported
+    assert "const M = 2147483647, A = 16807;" in js  # the week strip's preview, ported
+    # the four doors the card calls (0.42): no helper behind a kept palette
+    for door in ("list", "save", "delete", "random"):
+        assert f'"regie/palettes/{door}"' in js
 
 
 def test_the_avoided_arc_may_wrap_through_zero():
@@ -797,7 +820,7 @@ def test_the_avoided_arc_may_wrap_through_zero():
         "the widest harmony wants 150°" in e for e in errors
     )  # 120° free, dégradé up to 150°
     rules["harmonies"] = {"degrade": 0, "duo": 3, "uni": 2, "libre": 0}
-    body = P.jinja_body(rules, SALT)
+    body = OLD.jinja_body(rules, SALT)
     tpl = jinja2.Environment().from_string(
         "{% set day = D %}{% set roll = R %}" + body + "{{ palette | tojson }}"
     )

@@ -12,7 +12,9 @@
     - entity: input_boolean.house_palette_repaint
       name: {{ labels.ui.palette_repaint | to_yaml }}
 {# L'ATELIER DES PALETTES (0.25): a window that opens from this row - every part
-   of a palette, the day's rules, the names; the plain rows left with it #}
+   of a palette, the day's rules, the names; the plain rows left with it. Since
+   0.42 the kept palettes are documents the card reads and writes through the
+   component's four websocket commands: no slot list to hand it #}
 - type: custom:regie-palette-atelier
   select: input_select.house_palette
   auto_label: {{ palette.options[0].label | to_yaml }}
@@ -20,10 +22,6 @@
   rules:
     prefix: {{ h.rules_prefix }}
     whites: {{ h.whites | tojson }}
-  stores:
-{% for st in h.stores %}
-    - { n: {{ st.n }}, prefix: {{ st.prefix }} }
-{% endfor %}
   named:
 {% for n in h.named %}
     - id: {{ n.id }}

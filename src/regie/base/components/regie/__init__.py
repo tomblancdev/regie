@@ -1,10 +1,13 @@
 """La Régie — the product's own component inside the brain (0.31).
 
 The pieces rendered YAML cannot say live here, each a tenant of one domain
-`regie:` that the packages configure and the brain reads once at start. Two
+`regie:` that the packages configure and the brain reads once at start. Three
 tenants so far: the porter (conversation.py, porter.py), a conversation agent
-in front of the house's LLM, and the walker (walker.py, walk.py), which runs a
-look's colour walks one order per leg (0.39, the audit's V7).
+in front of the house's LLM, the walker (walker.py, walk.py), which runs a
+look's colour walks one order per leg (0.39, the audit's V7), and the palette
+(palettes.py, sensor.py, palette.py), whose kept palettes are documents in a
+store of ours and whose sensor is computed here from the arithmetic the engine
+reads by path (0.42, the audit's V8a).
 
 The component SHIPS WITH EVERY HOUSE since 0.39: `configuration.yaml` carries
 the bare `regie:` that loads it, and a pack that has something to configure —
@@ -18,9 +21,12 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant.components.conversation.const import DATA_COMPONENT
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+
+from .palettes import PALETTE_SCHEMA
 
 DOMAIN = "regie"
 
@@ -43,7 +49,17 @@ PORTER_SCHEMA = vol.Schema(
 # value may be None and the schema must say so (a bare key would otherwise be
 # refused as "expected a dict")
 CONFIG_SCHEMA = vol.Schema(
-    {DOMAIN: vol.Any(None, vol.Schema({vol.Optional("porter"): PORTER_SCHEMA}))},
+    {
+        DOMAIN: vol.Any(
+            None,
+            vol.Schema(
+                {
+                    vol.Optional("porter"): PORTER_SCHEMA,
+                    vol.Optional("palette"): PALETTE_SCHEMA,
+                }
+            ),
+        )
+    },
     extra=vol.ALLOW_EXTRA,
 )
 
@@ -54,6 +70,17 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     from . import walker
 
     await walker.async_setup(hass)
+    if "palette" in conf:
+        from . import palettes
+
+        store = await palettes.async_setup(hass, dict(conf["palette"]), config)
+
+        async def _names(_event) -> None:
+            # the select is a rendered helper and is not there yet at setup:
+            # its options take the kept names when the house is up
+            await store.async_names()
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _names)
     if "porter" in conf:
         # handed to the conversation component the way its own default agent
         # is (default_agent.py): that component never arms platform discovery

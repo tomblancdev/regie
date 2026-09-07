@@ -39,6 +39,9 @@ templates:
   - { copy: components/regie/porter.py, dst: home-assistant/custom_components/regie/porter.py }
   - { copy: components/regie/conversation.py, dst: home-assistant/custom_components/regie/conversation.py }
   - { copy: components/regie/walk.py, dst: home-assistant/custom_components/regie/walk.py }
+  - { copy: components/regie/palette.py, dst: home-assistant/custom_components/regie/palette.py }
+  - { copy: components/regie/palettes.py, dst: home-assistant/custom_components/regie/palettes.py }
+  - { copy: components/regie/sensor.py, dst: home-assistant/custom_components/regie/sensor.py }
   - { copy: components/regie/walker.py, dst: home-assistant/custom_components/regie/walker.py }
   - { copy: components/regie/services.yaml, dst: home-assistant/custom_components/regie/services.yaml }
   - { house_file: plan.image, dst: "home-assistant/www/{{ plan_image }}", when: plan_image }

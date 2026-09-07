@@ -1,14 +1,22 @@
-/* regie-atelier — L'Atelier des palettes (La Régie 0.25): a window that opens
- * from a button on Réglages to edit a palette in full, or the day's rules, with
- * a colour ring, a level curve and chips for the signs of life. It reads and
- * writes the brain's helpers alone (the stores, the day's rules), through the
- * `hass` object every card is handed — the sensor, the repaint and `regie
- * palette --pull` need nothing new from it. No fetch, no host, no store:
- * shipped by the product into the brain's own www/, loaded as a Lovelace
+/* regie-atelier — L'Atelier des palettes (La Régie 0.25, the store since 0.42):
+ * a window that opens from a button on Réglages to edit a palette in full, or
+ * the day's rules, with a colour ring, a level curve and chips for the signs of
+ * life. Shipped by the product into the brain's own www/, loaded as a Lovelace
  * resource (never an extra module: the registry polyfill).
  *
- * The random draw is the product's own arithmetic (palette.py) ported here —
- * the same seven draws in the same order — from a seed the clock gives. */
+ * TWO SOURCES, TWO DOORS. A KEPT PALETTE is a document in the component's own
+ * store, read and written through four websocket commands —
+ * regie/palettes/list · save · delete · random. There is no slot and no
+ * ceiling: « Nouvelle » and « Enregistrer sous » both save a new document,
+ * « Supprimer » deletes one, and no helper is left behind. THE DAY'S RULES are
+ * still the family's helpers, read and written through the `hass` object every
+ * card is handed (V8b moves them into the same store).
+ *
+ * The week strip under the rules draws with the product's own arithmetic
+ * (palette.py) ported here — the same seven draws in the same order. It is a
+ * PREVIEW: it must follow a slider as the finger moves, faster than a sensor
+ * recomputed on the helper's echo. What the house wears is never drawn here —
+ * that is sensor.house_palette's word, and the component's alone. */
 (function () {
   "use strict";
   const M = 2147483647, A = 16807;
@@ -16,7 +24,40 @@
   const ORDER = ["degrade", "duo", "uni", "libre"];
   const COLD = [150, 300], WARM_ACCENT = [345, 60], COLD_ACCENT = [170, 50];
   const PERIODS = ["morning", "day", "evening", "night"];
-  const NUMS = ["start", "width", "accent", "saturation", "jitter", "curve_morning", "curve_day", "curve_evening", "curve_night", "alive", "every_min", "every_max"];
+  // --- a kept palette: the document the store holds, and the flat values the controls edit ---
+  function valuesOf(doc) {
+    const band = doc.band || [200, 320], level = doc.level || {}, curve = level.curve || {}, life = doc.life || null;
+    const lo = ((band[0] % 360) + 360) % 360;
+    const v = {
+      label: doc.label || "", start: lo,
+      width: ((((band[1] - band[0]) % 360) + 360) % 360) || 360,
+      accent: doc.accent === null || doc.accent === undefined ? lo : doc.accent,
+      saturation: doc.saturation === undefined ? 100 : doc.saturation,
+      white: doc.white || "warm", jitter: level.jitter || 0,
+      alive: doc.alive === "all" ? 0 : (doc.alive || 0), alive_all: doc.alive === "all",
+      shapes: life && life.shapes ? life.shapes.slice() : [],
+      every_min: life && life.every ? life.every[0] : 120,
+      every_max: life && life.every ? life.every[1] : 600,
+    };
+    for (const p of PERIODS) v[`curve_${p}`] = curve[p] === undefined ? 100 : curve[p];
+    return v;
+  }
+  function docOf(v) {
+    const doc = {
+      label: v.label, band: [Math.round(v.start) % 360, Math.round(v.start + v.width) % 360],
+      accent: Math.round(v.accent), saturation: Math.round(v.saturation), white: v.white || "warm",
+    };
+    const curve = {}, level = {};
+    let moved = false;
+    for (const p of PERIODS) { curve[p] = Math.round(v[`curve_${p}`]); if (curve[p] !== 100) moved = true; }
+    if (moved) level.curve = curve;
+    if (v.jitter) level.jitter = Math.round(v.jitter);
+    if (Object.keys(level).length) doc.level = level;
+    if (v.alive_all) doc.alive = "all";
+    else if (v.alive) doc.alive = Math.round(v.alive);
+    if (v.shapes && v.shapes.length) doc.life = { shapes: v.shapes.slice(), every: [Math.round(v.every_min), Math.round(v.every_max)] };
+    return doc;
+  }
 
   // --- the product's draw, ported ----------------------------------------------------
   function draw(day, roll, salt, rules) {
@@ -95,11 +136,13 @@
 
   class RegiePaletteAtelier extends HTMLElement {
     setConfig(config) {
-      if (!config || !config.select || !config.rules || !config.stores) throw new Error("regie-palette-atelier: the card wants select, rules and stores");
+      if (!config || !config.select || !config.rules) throw new Error("regie-palette-atelier: the card wants select and rules");
       this._config = config;
       this._tab = null;
       this._open = false;
       this._pending = {};
+      this._docs = {};   // the store, read when the window opens
+      this._read = false;
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
       this._render();
     }
@@ -118,13 +161,15 @@
       return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
     }
     _signature() {
-      const c = this._config, parts = [this._tab || ""];
-      for (const st of c.stores) parts.push(this.st(`input_text.${st.prefix}_name`, ""));
-      const px = this._tab && this._tab.startsWith("store:") ? this._tab.slice(6) : this._tab === "today" ? c.rules.prefix : null;
-      if (px) {
-        const keys = px === c.rules.prefix
-          ? ORDER.map((h) => `input_number.${px}_weight_${h}`).concat(["avoid_from", "avoid_to", "saturation_min", "saturation_max", "jitter_min", "jitter_max", "alive_min", "alive_max", "every_min", "every_max", "chance"].map((k) => `input_number.${px}_${k}`), PERIODS.map((p) => `input_number.${px}_curve_${p}`), [`input_boolean.${px}_alive_all`, `input_text.${px}_shapes`, "counter.house_palette_roll", "input_datetime.house_palette_turns"])
-          : NUMS.map((k) => `input_number.${px}_${k}`).concat([`input_select.${px}_white`, `input_boolean.${px}_alive_all`, `input_text.${px}_shapes`, `input_text.${px}_name`]);
+      // what the WINDOW shows: the store's documents (they change on our own
+      // saves and on another phone's) and, on the rules tab, their helpers
+      const c = this._config, parts = [this._tab || "", JSON.stringify(this._docs)];
+      if (this._tab === "today") {
+        const px = c.rules.prefix;
+        const keys = ORDER.map((h) => `input_number.${px}_weight_${h}`).concat(
+          ["avoid_from", "avoid_to", "saturation_min", "saturation_max", "jitter_min", "jitter_max", "alive_min", "alive_max", "every_min", "every_max", "chance"].map((k) => `input_number.${px}_${k}`),
+          PERIODS.map((p) => `input_number.${px}_curve_${p}`),
+          [`input_boolean.${px}_alive_all`, `input_text.${px}_shapes`, "counter.house_palette_roll", "input_datetime.house_palette_turns"]);
         for (const e of keys) parts.push(this.st(e, ""));
       }
       return parts.join("|");
@@ -149,17 +194,29 @@
     setSelect(entity, option) { return this.call("input_select", "select_option", { entity_id: entity, option }); }
     press(entity) { return this.call("input_button", "press", { entity_id: entity }); }
 
-    stores() {
-      return this._config.stores.map((st) => ({ ...st, name: this.st(`input_text.${st.prefix}_name`, "") })).filter((st) => st.name);
+    // --- the store (0.42): the component's four doors ------------------------------
+    ws(type, extra) { return this._hass.callWS({ type, ...(extra || {}) }); }
+    fetch() {
+      return this.ws("regie/palettes/list")
+        .then((r) => { this._docs = r.palettes || {}; this._read = true; })
+        .catch((e) => { this._docs = {}; this._read = true; this._error = String((e && e.message) || e); });
     }
-    freeStore() { return this._config.stores.find((st) => !this.st(`input_text.${st.prefix}_name`, "")); }
-    storeValues(prefix) {
-      const v = {};
-      for (const k of NUMS) v[k] = this.num(`input_number.${prefix}_${k}`, 0);
-      v.white = this.st(`input_select.${prefix}_white`, "warm");
-      v.alive_all = this.st(`input_boolean.${prefix}_alive_all`, "off") === "on";
-      v.shapes = (this.st(`input_text.${prefix}_shapes`, "") || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-      return v;
+    stores() {
+      return Object.keys(this._docs).sort().map((id) => ({ id, name: this._docs[id].label || id }));
+    }
+    storeValues(id) { return valuesOf(this._docs[id] || {}); }
+    saveDoc(id, doc) {
+      return this.ws("regie/palettes/save", { ...(id ? { palette_id: id } : {}), palette: doc })
+        .then((r) => { this._docs[r.palette_id] = r.palette; return r.palette_id; })
+        .catch((e) => { this._note(String((e && e.message) || e)); return null; });
+    }
+    // a slider fires many times a second: the store hears the last document only
+    edit(id, mutate) {
+      const v = this.storeValues(id);
+      mutate(v);
+      this._docs[id] = docOf(v);
+      clearTimeout(this._pending[id]);
+      this._pending[id] = setTimeout(() => this.saveDoc(id, this._docs[id]), 150);
     }
     rulesValues() {
       const px = this._config.rules.prefix, n = (k, d) => this.num(`input_number.${px}_${k}`, d);
@@ -187,7 +244,10 @@
       if (!this._card) {
         this.shadowRoot.innerHTML = `<style>${css}</style><ha-card><div class="row"><div><div class="name"></div><div class="sub"></div></div><button class="open"></button></div></ha-card><div class="host"></div>`;
         this._card = this.shadowRoot.querySelector("ha-card");
-        this.shadowRoot.querySelector("button.open").addEventListener("click", () => { this._open = true; this._tab = this._tab || "today"; this._renderWindow(); });
+        this.shadowRoot.querySelector("button.open").addEventListener("click", () => {
+          this._open = true; this._tab = this._tab || "today"; this._renderWindow();
+          this.fetch().then(() => this._renderWindow());   // the store, read once per opening
+        });
       }
       const nameEl = this._card.querySelector(".name"), html = `${sw}${label}`;
       if (nameEl.innerHTML !== html) nameEl.innerHTML = html;
@@ -209,7 +269,7 @@
       const stores = this.stores();
       const tabs = [{ id: "today", label: L.rules || "Du jour · les règles" }]
         .concat(c.named.map((n) => ({ id: `named:${n.id}`, label: n.label, ro: true })))
-        .concat(stores.map((st) => ({ id: `store:${st.prefix}`, label: st.name })))
+        .concat(stores.map((st) => ({ id: `store:${st.id}`, label: st.name })))
         .concat([{ id: "new", label: "+ " + (L.new || "Nouvelle") }]);
       if (!tabs.some((t) => t.id === this._tab)) this._tab = "today";
       if (!host.querySelector(".win")) {
@@ -226,20 +286,46 @@
       tabsEl.innerHTML = tabs.map((t) => `<button class="tab${t.id === this._tab ? " on" : ""}${t.ro ? " ro" : ""}" data-tab="${t.id}">${t.label}</button>`).join("");
       tabsEl.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.tab;
-        if (id === "new") { this.press("input_button.house_palette_new"); return; }
+        if (id === "new") { this._new(); return; }
         this._tab = id; this._renderWindow();
       }));
       const body = host.querySelector(".body");
       if (this._tab === "today") this._renderRules(body);
       else if (this._tab.startsWith("named:")) this._renderNamed(body, c.named.find((n) => `named:${n.id}` === this._tab));
-      else if (this._tab.startsWith("store:")) this._renderStore(body, stores.find((st) => `store:${st.prefix}` === this._tab));
+      else if (this._tab.startsWith("store:")) this._renderStore(body, stores.find((st) => `store:${st.id}` === this._tab));
       this._sig = this._signature();
     }
 
-    // a store: every part of a palette, edited in place
+    // « Nouvelle » (0.24, the card's own since 0.42): a copy of the palette IN
+    // FORCE, under a name to change; the select takes it
+    _new() {
+      const L = this._config.labels || {};
+      const sensor = this._hass && this._hass.states["sensor.house_palette"];
+      const p = (sensor && sensor.attributes.palette) || { lo: 200, width: 120, accent: 30, saturation: 90, white: "warm" };
+      const taken = new Set(this.stores().map((st) => st.name));
+      let name = L.new || "Nouvelle", n = 1;
+      while (taken.has(name)) { n += 1; name = `${L.new || "Nouvelle"} ${n}`; }
+      this._keepAs(this._flatOf(p), name);
+    }
+    // a palette the sensor carries (a draw, a file's, a kept one) as the flat values
+    _flatOf(p) {
+      const curve = p.curve || {};
+      return {
+        start: p.lo, width: p.width, accent: p.accent === null || p.accent === undefined ? p.lo : p.accent,
+        saturation: p.saturation, white: p.white, jitter: p.jitter || 0,
+        curve_morning: curve.morning === undefined ? 100 : curve.morning,
+        curve_day: curve.day === undefined ? 100 : curve.day,
+        curve_evening: curve.evening === undefined ? 100 : curve.evening,
+        curve_night: curve.night === undefined ? 100 : curve.night,
+        alive: typeof p.alive === "number" ? p.alive : 0, alive_all: p.alive === "all",
+        shapes: p.life ? p.life.shapes : [], every_min: p.life ? p.life.every[0] : 120, every_max: p.life ? p.life.every[1] : 600,
+      };
+    }
+
+    // a kept palette: every part of it, edited in place
     _renderStore(body, st) {
       if (!st) return;
-      const L = this._config.labels || {}, px = st.prefix, v = this.storeValues(px);
+      const L = this._config.labels || {}, id = st.id, v = this.storeValues(id);
       body.innerHTML = `
         <div class="field"><div class="lab"><span>${L.name || "Nom"}</span></div><input type="text" class="name" value="${this._esc(st.name)}" maxlength="40"></div>
         <div class="grid">
@@ -263,30 +349,43 @@
           <button class="btn danger delete">${L.delete || "Supprimer"}</button>
         </div>`;
       this._ring(body, { lo: v.start, width: v.width, accent: v.accent, sat: v.saturation }, {
-        onArc: (lo, width) => { this.setNumber(`input_number.${px}_start`, lo); this.setNumber(`input_number.${px}_width`, width); },
-        onAccent: (h) => this.setNumber(`input_number.${px}_accent`, h),
+        onArc: (lo, width) => this.edit(id, (x) => { x.start = lo; x.width = width; }),
+        onAccent: (h) => this.edit(id, (x) => { x.accent = h; }),
         avoid: this.rulesValues().avoid,
       });
-      this._curve(body, PERIODS.map((p) => v[`curve_${p}`]), (i, val) => this.setNumber(`input_number.${px}_curve_${PERIODS[i]}`, val));
-      this._bindSlider(body, "saturation", (val) => this.setNumber(`input_number.${px}_saturation`, val));
-      this._bindSlider(body, "jitter", (val) => this.setNumber(`input_number.${px}_jitter`, val));
-      body.querySelectorAll(".sel.white button").forEach((b) => b.addEventListener("click", () => this.setSelect(`input_select.${px}_white`, b.dataset.w)));
-      body.querySelector("input.name").addEventListener("change", (e) => { const name = e.target.value.trim(); if (name) this.setText(`input_text.${px}_name`, name).then(() => { this._tab = `store:${px}`; }); });
-      body.querySelector("input.alive").addEventListener("change", (e) => this.setNumber(`input_number.${px}_alive`, parseInt(e.target.value || "0", 10)));
-      body.querySelector(".chip.all").addEventListener("click", () => this.setBool(`input_boolean.${px}_alive_all`, !v.alive_all));
+      this._curve(body, PERIODS.map((p) => v[`curve_${p}`]), (i, val) => this.edit(id, (x) => { x[`curve_${PERIODS[i]}`] = val; }));
+      this._bindSlider(body, "saturation", (val) => this.edit(id, (x) => { x.saturation = val; }));
+      this._bindSlider(body, "jitter", (val) => this.edit(id, (x) => { x.jitter = val; }));
+      body.querySelectorAll(".sel.white button").forEach((b) => b.addEventListener("click", () => this.edit(id, (x) => { x.white = b.dataset.w; })));
+      // the NAME is the face: the select's options follow it, the component keeps
+      // this palette selected across the rename (set_options would drop it)
+      body.querySelector("input.name").addEventListener("change", (e) => {
+        const name = e.target.value.trim();
+        if (!name) return;
+        this._docs[id] = docOf({ ...v, label: name });
+        this.saveDoc(id, this._docs[id]).then(() => this._renderWindow());
+      });
+      body.querySelector("input.alive").addEventListener("change", (e) => this.edit(id, (x) => { x.alive = parseInt(e.target.value || "0", 10); }));
+      body.querySelector(".chip.all").addEventListener("click", () => this.edit(id, (x) => { x.alive_all = !v.alive_all; }));
       body.querySelectorAll(".chips.shapes .chip").forEach((b) => b.addEventListener("click", () => {
-        const s = b.dataset.s, next = v.shapes.includes(s) ? v.shapes.filter((x) => x !== s) : v.shapes.concat([s]);
-        this.setText(`input_text.${px}_shapes`, next.join(", "));
+        const s = b.dataset.s;
+        this.edit(id, (x) => { x.shapes = v.shapes.includes(s) ? v.shapes.filter((y) => y !== s) : v.shapes.concat([s]); });
+        this._renderWindow();
       }));
-      body.querySelector("input.emin").addEventListener("change", (e) => this.setNumber(`input_number.${px}_every_min`, parseInt(e.target.value || "60", 10)));
-      body.querySelector("input.emax").addEventListener("change", (e) => this.setNumber(`input_number.${px}_every_max`, parseInt(e.target.value || "600", 10)));
+      body.querySelector("input.emin").addEventListener("change", (e) => this.edit(id, (x) => { x.every_min = parseInt(e.target.value || "60", 10); }));
+      body.querySelector("input.emax").addEventListener("change", (e) => this.edit(id, (x) => { x.every_max = parseInt(e.target.value || "600", 10); }));
       body.querySelector(".try").addEventListener("click", () => this.setSelect(this._config.select, st.name));
-      body.querySelector(".random").addEventListener("click", () => this.press(`input_button.${px}_random`));
-      body.querySelector(".saveas").addEventListener("click", () => this._saveAs(v));
+      body.querySelector(".random").addEventListener("click", () => this.ws("regie/palettes/random", { palette_id: id })
+        .then((r) => { this._docs[id] = r.palette; this._renderWindow(); })
+        .catch((e) => this._note(String((e && e.message) || e))));
+      body.querySelector(".saveas").addEventListener("click", () => this._saveAs(v, st.name + " 2"));
       const del = body.querySelector(".delete");
       del.addEventListener("click", () => {
-        if (del.dataset.armed) { this.press(`input_button.${px}_delete`).then(() => { this._tab = "today"; this._renderWindow(); }); }
-        else { del.dataset.armed = "1"; del.textContent = (L.confirm || "Confirmer") + " ?"; setTimeout(() => { delete del.dataset.armed; del.textContent = L.delete || "Supprimer"; }, 4000); }
+        if (del.dataset.armed) {
+          this.ws("regie/palettes/delete", { palette_id: id })
+            .then(() => { delete this._docs[id]; this._tab = "today"; this._renderWindow(); })
+            .catch((e) => this._note(String((e && e.message) || e)));
+        } else { del.dataset.armed = "1"; del.textContent = (L.confirm || "Confirmer") + " ?"; setTimeout(() => { delete del.dataset.armed; del.textContent = L.delete || "Supprimer"; }, 4000); }
       });
     }
 
@@ -310,12 +409,7 @@
         <div class="actions"><button class="btn solid try">${L.try || "Essayer"}</button><button class="btn dup">${L.duplicate || "Dupliquer"}</button></div>`;
       this._ring(body, { lo: p.lo, width: p.width, accent: p.accent, sat: p.saturation }, { readonly: true, avoid: this.rulesValues().avoid });
       body.querySelector(".try").addEventListener("click", () => this.setSelect(this._config.select, n.label));
-      body.querySelector(".dup").addEventListener("click", () => this._saveAs({
-        start: p.lo, width: p.width, accent: p.accent === null ? p.lo : p.accent, saturation: p.saturation, jitter: p.jitter || 0,
-        curve_morning: (p.curve || {}).morning || 100, curve_day: (p.curve || {}).day || 100, curve_evening: (p.curve || {}).evening || 100, curve_night: (p.curve || {}).night || 100,
-        alive: typeof p.alive === "number" ? p.alive : 0, alive_all: p.alive === "all", white: p.white,
-        shapes: p.life ? p.life.shapes : [], every_min: p.life ? p.life.every[0] : 120, every_max: p.life ? p.life.every[1] : 600,
-      }, n.label + " 2"));
+      body.querySelector(".dup").addEventListener("click", () => this._saveAs(this._flatOf(p), n.label + " 2"));
     }
 
     // the day's rules, and the week they give
@@ -384,16 +478,14 @@
         return;
       }
     }
+    // « Enregistrer sous » and « Nouvelle »: one more document, no ceiling (0.42)
     _keepAs(v, name) {
-      const L = this._config.labels || {};
-      const free = this.freeStore();
-      if (!free) { this._note(L.full || "Toutes les cases sont prises : passez une palette dans le fichier (palette-pull), ou supprimez-en une."); return; }
-      const px = free.prefix, calls = [];
-      for (const k of NUMS) if (k in v) calls.push(this.call("input_number", "set_value", { entity_id: `input_number.${px}_${k}`, value: Math.round(v[k]) }));
-      calls.push(this.setSelect(`input_select.${px}_white`, v.white || "warm"));
-      calls.push(this.setBool(`input_boolean.${px}_alive_all`, !!v.alive_all));
-      calls.push(this.setText(`input_text.${px}_shapes`, (v.shapes || []).join(", ")));
-      Promise.all(calls).then(() => this.setText(`input_text.${px}_name`, name)).then(() => { this._tab = `store:${px}`; this._renderWindow(); });
+      this.saveDoc(null, docOf({ ...v, label: name })).then((id) => {
+        if (!id) return;
+        this._tab = `store:${id}`;
+        this._renderWindow();
+        this.setSelect(this._config.select, name);
+      });
     }
     _note(text) {
       const body = this.shadowRoot.querySelector(".body");

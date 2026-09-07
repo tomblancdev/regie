@@ -320,7 +320,7 @@ class House:
             "restore_default": bool(c.get("restore_default", False)),
             "silent": bool(c.get("silent", True)),
             # the palette (0.20): the house card's row and the Réglages rows
-            "palette": bool(c.get("palette", False)),  # true, or { slots: N } (0.23)
+            "palette": bool(c.get("palette", False)),  # true (a dict said a ceiling until 0.41)
         }
 
     def look_options(self, area: dict) -> list[str]:
@@ -2632,6 +2632,13 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             hints.append(
                 "the house writes fx.palettes but pack 'palette' is not enabled — "
                 "no sensor carries them"
+            )
+        kept = (data.get("controls") or {}).get("palette")
+        if isinstance(kept, dict) and ("keep" in kept or "slots" in kept):
+            hints.append(
+                "controls.palette carries a ceiling (`keep`) — a kept palette is a document "
+                "in the component's store since 0.42 and there is no ceiling any more: "
+                "`palette: true` says it"
             )
         if house.has_pack("palette") and not house.controls()["palette"]:
             hints.append(
