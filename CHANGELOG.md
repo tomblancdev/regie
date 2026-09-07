@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.39.2 — « indisponible » n'est pas « éteinte » (2026-09-07)
+
+La preuve du redémarrage, lue en direct : le cerveau revient à 13:46:39, la
+seconde d'après **chaque ampoule de Kowloon lit `unavailable`** (sa radio n'a
+pas encore répondu — 35 s), le marcheur y voit « toutes éteintes », applique la
+règle de 0.25.5 et **éteint son propre interrupteur ↻**. La marche ne reprend
+pas. La même lecture tuait une marche au démarrage de son AMBIANCE : le script
+peint les ampoules puis lance la marche, et leurs états n'ont pas encore
+rattrapé la peinture (observé aussi sur 0.38, avant ce chantier — la boucle
+rendue portait la même faute).
+
+**La règle relue :** une marche se termine quand chaque ampoule de l'ambiance
+est vraiment `off` — la main l'a éteinte. `unavailable` ou `unknown` n'est pas
+une main : c'est une ampoule qui ne répond plus, ou un cerveau qui revient et
+ne sait pas encore. Et le minuteur d'un marcheur reste armé même quand son
+ampoule n'est pas allumée : le rapport `on` est le chemin rapide, la frontière
+de la jambe suivante celui qui rattrape une ampoule revenue sans qu'on
+l'entende. Une ampoule éteinte n'est toujours jamais peinte.
+
 ## 0.39.1 — le composant dit ses services (2026-09-07)
 
 Un composant qui enregistre un service et n'embarque pas de `services.yaml`

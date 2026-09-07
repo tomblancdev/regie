@@ -140,3 +140,16 @@ def test_the_hue_register_is_the_bulbs_own_254_units():
     assert walk.zcl_hue(360) == 0, "the circle closes"
     assert walk.zcl_hue(180) == 127
     assert 0 <= walk.zcl_hue(359.9) < 254
+
+
+def test_only_a_hand_s_off_ends_a_walk():
+    """0.25.5's rule, read again after it cost a walk: every bulb OFF ends the
+    walk — and `unavailable` is not off. Live 2026-09-07 13:46:47, a restart
+    put every walker `unavailable` for 35 s and the walk turned its own switch
+    out; the same reading killed a walk at its look's start, the bulbs' states
+    not yet caught up with the paint."""
+    assert walk.ended(["off", "off", "off"])
+    assert not walk.ended(["off", "on", "off"])
+    assert not walk.ended(["unavailable", "unavailable", "unavailable"])
+    assert not walk.ended(["unknown", "off"])
+    assert not walk.ended([]), "a walk with no walker has nothing to end"

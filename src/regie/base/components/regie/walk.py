@@ -192,6 +192,20 @@ def step_order(
     return Order(hue, step, step, False, None)
 
 
+def ended(states: list[str]) -> bool:
+    """Is the walk over? Only when every bulb of the look is genuinely OFF —
+    that is a hand's off, and 0.25.5's rule says it ends the walk.
+
+    A bulb reading `unavailable` or `unknown` has NOT been switched off: it has
+    stopped answering, or the brain has just come back and does not know yet.
+    Read live 2026-09-07 13:46:47, the restart proof: Home Assistant came back,
+    every walker went `unavailable` for 35 s before its radio answered, and a
+    walk that counted anything-but-on as off turned its own switch out. The
+    same reading killed a walk at its LOOK's start — the look paints the bulbs
+    and the walk begins before their states have caught up."""
+    return bool(states) and all(s == "off" for s in states)
+
+
 def rate_of(order: Order, unit: float = 360 / 254) -> int:
     """The move order's rate, in the bulb's own whole units per second (ZCL
     `moveHue` takes nothing finer, and the GU10 answered an enhanced-hue order

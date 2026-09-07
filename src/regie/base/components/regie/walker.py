@@ -43,7 +43,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .walk import FLOOR, SPAN, Order, hue_at, order_at, rate_of, step_order, zcl_hue
+from .walk import FLOOR, SPAN, Order, ended, hue_at, order_at, rate_of, step_order, zcl_hue
 
 _LOG = logging.getLogger(__name__)
 
@@ -230,10 +230,6 @@ class Walks:
             w.cancel = None
         if not w.alive:
             return
-        if not self.hass.states.is_state(w.entity, "on"):
-            # a bulb a hand switched off is never painted: a colour command
-            # would light it again. The `on` report re-arms it.
-            return
         arc = self._arc(walk)
         now = time.time()
         order = (
@@ -251,7 +247,12 @@ class Walks:
                 anchor=w.order == "move",
             )
         )
-        if order.hue is not None:
+        # a bulb that is not lit is never painted: a colour command would light
+        # it again, and a hand's off must hold (0.25.5). The timer stays armed
+        # all the same — the `on` report is the fast path, the next leg's
+        # boundary the one that catches a bulb that came back unheard.
+        lit = self.hass.states.is_state(w.entity, "on")
+        if order.hue is not None and lit:
             await self._say(walk, w, order, arc)
             if w.first and w.backend == "matter":
                 # the dropped first command (the Govee, twice read): say it
@@ -259,7 +260,8 @@ class Walks:
                 w.first = False
                 self._later(walk, w, REPEAT_FIRST)
                 return
-        w.first = False
+        if lit:
+            w.first = False
         self._later(walk, w, order.wait)
 
     def _later(self, walk: Walk, w: Walker, seconds: float) -> None:
@@ -372,10 +374,8 @@ class Walks:
             return
         if new is None or new.state != "on":
             w.brightness = None
-            if w.cancel:
-                w.cancel()
-                w.cancel = None
-            await self._all_off(walk)
+            if new is not None and new.state == "off":
+                await self._all_off(walk)
             return
         level = new.attributes.get("brightness")
         was_off = old is None or old.state != "on"
@@ -387,7 +387,11 @@ class Walks:
             await self._arm(walk, w)
 
     async def _all_off(self, walk: Walk) -> None:
-        if any(self.hass.states.is_state(w.entity, "on") for w in walk.walkers):
+        states = [
+            (self.hass.states.get(w.entity).state if self.hass.states.get(w.entity) else "")
+            for w in walk.walkers
+        ]
+        if not ended(states):
             return
         _LOG.debug("regie.walk %s: every bulb off — a hand ended the walk", walk.id)
         self.stop_walk(walk.id)
