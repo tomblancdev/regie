@@ -2,7 +2,7 @@
 
 | file | project | version | sha256 |
 |---|---|---|---|
-| `easy-floorplan-card.js` | [nicosandller/easy-floorplan](https://github.com/nicosandller/easy-floorplan) (MIT) | **v1.6.1** (2026-09-02) | `704f168adc4c9a16d41aee810676909f4d961b90c5352b3ad38cfedf2d806630` |
+| `easy-floorplan-card.js` | [nicosandller/easy-floorplan](https://github.com/nicosandller/easy-floorplan) (MIT) | **v1.8.0** (2026-09-07) | `59f735f01a8ecec465de60b6cd24ecf6fcd26b2097b112393c220a40f4f5d041` |
 
 The card the Plan tab is drawn with (`floorplan.py`). It is carried by the
 product, not fetched at converge and never through a store: a house renders

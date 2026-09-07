@@ -32,7 +32,7 @@ from .house import House
 # A resource is loaded by the frontend after its bootstrap, so after the
 # polyfill, every time. The version in the URL turns a bump into a new file
 # for every cache between the brain and a phone.
-CARD_VERSION = "1.6.1"  # VENDOR.md
+CARD_VERSION = "1.8.0"  # VENDOR.md
 CARD_URL = f"/local/easy-floorplan-card.js?v={CARD_VERSION}"
 
 GLOW = 130  # how far a light at full brightness pools its colour, in centimetres
