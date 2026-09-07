@@ -1,0 +1,120 @@
+# The walker's two doors, as Home Assistant reads them (0.39). A component
+# that registers a service and ships no services.yaml logs an error at every
+# start ("Failed to load services.yaml for integration: regie", read live) and
+# leaves the service nameless in the UI's picker — so the file is part of the
+# service, not documentation beside it.
+walk:
+  name: Walk
+  description: >-
+    Run a look's sustained colour walk — a sequence of legs, one order per leg,
+    said in each bulb's own language. The look's ↻ switch is the only truth: a
+    walk whose switch is not on does not start, and a switch going off ends it.
+  fields:
+    id:
+      name: Walk
+      description: The walk's name, one per room and look (`<room>.<look>`).
+      required: true
+      example: living_room.game
+      selector:
+        text:
+    switch:
+      name: Switch
+      description: The look's ↻ helper — the walk runs while it is on.
+      required: true
+      example: input_boolean.living_room_game_drift
+      selector:
+        entity:
+          domain: input_boolean
+    walkers:
+      name: Walkers
+      description: >-
+        One entry per bulb — `entity`, `period` (seconds for one there and
+        back), `phase`, `backend` (zigbee · matter · ha), `topic`
+        (Zigbee2MQTT's, without /set), `order` (ramp · move) and `alive`.
+      required: true
+      selector:
+        object:
+    palette:
+      name: Palette
+      description: >-
+        The sensor to read the arc from at every leg. Leave it out to use the
+        numbers below.
+      example: sensor.house_palette
+      selector:
+        entity:
+          domain: sensor
+    lo:
+      name: Low end
+      description: The arc's low end, in degrees.
+      default: 190
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+    width:
+      name: Width
+      description: How far the arc travels from its low end, in degrees.
+      default: 140
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+    accent:
+      name: Accent
+      description: A hue each walker dwells on for a fifth of its cycle.
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+    saturation:
+      name: Saturation
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    step:
+      name: Step
+      description: >-
+        A leg's approach, in seconds — and the pace of the slowest rung, a bulb
+        that cannot ramp by itself.
+      default: 2.5
+      selector:
+        number:
+          min: 0.5
+          max: 60
+          step: 0.1
+          unit_of_measurement: s
+    span:
+      name: Span
+      description: >-
+        The widest travel one order covers, in degrees: the walk is cut into
+        legs no longer than this. Lower it for shorter legs.
+      default: 170
+      selector:
+        number:
+          min: 5
+          max: 180
+          unit_of_measurement: "°"
+stop:
+  name: Stop
+  description: >-
+    End a walk and the motion inside its bulbs — a leg's order lives in the
+    bulb's own firmware, so a forgotten walk would go on sliding.
+  fields:
+    id:
+      name: Walk
+      description: One walk by name.
+      example: living_room.game
+      selector:
+        text:
+    room:
+      name: Room
+      description: Every walk of a room.
+      example: living_room
+      selector:
+        text:

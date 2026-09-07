@@ -40,6 +40,7 @@ templates:
   - { copy: components/regie/conversation.py, dst: home-assistant/custom_components/regie/conversation.py }
   - { copy: components/regie/walk.py, dst: home-assistant/custom_components/regie/walk.py }
   - { copy: components/regie/walker.py, dst: home-assistant/custom_components/regie/walker.py }
+  - { copy: components/regie/services.yaml, dst: home-assistant/custom_components/regie/services.yaml }
   - { house_file: plan.image, dst: "home-assistant/www/{{ plan_image }}", when: plan_image }
   - { src: mosquitto/mosquitto.conf.j2, dst: mosquitto/config/mosquitto.conf, owner: mosquitto }
   - { src: mosquitto/acl.j2, dst: mosquitto/config/acl, owner: mosquitto }

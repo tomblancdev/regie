@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.39.1 — le composant dit ses services (2026-09-07)
+
+Un composant qui enregistre un service et n'embarque pas de `services.yaml`
+écrit une erreur à chaque démarrage (`Failed to load services.yaml for
+integration: regie`, lu en direct sur le cerveau au premier converge de 0.39.0)
+et laisse le service sans nom dans le sélecteur de l'interface. Le fichier
+part donc avec le composant : `regie.walk` et `regie.stop` avec leurs champs,
+leurs sélecteurs et leurs défauts.
+
 ## 0.39.0 — l'ampoule marche seule (2026-09-07)
 
 L'audit du cerveau, V7 : **une marche est une suite de JAMBES, et chaque

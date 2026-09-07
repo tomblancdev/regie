@@ -53,6 +53,7 @@ EXPECTED = {
     "home-assistant/custom_components/regie/conversation.py",
     "home-assistant/custom_components/regie/walk.py",
     "home-assistant/custom_components/regie/walker.py",
+    "home-assistant/custom_components/regie/services.yaml",
     "mosquitto/config/mosquitto.conf",
     "mosquitto/config/acl",
     "mosquitto/config/passwd",

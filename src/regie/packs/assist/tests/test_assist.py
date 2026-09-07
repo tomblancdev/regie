@@ -57,6 +57,7 @@ def test_the_porter_is_configured_and_its_component_laid_down(rendered):
         # walker is its second tenant and needs no pack to be asked for
         "walk.py",
         "walker.py",
+        "services.yaml",
     }
 
 
