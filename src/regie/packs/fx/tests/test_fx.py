@@ -260,3 +260,26 @@ def test_enable_narrows_the_scripts(house_with, secrets, tmp_path):
     (path.parent / "fx.yml").write_text("enable: [flash]\n", encoding="utf-8")
     with pytest.raises(HouseError, match="shape 'pulse' is not enabled"):
         load_house(path)  # the witness's story uses pulse
+    # ... and both words come from this folder now (0.38, the audit's V9): the
+    # refusal above is `hooks.py`'s `check`, the fx.yaml above its `context`
+
+
+def test_the_pack_carries_its_own_check_and_context():
+    """The plugin shape (0.38, V9): the two questions that are fx's alone live
+    in the pack folder, not in the engine — the compiler follows in V14."""
+    from regie.packs import _load, product_packs
+
+    pack = _load("fx", product_packs()["fx"], "product")
+    assert pack.hooks_file == "hooks.py"
+    assert callable(pack.hooks.check) and callable(pack.hooks.context)
+
+
+def test_an_unknown_backend_is_still_refused(house_with):
+    from regie.house import load_house
+
+    path = house_with(lambda d: None)
+    # a name the SCHEMA accepts (`^[a-z][a-z0-9_]*$`), so the refusal is the
+    # pack's word and not the schema's — which speaks first
+    (path.parent / "fx.yml").write_text("backend: pigeon\n", encoding="utf-8")
+    with pytest.raises(HouseError, match="fx: unknown backend 'pigeon'"):
+        load_house(path)

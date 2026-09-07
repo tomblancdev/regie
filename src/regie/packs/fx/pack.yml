@@ -9,6 +9,7 @@
 # light-service loop, the slowest rung; the per-protocol folders carry their
 # envelope, written down, measured at their bench.
 name: fx
+hooks: hooks.py   # 0.38 (V9): the backend and the shapes checked, fx_scripts compiled
 summary: script.fx_<shape> per shape — flash · fade · pulse · blackout · strike, compiled for the ha backend
 kinds: []
 services: []

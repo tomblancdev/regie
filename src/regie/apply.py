@@ -43,6 +43,7 @@ from .ha import HomeAssistant
 from .host import STATE, read_state, write_state
 from .house import House
 from .otbr import Otbr
+from .packs import call_hook, hooks_of
 from .render import MANIFEST, OBJECT_DOMAINS
 from .z2m import Z2M
 
@@ -182,6 +183,8 @@ class Conductor:
         self.tokens_dir = self.root / STATE / "tokens"
         self._cache: dict = {}
         self.area_ids: dict[str, str] = {}  # the house's area id -> Home Assistant's, once read
+        # the open websocket, live only while a pack's `apply` hook runs (0.38)
+        self.ws = None
         if house.data["house"].get("url") and not ha.frontend_base:
             ha.frontend_base = house.data["house"]["url"]
 
@@ -1444,18 +1447,23 @@ class Conductor:
             if not self.check:
                 ws.call("config/entity_registry/update", entity_id=e["entity_id"], hidden_by="user")
 
-    def palette_slots(self) -> None:
-        """The stores under the rule (0.33; freed on their name alone 0.24 →
-        0.32): a store the files carry as it stands is freed — the family kept
-        a palette on the phone, `regie pull` wrote it, the file has it; one the
-        files do not carry is kept, not yet pulled; one the files carry
-        DIFFERENTLY waits for a hand (a re-edit on the phone after the pull, or
-        the file's numbers touched) — nothing is lost either way."""
-        from . import pull
+    def packs(self, ws) -> None:
+        """What the packs do on the brain (0.38, the audit's V9): each pack's
+        `apply` hook, after the engine's own steps, with the open websocket at
+        hand (`conductor.ws`).
 
-        for o in pull.read_stores(self.house, self.ha):
-            state, detail = pull.settle(o, self.check)
-            self.step(o.name, state, detail)
+        The rule a hook lives by: it PLACES what leaves with the pack's own
+        rendered files (the palette's stores are helpers the manifest already
+        remembers), never what must be UN-placed once the pack is gone — a
+        Lovelace resource, a config entry. A pack that is no longer in
+        `packs:` is not loaded, and code that does not run undoes nothing;
+        those stay the engine's, in `resources()` and `entries()`."""
+        self.ws = ws
+        try:
+            for pack, fn in hooks_of(self.house.packs, "apply"):
+                call_hook(pack, "apply", fn, self)
+        finally:
+            self.ws = None
 
     def orphans(self, ws) -> None:
         """A package rendered once and gone leaves its entities in the registry
@@ -2163,7 +2171,6 @@ class Conductor:
             self.backup(ws)
         self.knobs()
         self.looks()
-        self.palette_slots()
         self.mqtt()
         self.matter()
         self.thread()
@@ -2178,6 +2185,7 @@ class Conductor:
             self.resources(ws)
             self.workbench(ws)
             self.assist(ws)
+            self.packs(ws)
         return self.steps
 
 

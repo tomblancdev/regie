@@ -19,10 +19,45 @@ the first commit or never are:
   mini-PC — Quadlet units, host networking) now; `pi`, `docker` later.
 - **packs** — what a house does. A pack is a folder: the services it
   brings, the templates it instantiates from the things, the schema fields
-  it adds, its tests. `lighting` now; `presence`, `energy`, `security`,
-  `media`, `voice`, `matter`, `cameras` the day a need names them. **A house
-  adds its own packs** from a directory of its choosing — the same loader,
-  the same shape — so what must stay private never enters this repo.
+  it adds, its tests, and since 0.38 the code that thinks for it. `lighting`
+  now; `presence`, `energy`, `security`, `media`, `voice`, `matter`,
+  `cameras` the day a need names them. **A house adds its own packs** from a
+  directory of its choosing — the same loader, the same shape — so what must
+  stay private never enters this repo.
+
+### A pack that carries code (0.38)
+
+A pack folder may name one Python module beside its `pack.yml` —
+`hooks: hooks.py`, a declaration, so a stray `.py` in a folder never runs —
+and the engine calls it at the three places it has always had for a pack:
+
+| hook | called | does |
+|---|---|---|
+| `check(house)` | the house cross-checked, after the engine's own words | returns `(errors, warnings, hints)` — lines in the pack's own wording, the engine prefixes none |
+| `context(house)` | the render's context is built | returns names for the templates, merged **flat** (`fx_scripts`, not `packs.fx.scripts`) — two packs claiming one name, or a pack claiming the engine's, is refused at render, never a silent overwrite |
+| `apply(conductor)` | the conductor's run, after its own steps | `conductor.step(name, state, detail)`, with `.house`, `.ha`, `.root`, `.check` and the open websocket at `.ws` |
+
+Each is optional; the module is imported once, **from its path** — the packs
+ship as data, and a house pack lives outside the installed engine entirely,
+so one loader serves both and a house pack is a plugin on exactly the
+product's terms. A hook's own `HouseError` is the pack's word; anything else
+raised is renamed with the pack that raised it — the family never meets a
+traceback.
+
+**What a hook may own.** It PLACES what leaves with the pack's own rendered
+files (the palette pack's stores are helpers the manifest already
+remembers). It may not own something that must be UN-placed once the pack is
+gone — a Lovelace resource, a config entry: a pack no longer in `packs:` is
+never loaded, and code that does not run undoes nothing. Those stay the
+engine's.
+
+**A pack folder is code.** A pack that declares `hooks:` runs inside the
+engine's own process, as whoever runs `regie` — root, on the brain, with the
+conductor's token in reach. Loading one trusts its author exactly as much as
+the engine's. There is no sandbox and a convincing-looking one would be
+worse than this paragraph; what the engine does instead is name them before
+they run — `regie check` marks each such pack `+hooks`, `regie packs` prints
+the file.
 
 The **schema is the contract** (`schema: 1`, [`home.schema.json`](src/regie/schema/home.schema.json)):
 `kind` and `via` are open vocabularies — an unknown value is a warning,
@@ -118,7 +153,7 @@ through the same code, so the fleet never has a feature the house lacks.
 | the base | the config tree every profile renders, the dashboard's descent (`dash.py`) and the skin (`theme.py`, `base/fonts/`) | [`src/regie/base/`](src/regie/base) |
 | themes | the skins the product carries — `nuit` · `verre` · `atelier` | [`src/regie/themes/`](src/regie/themes) |
 | profiles | `ct` — Quadlet units, host networking | [`src/regie/profiles/`](src/regie/profiles) |
-| packs | `lighting` — room groups (+ per role, per layout row), the rooms that sense (0.17: one automation per room on its occupancy, the look of the hour when `<room>_dark` says so, off only what the sensors lit, a switch and a pin per room), silent alerts, the room's health sensor · the vocabulary: `signals` (+ `<room>_dark` and the occupancy's hold, 0.17) · `modes` · `scenes` (+ the room's look memory, 0.17) · `fx` (shapes/ the bricks, backends/ the envelopes) · `notify` · `scenarios` · `when` (0.18: a thing's state, or the house's mode, picks a look, a mode or a story — one automation per thing, a switch each; the verbs in `verbs.py`, rendered once) · `hands` (0.19: the remotes — a gesture profile per model in `hands.py`, a behaviour from the shelf per remote, one automation per remote) | [`src/regie/packs/`](src/regie/packs) |
+| packs | `lighting` — room groups (+ per role, per layout row), the rooms that sense (0.17: one automation per room on its occupancy, the look of the hour when `<room>_dark` says so, off only what the sensors lit, a switch and a pin per room), silent alerts, the room's health sensor · the vocabulary: `signals` (+ `<room>_dark` and the occupancy's hold, 0.17) · `modes` · `scenes` (+ the room's look memory, 0.17) · `fx` (shapes/ the bricks, backends/ the envelopes) · `notify` · `scenarios` · `when` (0.18: a thing's state, or the house's mode, picks a look, a mode or a story — one automation per thing, a switch each; the verbs in `verbs.py`, rendered once) · `hands` (0.19: the remotes — a gesture profile per model in `hands.py`, a behaviour from the shelf per remote, one automation per remote) · **the packs that carry code** (0.38): `fx` (`hooks.py` — the backend and the shapes checked, `fx_scripts` compiled), `palette` (`hooks.py` — the stores settled at every converge) | [`src/regie/packs/`](src/regie/packs) |
 | labels | the family's words, per language | [`src/regie/labels/`](src/regie/labels) |
 | the witness | `maison-temoin` | [`examples/`](examples) |
 | the collection | `tomblancdev.regie` — the fleet driver | [`ansible/`](ansible) |

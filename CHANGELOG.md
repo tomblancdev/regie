@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.38.0 — le contrat des paquets gagne des crochets Python (2026-09-07)
+
+L'audit du cerveau, V9 : **la forme d'un greffon EST le dossier du paquet.**
+Mesuré avant d'écrire une ligne : les douze paquets ne savent dire que six
+choses, toutes déclaratives (le nom, `kinds`/`via`, un fragment de schéma,
+des gabarits, des cartes, des tests) et aucun n'a jamais porté une ligne de
+Python ; tout paquet qui doit RÉFLÉCHIR le fait depuis le moteur, derrière
+27 `has_pack()` répartis dans six modules, et 2 551 lignes qui
+n'appartiennent qu'à un seul paquet vivent ailleurs que chez lui (`fx.py`
+446, `palette.py` 1 301, `hands.py` 596, `look.py` 208) ; `_cross_check` est
+UNE fonction de 618 lignes où les questions de `modes`, `fx`, `scenarios`,
+`palette` et `assist` se touchent ; quatre paquets sur douze seulement
+portent un `schema.json` — les mots des huit autres (`fx:`, `scenes:`,
+`modes:`…) sont dans le schéma de base ; et `services:` est un champ mort,
+déclaré sur la classe, lu par personne.
+
+**Le contrat.** Un dossier de paquet peut nommer UN module Python à côté de
+son `pack.yml` — `hooks: hooks.py`, une déclaration : un `.py` égaré dans un
+dossier ne tourne jamais. Le moteur l'appelle aux trois endroits qu'il a
+toujours eus pour un paquet :
+
+- `check(house)` → `(errors, warnings, hints)`, après les mots du moteur,
+  dans l'ordre des `packs:` de la maison ; le paquet écrit son propre
+  préfixe, le moteur n'en ajoute aucun.
+- `context(house)` → des noms pour les gabarits, fusionnés À PLAT
+  (`fx_scripts`, pas `packs.fx.scripts`) : aucun gabarit ne change quand un
+  cas d'usage sort du moteur pour rentrer chez lui. Deux paquets qui
+  réclament le même nom, ou un paquet qui réclame celui du moteur : refus au
+  rendu, jamais un écrasement silencieux dans le cerveau de la famille.
+- `apply(conductor)` → `conductor.step(...)`, après les pas du moteur, la
+  websocket ouverte sous la main (`conductor.ws`).
+
+Chacun est facultatif. Le module est importé UNE fois, **par son chemin** —
+les paquets sont livrés en données (aucun `__init__.py` sous `packs/`) et un
+paquet de maison vit entièrement hors du moteur installé : un seul chargeur
+pour les deux, et un paquet de maison est un greffon aux conditions exactes
+du produit. Le `HouseError` d'un crochet est la parole du paquet et passe tel
+quel ; toute autre exception est renommée avec le paquet qui l'a levée — la
+famille ne rencontre jamais une trace d'appels.
+
+**Ce qu'un crochet a le droit de posséder.** Il POSE ce qui s'en va avec les
+fichiers rendus du paquet (les réserves de `palette` sont des assistants que
+le manifeste retient déjà). Il ne peut pas posséder ce qu'il faut DÉPOSER une
+fois le paquet parti — une ressource Lovelace, une entrée de configuration :
+un paquet qui n'est plus dans `packs:` n'est jamais chargé, et du code qui ne
+tourne pas ne défait rien. Ceux-là restent au moteur (`resources()`,
+`entries()`) ; c'est pour cette raison, trouvée en le faisant, que la
+ressource de l'Atelier n'a pas bougé.
+
+**Un dossier de paquet est du code**, et c'est écrit : il tourne dans le
+processus du moteur, en root sur le cerveau, le jeton du chef d'orchestre à
+portée. Charger un tel paquet, c'est faire à son auteur exactement la
+confiance qu'on fait au moteur. Pas de bac à sable — un faux serait pire que
+la phrase ; ce que le moteur fait à la place, c'est les NOMMER avant qu'ils
+tournent (`regie check` marque `+hooks` dans sa ligne de paquets, `regie
+packs` imprime le fichier).
+
+**Les deux premiers utilisateurs, déplacés dans la même version** — une
+mécanique sans usage réel n'est pas prouvée : `packs/fx/hooks.py` prend le
+`check` de fx (le backend, `enable`, la forme qu'une histoire nomme) et son
+`context` (`fx_scripts`, que seul son propre gabarit lit) ; le compilateur
+`src/regie/fx.py` suivra avec le reste du paquet (V14). `packs/palette/hooks.py`
+prend `Conductor.palette_slots` — les réserves réglées à chaque convergence.
+**Le rendu de la maison témoin est identique octet pour octet** avant et après
+le déplacement (48 fichiers, le manifeste et les fichiers 0600 compris). Les
+pas des réserves arrivent maintenant à la FIN de `apply`, après `orphans` :
+une réserve dont la maison ne rend plus l'assistant est retirée avant d'être
+lue, au lieu d'être annoncée « pas encore rapatriée » juste avant de
+disparaître.
+
+Dix-huit tests sur la mécanique, écrits par un paquet de MAISON (le `chalet`
+du témoin — ce qu'une maison a le droit de faire est exactement ce que fait
+un paquet du produit) : les trois crochets, un fichier non déclaré qui ne
+tourne pas, un fichier déclaré absent, un chemin qui sort du dossier, un
+module qui ne s'importe pas, un crochet qui lève, un `check` qui répond la
+mauvaise forme, un `context` qui répond autre chose qu'un dictionnaire, un
+nom réclamé par deux paquets, le nom du moteur réclamé, `+hooks` dans la
+ligne de `regie check`.
+
 ## 0.37.0 — une porte pour les deux verbes (2026-09-07)
 
 La porte standard de la voix chez Le Squat : les oreilles et la bouche
@@ -47,7 +126,6 @@ logbook holds no line for it — nothing to write ». Le double de test apprend
 le journal (`FakeHA.logbook`) ; un test lit l'automatisation rendue dans le
 paquet du témoin (le déclencheur, l'action, chaque lumière dans le gabarit du
 message).
-||||||| parent of d01ef7f (Une porte pour les deux verbes (la porte standard de la voix chez Le Squat). assist.voice prend sa forme à une adresse, voice: { url, voice }, à côté de la forme à deux portes de 0.34 (le schéma prend l'une ou l'autre) ; la maison lit les deux en une liste de portes, chacune avec les verbes qu'elle sert (house.py). apply fait UNE entrée wyoming pour une porte à deux verbes (l'étape entry wyoming voice — l'intégration du cerveau charge la plateforme stt et la plateforme tts depuis une même entrée, lu dans sa source data.py), lit dans le registre l'entité de chaque verbe qu'elle porte (le titre est le mot du serveur : openai pour le pont wyoming_openai, jamais deviné) ; chaque verbe se souvient de son entrée et de l'adresse où elle fut faite, si bien qu'une maison qui replie ses deux portes en une voit ses deux entrées refaites en une (un verbe qui a déménagé perd son entrée, la porte est faite une fois, les deux verbes s'en souviennent) ; sans mémoire, l'entrée adoptée est celle qui porte déjà une entité de chaque verbe de la porte. Le double apprend un serveur qui annonce les deux (ha.bridges). Deux tests neufs ; la ligne Voice du README ; l'entrée 0.37.0 du CHANGELOG.)
 
 ## 0.36.0 — « Garder » : une ambiance réglée sur le téléphone, rapatriée (2026-09-07)
 

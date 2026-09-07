@@ -1,11 +1,22 @@
 """Packs — use cases. A folder: a pack.yml, an optional schema fragment, the
-templates it instantiates from the things, its tests. The product ships its
-own; a house adds its own from a directory of its choosing — same loader,
-same shape, so what must stay private never enters the public product."""
+templates it instantiates from the things, its tests — and, since 0.38 (the
+audit's V9), an optional Python module the engine calls at check, render and
+apply. The product ships its own; a house adds its own from a directory of
+its choosing — same loader, same shape, so what must stay private never
+enters the public product, and the plugin shape IS the pack folder.
+
+A pack that declares `hooks:` is CODE: the module runs inside the engine's
+own process, as whoever runs `regie` — root, on the brain, with the
+conductor's token in reach. Loading such a pack trusts its author exactly as
+much as the engine's. `regie check` and `regie packs` name the packs that
+carry one, before a line of it runs; there is no sandbox and a fake one
+would be worse than this sentence."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,6 +26,10 @@ from .errors import HouseError
 
 HERE = Path(__file__).parent / "packs"
 
+# the three call sites (0.38): the house cross-checked, the render's context,
+# the conductor's run. A pack answers to none, some or all of them.
+HOOKS = ("check", "context", "apply")
+
 
 @dataclass
 class Pack:
@@ -23,6 +38,7 @@ class Pack:
     data: dict
     origin: str  # "product" or "house"
     fragment: dict = field(default_factory=dict)
+    _module: object | None = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def summary(self) -> str:
@@ -57,6 +73,84 @@ class Pack:
     def templates_dir(self) -> Path:
         return self.path / "templates"
 
+    @property
+    def hooks_file(self) -> str:
+        """The Python module the pack declares beside its pack.yml, or "" — a
+        pack that declares none carries no code, and none is looked for: a
+        stray .py in a folder never runs."""
+        return str(self.data.get("hooks") or "")
+
+    @property
+    def hooks(self):
+        """The pack's module, imported once — None when it declares none.
+
+        Loaded from its PATH, never as `regie.packs.<name>`: the packs ship as
+        data (there is no `__init__.py` anywhere under `packs/`) and a house
+        pack lives outside the installed engine altogether. One loader for
+        both, so a house pack is a plugin on exactly the product's terms."""
+        if not self.hooks_file:
+            return None
+        if self._module is None:
+            self._module = _import(self)
+        return self._module
+
+
+def _import(pack: Pack):
+    file = pack.path / pack.hooks_file
+    name = f"regie_pack_{pack.origin}_{pack.name}"
+    spec = importlib.util.spec_from_file_location(name, file)
+    if spec is None or spec.loader is None:
+        raise HouseError(f"pack {pack.name}: {file} is not a Python module")
+    module = importlib.util.module_from_spec(spec)
+    # named in sys.modules before it runs: a dataclass, a typing lookup or a
+    # relative helper inside the module asks for its own name while importing
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except HouseError:
+        del sys.modules[name]
+        raise
+    except Exception as exc:
+        del sys.modules[name]
+        raise HouseError(f"pack {pack.name}: {pack.hooks_file} does not import — {exc!r}") from exc
+    if not any(hasattr(module, hook) for hook in HOOKS):
+        # a module named by pack.yml and answering to nothing is a typo, not a
+        # choice — a pack that wants no code declares none
+        raise HouseError(
+            f"pack {pack.name}: {pack.hooks_file} answers to none of "
+            f"{', '.join(HOOKS)} — a misspelt name is silent otherwise"
+        )
+    return module
+
+
+def hooks_of(packs: list[Pack], hook: str) -> list[tuple[Pack, object]]:
+    """Every pack of the house that answers to `hook`, in the house's own
+    order (`packs:` in home.yml) — a pack's hooks run where the house put it."""
+    found = []
+    for p in packs:
+        module = p.hooks
+        if module is None:
+            continue
+        fn = getattr(module, hook, None)
+        if fn is None:
+            continue
+        if not callable(fn):
+            raise HouseError(f"pack {p.name}: {hook} in {p.hooks_file} is not a function")
+        found.append((p, fn))
+    return found
+
+
+def call_hook(pack: Pack, hook: str, fn, *args):
+    """A hook run. Its own HouseError is the pack's word and passes through
+    untouched; anything else is named — a broken pack tells the family which
+    pack broke, never a traceback."""
+    try:
+        return fn(*args)
+    except HouseError:
+        raise
+    except Exception as exc:
+        raise HouseError(f"pack {pack.name}: the {hook} hook failed — {exc!r}") from exc
+
 
 def _packs_in(directory: Path | None) -> dict[str, Path]:
     if directory is None or not directory.is_dir():
@@ -83,6 +177,15 @@ def _load(name: str, path: Path, origin: str) -> Pack:
     fragment: dict = {}
     if data.get("schema"):
         fragment = json.loads((path / data["schema"]).read_text(encoding="utf-8"))
+    hooks = data.get("hooks")
+    if hooks:
+        rel = Path(str(hooks))
+        if rel.is_absolute() or ".." in rel.parts:
+            raise HouseError(
+                f"pack {path}: hooks {hooks!r} — a pack's code lives inside its own folder"
+            )
+        if not (path / rel).is_file():
+            raise HouseError(f"pack {path}: pack.yml declares hooks {hooks!r} — no such file")
     return Pack(name, path, data, origin, fragment)
 
 

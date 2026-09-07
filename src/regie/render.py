@@ -18,8 +18,8 @@ from . import __version__, dash
 from . import palette as palette_mod
 from . import theme as skin
 from .errors import HouseError
-from .fx import compile_all
 from .house import DAYLIGHT, House
+from .packs import call_hook, hooks_of
 from .secrets import mosquitto_hash
 
 BASE = Path(__file__).parent / "base"
@@ -90,11 +90,36 @@ def make_env(house: House) -> Environment:
     return env
 
 
+def pack_context(house: House, ctx: dict) -> dict:
+    """What the packs put in front of the templates (0.38, the audit's V9):
+    each pack's `context` hook, merged FLAT — a pack's template reads
+    `fx_scripts`, not `packs.fx.scripts`, so a use case moving out of the
+    engine into its own folder rewrites no template. Two packs claiming one
+    name, or a pack claiming a name the engine already uses, is refused here:
+    a collision is a fault at render, never a silent overwrite in the
+    family's brain."""
+    claimed: dict[str, str] = {}
+    for pack, fn in hooks_of(house.packs, "context"):
+        extra = call_hook(pack, "context", fn, house)
+        if not isinstance(extra, dict):
+            raise HouseError(
+                f"pack {pack.name}: the context hook returns a mapping of names for the "
+                f"templates; it returned {type(extra).__name__}"
+            )
+        for key, value in extra.items():
+            if key in claimed:
+                raise HouseError(
+                    f"pack {pack.name}: context name {key!r} is already pack {claimed[key]}'s"
+                )
+            if key in ctx:
+                raise HouseError(f"pack {pack.name}: context name {key!r} is the engine's own")
+            claimed[key] = pack.name
+            ctx[key] = value
+    return ctx
+
+
 def context(house: House, secrets: dict) -> dict:
-    fx_scripts = {}
-    if house.has_pack("fx"):
-        fx_scripts, _notes, _backend = compile_all(house.fx(), house.data["house"]["label"])
-    return {
+    ctx = {
         "house": house,
         "data": house.data,
         "labels": house.labels,
@@ -122,7 +147,6 @@ def context(house: House, secrets: dict) -> dict:
         # the vocabulary, resolved by role (house.py)
         "modes": house.modes(),
         "fx": house.fx(),
-        "fx_scripts": fx_scripts,
         "scenarios": house.scenarios,
         "daylight": DAYLIGHT,
         "declared_roles": house.declared_roles,
@@ -148,6 +172,7 @@ def context(house: House, secrets: dict) -> dict:
         "look_options": house.look_options,
         "defaults_base": house.defaults_base,
     }
+    return pack_context(house, ctx)
 
 
 def each_items(house: House, each: str | None) -> list[tuple[str | None, dict | None]]:

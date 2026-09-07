@@ -21,10 +21,10 @@ from jsonschema import Draft202012Validator
 from . import palette as palette_mod
 from . import theme as theme_lib
 from .errors import HouseError
-from .fx import KELVIN, known_backends, load_shapes
+from .fx import KELVIN, load_shapes
 from .include import merge_includes
 from .labels import Labels
-from .packs import Pack, load_packs
+from .packs import Pack, call_hook, hooks_of, load_packs
 from .profiles import Profile, load_profile
 
 SCHEMA_VERSION = 1
@@ -1843,6 +1843,24 @@ def _validate_pieces(schema: dict, data: dict, sources: dict[str, str]) -> None:
             _validate({"$ref": "#/$defs/scenario", "$defs": schema["$defs"]}, s, src)
 
 
+def _hook_lists(pack, result) -> tuple[list[str], list[str], list[str]]:
+    """A `check` hook's answer: three lists of lines, errors first. A pack
+    that returns anything else says so here, named — never a TypeError deep
+    in the loader."""
+    ok = (
+        isinstance(result, tuple | list)
+        and len(result) == 3
+        and all(isinstance(part, tuple | list) for part in result)
+    )
+    if not ok:
+        raise HouseError(
+            f"pack {pack.name}: the check hook returns (errors, warnings, hints) — "
+            f"three lists of lines; it returned {result!r}"
+        )
+    errors, warnings, hints = result
+    return list(errors), list(warnings), list(hints)
+
+
 def _cross_check(house: House) -> tuple[list[str], list[str]]:
     data = house.data
     warnings: list[str] = []
@@ -2368,22 +2386,12 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                 "modes.periods: the times are not in the order of the day — the file's order "
                 "is the day's; the family's UI edits can still cross"
             )
+    # the backend, the enabled shapes and the shapes a story names are the fx
+    # pack's own questions — its `check` hook asks them (0.38, the audit's V9,
+    # `packs/fx/hooks.py`). What stays here needs them for somebody else: the
+    # palette's rules are checked against the shapes and against `fx.enable`
     fx = house.fx()
-    if fx.get("backend") not in known_backends():
-        errors.append(
-            f"fx: unknown backend {fx.get('backend')!r} — known: {', '.join(known_backends())}"
-        )
     shapes = load_shapes(fx.get("shapes"))
-    if not fx.get("enable"):
-        hints.append(
-            f"fx: no enable: — every shape of the library renders a script ({len(shapes)}); "
-            "an enable: list picks"
-        )
-    for name in fx.get("enable") or []:
-        if name not in shapes:
-            errors.append(
-                f"fx.enable: {name!r} is not a shape — known: {', '.join(sorted(shapes))}"
-            )
     dup = [i for i, n in Counter(s["id"] for s in house.scenarios).items() if n > 1]
     if dup:
         errors.append(f"scenario ids used twice: {', '.join(sorted(dup))}")
@@ -2407,10 +2415,6 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                     room and house.area(room)
                 ) and scene not in ("default",):
                     hints.append(f"{where}: {room}/{scene} has no script yet (its roles wait)")
-            if "fx" in step and step["fx"]["shape"] not in shapes:
-                errors.append(f"{where}: shape {step['fx']['shape']!r} is not one")
-            if "fx" in step and fx.get("enable") and step["fx"]["shape"] not in fx["enable"]:
-                errors.append(f"{where}: shape {step['fx']['shape']!r} is not enabled in fx")
     # the palettes (0.20): the rules of the design page, mechanical
     raw_palettes = (data.get("fx") or {}).get("palettes")
     if raw_palettes or house.has_pack("palette"):
@@ -2459,6 +2463,17 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
             f"no labels for lang {house.labels.lang!r} "
             f"(known: {', '.join(Labels.known())}) — English used"
         )
+
+    # what only a pack can ask (0.38, the audit's V9): its `check` hook, after
+    # the engine's own words, in the house's pack order. A pack writes its own
+    # prefix — the engine adds none, so a line reads the same whether the
+    # question moved out of the engine or was born in the pack
+    for pack, fn in hooks_of(house.packs, "check"):
+        p_errors, p_warnings, p_hints = _hook_lists(pack, call_hook(pack, "check", fn, house))
+        errors += p_errors
+        warnings += p_warnings
+        hints += p_hints
+
     if errors:
         raise HouseError(f"{house.path}:\n  " + "\n  ".join(errors))
     return warnings, hints

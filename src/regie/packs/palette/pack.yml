@@ -7,6 +7,7 @@
 # helpers the family owns; the file seeds them once. The rooms' parts, the
 # life loop and the Atelier come with the next steps.
 name: palette
+hooks: hooks.py   # 0.38 (V9): the stores settled at every converge, on the brain
 summary: sensor.house_palette — the house's palette (Auto = the day's draw, or a named one), the select, the hour it turns, « Une autre », the switch « Palette du jour » (a state — what "on" means in every room with a part, never a light on or off)
 kinds: []
 services: []

@@ -51,8 +51,15 @@ def cmd_check(args) -> int:
 def report(house: House, secrets: dict) -> None:
     h = house.data["house"]
     print(f"{h['name']} — {h['label']} ({h.get('lang', 'en')}, {h.get('timezone', 'UTC')})")
+    # a pack carrying a hooks module is CODE the engine runs (0.38, V9): it is
+    # named here, before a line of it does anything
     packs = (
-        ", ".join(f"{p.name}{' (house)' if p.origin == 'house' else ''}" for p in house.packs)
+        ", ".join(
+            f"{p.name}"
+            f"{' (house)' if p.origin == 'house' else ''}"
+            f"{' +hooks' if p.hooks_file else ''}"
+            for p in house.packs
+        )
         or "none"
     )
     print(f"profile {house.profile.name} · packs {packs}")
@@ -609,7 +616,8 @@ def cmd_packs(args) -> int:
 
     for name, path in product_packs().items():
         p = _load(name, path, "product")
-        print(f"{name}: {p.summary} (kinds: {', '.join(p.kinds) or '—'})")
+        code = f" · hooks: {p.hooks_file}" if p.hooks_file else ""
+        print(f"{name}: {p.summary} (kinds: {', '.join(p.kinds) or '—'}){code}")
     return 0
 
 

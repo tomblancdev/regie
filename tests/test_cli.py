@@ -11,8 +11,9 @@ def test_check_reports_and_passes(witness_path, capsys):
     out = capsys.readouterr().out
     assert "maison_temoin — Maison témoin (fr, Europe/Paris)" in out
     assert (
-        "profile ct · packs modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, "
-        "matter, palette, assist, "
+        # `+hooks` marks a pack that carries code, named before it runs (0.38)
+        "profile ct · packs modes, signals, scenes, fx +hooks, notify, scenarios, lighting, "
+        "when, hands, matter, palette +hooks, assist, "
         "chalet (house)" in out
     )
     assert (
