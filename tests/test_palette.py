@@ -281,31 +281,21 @@ def test_the_witness_look_that_reads_the_palette_renders_as_templates(rendered, 
     assert "pal.width * 1.0" in by_entity[("light.living_ceiling_3",)]["data"]["hs_color"]
     # a walker dwells on the accent for a part of its cycle: one more colour of the walk
     assert _lamp(by_entity)["data"]["color_temp_kelvin"] == "{{ pal.white_kelvin }}"
-    # the candidates walk behind a gate, from the sensor's arc
+    # the candidates walk behind a gate, and the walk reads the SENSOR at every
+    # leg (0.39): the script hands `regie.walk` the plan, it does not paint
     drift = pkg["script"]["living_today_drift"]["sequence"]
     assert "variables" in drift[0]
-    walk = drift[1]["repeat"]["sequence"]
-    # a hand's off ends the walk (0.25.5): the first step stops when every walker
-    # is off, and every walker is painted only while it is on
-    assert walk[0]["then"][-1]["stop"] == "every bulb of the look is off — a hand ended the walk"
-    assert (
-        "| map('states') | select('eq', 'on') | list | count == 0"
-        in walk[0]["if"][0]["value_template"]
+    call = drift[1]
+    assert call["action"] == "regie.walk"
+    plan = call["data"]
+    assert plan["palette"] == "sensor.house_palette", (
+        "the arc is read again at each leg — « Une autre » reaches a walk already going"
     )
-    walkers = [s for s in walk if "if" in s and s["then"][0].get("action") == "light.turn_on"]
-    for s_ in walkers:
-        bulb = s_["then"][0]["target"]["entity_id"]
-        assert s_["if"][0] == {"condition": "state", "entity_id": bulb, "state": "on"}
-    gated = [s for s in walkers if len(s["if"]) == 2]
+    assert plan["id"] == "living.today" and plan["switch"] == "input_boolean.living_today_drift"
+    gated = [w for w in plan["walkers"] if "alive" in w]
     assert len(gated) == 3  # the front's two paired places, and the third bulb
-    assert gated[0]["if"][1]["value_template"] == "{{ room.alive[0] }}"
-    hue = gated[0]["then"][0]["data"]["hs_color"][0]
-    assert hue.startswith("{% set pal = state_attr('sensor.house_palette', 'palette') %}")
-    assert "(pal.lo + pal.width * t) % 360" in hue
-    assert (
-        "{% if x >= 0.8 %}{{ ((pal.accent if pal.accent is not none else pal.lo)) % 360 }}" in hue
-    )
-    assert "saturation" in gated[0]["then"][0]["data"]["hs_color"][1]
+    assert gated[0]["alive"] == "{{ room.alive[0] }}"
+    assert all(w["backend"] == "zigbee" and w["topic"] for w in plan["walkers"])
     # the room's drift switch exists like any moving look's
     assert "living_today_drift" in pkg["input_boolean"]
 
@@ -413,7 +403,9 @@ def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness
     today = pkg["script"]["living_today"]["sequence"]
     assert today[-1]["target"]["entity_id"] == "script.living_today_life"
     assert today[-2]["target"]["entity_id"] == "script.living_today_drift"
-    stop = pkg["script"]["living_party"]["sequence"][1]
+    # the walks are ended by the walker's own door, the life loop by its script
+    assert pkg["script"]["living_party"]["sequence"][1]["action"] == "regie.stop"
+    stop = pkg["script"]["living_party"]["sequence"][2]
     assert "script.living_today_life" in stop["target"]["entity_id"]
     # a look that refuses life gets no loop, and a look without a palette neither
     assert "living_evening_life" not in pkg["script"]

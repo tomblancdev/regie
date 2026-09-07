@@ -118,6 +118,17 @@ SCENE_ICONS = {
 # bulb and the walk reads as jitter (Le QG, IKEA LED2109G6/LED2110R3 — 0.5 s was
 # visibly dirty, 2 s was clean)
 DRIFT = {"band": [190.0, 330.0], "saturation": 100, "period": [80.0, 175.0], "step": 2.5}
+# the walk's legs (H51, 2026-09-07): one order per leg, and a leg travels at
+# most this many degrees — `moveToHue` needs an unambiguous direction and a
+# Matter transition takes the short way round whatever was meant, so half the
+# circle is the ceiling; lower it and the legs get shorter, which is the
+# fallback the bench named if the eye reads a long leg worse than the steps.
+WALK_SPAN = 170.0
+# `ramp` = one order with the leg's exact endpoint (`moveToHue` + `transtime`,
+# proven on both IKEA models); `move` = the move order at a whole-unit rate,
+# re-anchored at each leg — the GU10's fallback if its firmware's blind ramp
+# reads as a jump at the end rather than a slide (the bench, the page).
+WALK_ORDERS = ("ramp", "move")
 # a group of lights earns a PAGE of its own at this many things, or as soon as it
 # holds groups (its layout's places). Below it the group is drawn where it stands,
 # its members under it: a step with one way on is not a step.
@@ -701,6 +712,34 @@ class House:
                 out.append(alias)
         return out
 
+    def coordinator_topics(self) -> dict[str, str]:
+        """Each radio's base topic, by radio id — the naming rule, written once
+        (`coordinators()` and the walk's own topics both read it)."""
+        entries = self.data.get("zigbee", {}).get("coordinators", [])
+        return {
+            c["id"]: c.get("base_topic") or ("zigbee2mqtt" if i == 0 else f"zigbee2mqtt_{c['id']}")
+            for i, c in enumerate(entries)
+        }
+
+    def zigbee_topics(self) -> dict[str, str]:
+        """Zigbee2MQTT's own topic per paired thing (`<base>/<id>` — the
+        friendly name IS the thing's id, devices.yaml.j2). Read from the
+        radios' rows and not from `coordinators()`, which resolves each radio's
+        HOST: a walk's plan must render on a house whose radio row is still
+        wrong, so that the cross-check gets to name that fault itself."""
+        entries = self.data.get("zigbee", {}).get("coordinators", [])
+        if not entries:
+            return {}
+        base = self.coordinator_topics()
+        out = {}
+        for t in self.things:
+            if t["via"] != "zigbee" or not t.get("ieee"):
+                continue
+            radio = base.get(t.get("coordinator") or entries[0]["id"])
+            if radio:
+                out[t["id"]] = f"{radio}/{t['id']}"
+        return out
+
     def coordinators(self) -> list[dict]:
         """The radios, resolved: an address, a port, an adapter, a base topic,
         the paired things on each and one Zigbee group per room of lights."""
@@ -730,8 +769,7 @@ class House:
                     "host": host,
                     "port": c.get("port", 6638),
                     "adapter": c.get("adapter", "zstack"),
-                    "base_topic": c.get("base_topic")
-                    or ("zigbee2mqtt" if i == 0 else f"zigbee2mqtt_{c_id}"),
+                    "base_topic": self.coordinator_topics()[c_id],
                     # the instance's own UI, on the loopback: the door the
                     # engine walks and binds through (one per radio, in order)
                     "frontend_port": 8080 + i,
@@ -1260,7 +1298,13 @@ class House:
         falls into a pattern. Stateless by design — a walker's hue is a pure
         function of the clock, so a restart resumes mid-stride and nothing is
         stored. Brightness is absent on purpose: the scene sets it once, and a
-        level command would abort the colour ramp running inside the bulb."""
+        level command would abort the colour ramp running inside the bulb.
+
+        Since 0.39 the plan is what `regie.walk` is CALLED with (the component's
+        walker runs it, one order per leg) rather than what a rendered loop
+        painted step by step: the arc says where to read it — a look's own
+        numbers, a named palette's, or the sensor at every leg — and every
+        walker carries the backend that speaks to its bulb."""
         spec = (plan.get("run") or {}).get("drift")
         pal = self.scene_palette(area, plan)
         gates: dict[str, int] = {}
@@ -1278,6 +1322,7 @@ class House:
             sat = f"{{{{ ({pal['pal']}).saturation }}}}"
             prefix = f"{{% set pal = {pal['pal']} %}}"
             accent_expr = "(pal.accent if pal.accent is not none else pal.lo)"
+            arc = self.walk_arc(pal["source"])
         else:
             if not spec:
                 return None
@@ -1292,8 +1337,16 @@ class House:
             )
             sat = int(spec.get("saturation", DRIFT["saturation"]))
             accent_expr = None
+            arc = {
+                "lo": float(band[0]),
+                "width": float(band[1]) - float(band[0]),
+                "accent": None,
+                "saturation": sat,
+            }
         period = spec.get("period") or DRIFT["period"]
         step = float(spec.get("step") or DRIFT["step"])
+        order = (spec.get("order") or "ramp") if spec else "ramp"
+        span = float((spec.get("span") if spec else None) or WALK_SPAN)
         floor = self.colour_floor(area, spec["role"], [p for p, _ in pairs])
         n = len(pairs)
         walkers = []
@@ -1310,6 +1363,7 @@ class House:
                         per, round(i / n, 4), lo_expr, width_expr, prefix, accent_expr
                     ),
                     "gate": gates.get(entity),
+                    **self.walk_backend(entity),
                 }
             )
         return {
@@ -1320,9 +1374,65 @@ class House:
             "step": max(step, floor),
             "asked": step,
             "floor": floor,
+            "order": order,
+            "span": span,
+            "arc": arc,
             "walkers": walkers,
             "palette": pal,
         }
+
+    def walk_arc(self, source: str) -> dict:
+        """Where a palette walk reads its band. `today` names the SENSOR, read
+        again at every leg — « Une autre », « Repeint » and the turn of the day
+        reach a walk that is already going, exactly as the stepped loop read it
+        at every step. A named palette is numbers, settled at the render.
+
+        A palette walk always dwells: with no accent of its own the palette
+        dwells on its low end (0.24 — the accent is one more colour of the arc,
+        as random as the others), which is what the template says too."""
+        if source == palette_mod.AUTO:
+            return {"palette": palette_mod.SENSOR}
+        named = self.palettes()["named"].get(source) or {}
+        value = palette_mod.named_value(named, self.kelvin())
+        return {
+            "lo": value["lo"],
+            "width": value["width"],
+            "accent": value["accent"] if value["accent"] is not None else value["lo"],
+            "saturation": value["saturation"],
+        }
+
+    def walk_backend(self, entity: str) -> dict:
+        """How a walking bulb is spoken to, from the thing that carries it.
+
+        `zigbee` — raw ZCL through Zigbee2MQTT's own `set` topic (the topic is
+        the radio's base and the thing's id, which IS its friendly name);
+        `matter` — Home Assistant's `light.turn_on` with a transition, the
+        bulb ramping by itself (Thread rides here too: same controller, same
+        service); anything else — `ha`, the stepped loop at the floor, which is
+        every walk before 0.39 and the rung a bulb with no ramp keeps."""
+        thing = self.thing_of(entity)
+        if thing is None:
+            return {"backend": "ha"}
+        if thing["via"] == "zigbee":
+            topics = self.__dict__.setdefault("_zigbee_topics", self.zigbee_topics())
+            topic = topics.get(thing["id"])
+            return {"backend": "zigbee", "topic": topic} if topic else {"backend": "ha"}
+        if thing["via"] in ("matter", "thread"):
+            return {"backend": "matter"}
+        return {"backend": "ha"}
+
+    def thing_of(self, entity: str) -> dict | None:
+        """The thing an entity belongs to, or None (a role group, a helper).
+        Memoised: a walk asks once per walker at every render."""
+        cache = self.__dict__.get("_thing_of")
+        if cache is None:
+            cache = {}
+            for t in self.things:
+                e = self.entity(t)
+                if e:
+                    cache.setdefault(e, t)
+            self.__dict__["_thing_of"] = cache
+        return cache.get(entity)
 
     def colour_floor(self, area: dict, role: str, places: list[str]) -> float:
         """The slowest colour clock the targets impose. A Zigbee bulb ramps
@@ -2169,6 +2279,16 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
                     f"{a['id']}: scene {plan['id']} asks {d['asked']} s between colours on "
                     f"{d['role']} — the backend gives {d['floor']} s, stretched (a Zigbee bulb "
                     "ramps colour itself; a command inside that ramp aborts it)"
+                )
+            # a walk is one order per leg where the bulb can ramp by itself
+            # (0.39); a bulb whose backend cannot is stepped as before, and a
+            # refusal is a line, never silence (H22's first rule)
+            stepped = [w["entity"] for w in (d or {}).get("walkers", []) if w["backend"] == "ha"]
+            if stepped:
+                hints.append(
+                    f"{a['id']}: scene {plan['id']} walks {', '.join(stepped)} on the slowest "
+                    f"rung — nothing says how to make that bulb ramp itself, so it is painted "
+                    f"every {d['step']} s as before (one order per leg for the others)"
                 )
         # a look that reads a palette (0.21): the words need the key, the key
         # needs a palette the file names and the pack that carries it

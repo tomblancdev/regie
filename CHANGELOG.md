@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.39.0 — l'ampoule marche seule (2026-09-07)
+
+L'audit du cerveau, V7 : **une marche est une suite de JAMBES, et chaque
+jambe est UN ordre à l'ampoule.** Le banc du midi (trois ampoules, la page
+« L'Ampoule marche seule ») a répondu à la condition posée par H50 : la
+TRÅDFRI tourne sa teinte toute seule quand on le lui demande dans sa langue —
+`moveToHue` avec un `transtime` atterrit sur la teinte exacte, l'ampoule ne
+REMONTE RIEN pendant qu'elle tourne, un `off` ou une commande de niveau
+arrêtent le mouvement ; la Govee en Matter rampe sur un `transition` et
+ignore le niveau. Kowloon envoyait 8 640 commandes par heure ; elle en
+enverra environ 250, et les dix-neuf ampoules Zigbee n'écriront plus une
+ligne dans le recorder pendant qu'elles marchent.
+
+**Le marcheur vit dans le composant** (H51, *« go for all your reco »*). Le
+composant du produit EMBARQUE AVEC TOUTE MAISON désormais : `configuration.yaml`
+porte le `regie:` nu qui le charge, et le paquet du Portier fusionne sa clef
+dans celle-là (la fusion des paquets de Home Assistant remplit un domaine vide
+— lu à la source, `config.py`). Deux locataires : le portier, et le marcheur.
+
+- **`regie.walk`** prend le plan d'une ambiance : l'arc (les nombres d'une
+  ambiance, ceux d'une palette nommée, ou LE CAPTEUR relu à chaque jambe pour
+  la palette du jour), et un marcheur par ampoule avec son horloge, sa phase,
+  son backend et sa porte. **`regie.stop`** termine les marches d'une pièce et
+  pose chaque ampoule là où elle est — une jambe en vol vit dans l'AMPOULE et
+  continuerait de glisser sous l'ambiance suivante.
+- **Un ordre par jambe, par backend** : `moveToHue` + `transtime` en ZCL brut
+  par le topic `set` de Zigbee2MQTT (`order: move` bascule sur l'ordre de
+  déplacement à un taux entier, ré-ancré à chaque jambe — le repli du GU10 si
+  sa rampe aveugle se lit comme un saut) ; `light.turn_on` + `transition` pour
+  Matter ; et pour tout le reste **la boucle au plancher, celle d'avant**, que
+  `check` nomme désormais à voix haute.
+- **L'horloge reste la seule source** : rien n'est stocké, la teinte est la
+  même fonction du temps qu'avant (`hue_at` en Python EST `hue_template` en
+  Jinja, un test le vérifie jambe par jambe). Un redémarrage en pleine jambe
+  la reprend avec un ordre pour ce qu'il en reste ; un rapport `on` ou un
+  nouveau niveau la ré-arment (une TRÅDFRI s'arrête sur les deux).
+- **Une jambe ne parcourt jamais plus de 170°** (`span`) : `moveToHue` a besoin
+  d'une direction non ambiguë, un `transition` Matter prend le chemin court
+  quoi qu'on ait voulu, et une bande large comme le cercle demanderait à
+  l'ampoule d'aller d'une teinte à elle-même. Baisser `span` raccourcit les
+  jambes — c'est le repli que le banc a nommé si l'œil préfère.
+- **La main garde son mot** : l'ampoule s'arrête d'elle-même sur un `off`, et
+  quand toutes les ampoules d'une ambiance sont éteintes le marcheur éteint
+  l'interrupteur ↻. L'interrupteur reste la seule vérité : une marche dont il
+  n'est pas `on` ne démarre pas.
+
+Le script `<pièce>_<ambiance>_drift` n'est plus une boucle de quatre-vingt-dix
+lignes mais **un appel** ; la boucle de vie (`_life`) reste le script YAML
+qu'elle était, une forme par minutes et non par secondes. Nouveau `span:` et
+`order:` dans le schéma d'un `drift:`. Onze tests neufs sur l'arithmétique
+(`tests/test_walk.py`), les tests du paquet `scenes` relus sur la nouvelle
+forme. La version du composant passe à 0.2.0 : un fichier changé redémarre le
+cerveau.
+
 ## 0.38.0 — le contrat des paquets gagne des crochets Python (2026-09-07)
 
 L'audit du cerveau, V9 : **la forme d'un greffon EST le dossier du paquet.**

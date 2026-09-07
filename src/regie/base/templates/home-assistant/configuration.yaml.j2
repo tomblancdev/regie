@@ -104,5 +104,14 @@ auth_oidc:
 {% endfor %}
 
 {% endif %}
+# the product's own component (custom_components/regie), loaded at every start
+# — it ships with every house since 0.39 because the WALKER lives in it: a
+# look's colour walk is one order per leg, said in the bulb's own language
+# (`regie.walk` / `regie.stop`). Nothing is configured here; a pack that has
+# something to say — Le Portier's package — merges its key into this one, as
+# Home Assistant's package merge fills an empty domain (config.py, read at the
+# source). A change to this file restarts the brain.
+regie:
+
 logger:
   default: warning

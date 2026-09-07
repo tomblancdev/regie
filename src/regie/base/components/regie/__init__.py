@@ -1,10 +1,15 @@
 """La Régie — the product's own component inside the brain (0.31).
 
 The pieces rendered YAML cannot say live here, each a tenant of one domain
-`regie:` that the packages configure and the brain reads once at start. The
-first tenant is the porter (conversation.py, porter.py): a conversation agent
-in front of the house's LLM. The component is copied into the brain's
-config by `render` (base.yml, when the house carries pack assist) and its
+`regie:` that the packages configure and the brain reads once at start. Two
+tenants so far: the porter (conversation.py, porter.py), a conversation agent
+in front of the house's LLM, and the walker (walker.py, walk.py), which runs a
+look's colour walks one order per leg (0.39, the audit's V7).
+
+The component SHIPS WITH EVERY HOUSE since 0.39: `configuration.yaml` carries
+the bare `regie:` that loads it, and a pack that has something to configure —
+the porter's package — merges its own key into that one (Home Assistant's
+package merge fills an empty domain, read at the source, config.py). Its
 version below is its own: it moves when a tenant changes, not with every
 release of the product — a changed file restarts the brain (up.py's rule).
 """
@@ -33,14 +38,22 @@ PORTER_SCHEMA = vol.Schema(
     }
 )
 
+# `regie:` with nothing under it is the ordinary case now — a house with no
+# pack to configure still loads the component for its walks, so the domain's
+# value may be None and the schema must say so (a bare key would otherwise be
+# refused as "expected a dict")
 CONFIG_SCHEMA = vol.Schema(
-    {DOMAIN: vol.Schema({vol.Optional("porter"): PORTER_SCHEMA})}, extra=vol.ALLOW_EXTRA
+    {DOMAIN: vol.Any(None, vol.Schema({vol.Optional("porter"): PORTER_SCHEMA}))},
+    extra=vol.ALLOW_EXTRA,
 )
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config.get(DOMAIN) or {}
     hass.data[DOMAIN] = conf
+    from . import walker
+
+    await walker.async_setup(hass)
     if "porter" in conf:
         # handed to the conversation component the way its own default agent
         # is (default_agent.py): that component never arms platform discovery

@@ -200,33 +200,53 @@ def test_a_base_look_covers_every_place_the_look_did_not_name(house_with):
     assert by_place["back_center"] == {"on": True, "brightness_pct": 30}
 
 
-def test_the_drift_walks_every_place_on_its_own_clock(rendered):
-    pkg = load(rendered, "living")
-    drift = pkg["script"]["living_party_drift"]
-    (rep,) = drift["sequence"]
-    assert rep["repeat"]["while"][0]["entity_id"] == "input_boolean.living_party_drift", (
-        "the kill-switch IS the loop's condition — turning it off ends the walk"
+def test_the_drift_hands_its_plan_to_the_walker(rendered):
+    """0.39 (H51): the script no longer paints a colour every 2.5 s — it is ONE
+    call carrying the plan, and the component's walker sends one order per leg
+    in each bulb's own language."""
+    drift = load(rendered, "living")["script"]["living_party_drift"]
+    (call,) = drift["sequence"]
+    assert call["action"] == "regie.walk"
+    plan = call["data"]
+    assert plan["id"] == "living.party"
+    assert plan["switch"] == "input_boolean.living_party_drift", (
+        "the kill-switch is still the only truth about a walk"
     )
-    # 0.25.5: a walker is painted only while it is on — the call sits under its `if`
-    walk = rep["repeat"]["sequence"]
-    calls = [
-        s["then"][0] for s in walk if "if" in s and s["then"][0].get("action") == "light.turn_on"
-    ]
-    delays = [s for s in rep["repeat"]["sequence"] if "delay" in s]
-    assert [c["target"]["entity_id"] for c in calls] == [
+    assert (plan["lo"], plan["width"], plan["saturation"]) == (190.0, 140.0, 100)
+    assert plan["accent"] is None and "palette" not in plan
+    assert plan["step"] == 2.5 and plan["span"] == 170.0
+    assert [w["entity"] for w in plan["walkers"]] == [
         "light.living_ceiling",
         "light.living_ceiling_2",
     ]
-    assert all("brightness" not in str(c["data"]) for c in calls), (
+    assert [w["period"] for w in plan["walkers"]] == [80.0, 175.0], "no two share a clock"
+    assert [w["phase"] for w in plan["walkers"]] == [0.0, 0.5], "nor a phase"
+    # the backend is read from the thing: these two are on the radio, so the
+    # order is raw ZCL through Zigbee2MQTT's own topic — the thing's id IS its
+    # friendly name (devices.yaml.j2)
+    assert all(w["backend"] == "zigbee" and w["order"] == "ramp" for w in plan["walkers"])
+    assert [w["topic"] for w in plan["walkers"]] == [
+        "zigbee2mqtt/living_ceiling",
+        "zigbee2mqtt/living_ceiling_2",
+    ]
+    assert "brightness" not in str(plan), (
         "brightness is NEVER sent: a level command aborts the colour ramp in the bulb"
     )
-    periods = [c["data"]["hs_color"][0] for c in calls]
-    assert "/ 80.0)" in periods[0] and "/ 175.0)" in periods[1], "no two share a clock"
-    assert "+ 0.0)" in periods[0] and "+ 0.5)" in periods[1], "nor a phase"
-    assert all(c["data"]["transition"] == 2.5 for c in calls)
-    assert [d["delay"]["milliseconds"] for d in delays] == [1250, 1250], (
-        "the places share the step window between them"
-    )
+
+
+def test_a_palette_walk_reads_its_arc_at_every_leg(rendered):
+    """A look on the palette of the day names the SENSOR instead of numbers:
+    « Une autre », « Repeint » and the turn of the day reach a walk already
+    going, exactly as the stepped loop read it at every step."""
+    drift = load(rendered, "living")["script"]["living_today_drift"]
+    variables, call = drift["sequence"]
+    assert "pal" in variables["variables"] and "room" in variables["variables"]
+    plan = call["data"]
+    assert plan["palette"] == "sensor.house_palette"
+    # a candidate walks only on a day that picked it — the gate is the room's
+    # own draw, read when the walk starts
+    gated = [w for w in plan["walkers"] if "alive" in w]
+    assert gated and all(w["alive"].startswith("{{ room.alive[") for w in gated)
 
 
 def test_every_other_look_stops_the_drift(rendered):
@@ -239,6 +259,13 @@ def test_every_other_look_stops_the_drift(rendered):
             "input_boolean.living_today_drift",
         ], "a moving ceiling belongs to ONE look: leaving it must leave it"
         assert second == {
+            "action": "regie.stop",
+            "data": {"room": "living"},
+            "continue_on_error": True,
+        }, (
+            "a leg in flight lives in the BULB (0.39): the walker's own door ends it"
+        )
+        assert pkg["script"][scene]["sequence"][2] == {
             "action": "script.turn_off",
             "target": {
                 "entity_id": [
@@ -247,7 +274,7 @@ def test_every_other_look_stops_the_drift(rendered):
                     "script.living_today_life",
                 ]
             },
-        }, "and the loop in flight is stopped, not left to paint over the next look (0.19.2)"
+        }, "and the life loop in flight, which is a script still (0.19.2)"
     party = pkg["script"]["living_party"]["sequence"]
     assert party[-2]["action"] == "input_boolean.turn_on"
     assert party[-1]["target"]["entity_id"] == "script.living_party_drift"

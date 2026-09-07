@@ -53,6 +53,10 @@ def test_the_porter_is_configured_and_its_component_laid_down(rendered):
         "__init__.py",
         "porter.py",
         "conversation.py",
+        # 0.39: the component ships with every house, pack assist or not — the
+        # walker is its second tenant and needs no pack to be asked for
+        "walk.py",
+        "walker.py",
     }
 
 
