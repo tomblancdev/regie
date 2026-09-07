@@ -262,9 +262,7 @@ def test_every_other_look_stops_the_drift(rendered):
             "action": "regie.stop",
             "data": {"room": "living"},
             "continue_on_error": True,
-        }, (
-            "a leg in flight lives in the BULB (0.39): the walker's own door ends it"
-        )
+        }, "a leg in flight lives in the BULB (0.39): the walker's own door ends it"
         assert pkg["script"][scene]["sequence"][2] == {
             "action": "script.turn_off",
             "target": {
