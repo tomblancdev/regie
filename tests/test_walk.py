@@ -153,3 +153,20 @@ def test_only_a_hand_s_off_ends_a_walk():
     assert not walk.ended(["unavailable", "unavailable", "unavailable"])
     assert not walk.ended(["unknown", "off"])
     assert not walk.ended([]), "a walk with no walker has nothing to end"
+
+
+def test_a_bulb_that_narrates_its_movement_is_stepped_not_ramped():
+    """0.41, measured on a Govee H6008: the same 140° over the same 50 s cost
+    91 state changes as ONE order with a 50 s transition, and 20 as twenty
+    orders of 7° with no transition — one report per order, 4.5x cheaper. A
+    Matter bulb reports every ~1.5° it moves, and every one of those rows holds
+    the word `on` and nothing else, because the light domain keeps no colour.
+    So it is not asked to move: it is stepped, and it does not get a
+    transition. A Zigbee bulb turns in silence and keeps its leg."""
+    assert walk.stepped("matter") and walk.stepped("ha")
+    assert not walk.stepped("zigbee"), "a TRÅDFRI reports nothing while it turns"
+    # only Matter is asked to JUMP: the ramp is what it narrates. Anything else
+    # keeps the transition the loop always had — a bulb with no firmware ramp
+    # of its own needs it to look like movement
+    assert not walk.ramps("matter")
+    assert walk.ramps("ha") and walk.ramps("zigbee")

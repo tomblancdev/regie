@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.41.0 — une ampoule qui raconte ses pas n'est pas priée de marcher (2026-09-07)
+
+Une jambe est UN ordre parce que l'ampoule bouge ensuite **en silence** : une
+TRÅDFRI ne remonte rien pendant qu'elle tourne, et c'est toute l'économie du
+marcheur. Une ampoule **Matter** fait l'inverse — elle annonce chaque ~1,5°
+parcouru, et **chacune de ces annonces est une ligne du recorder qui ne
+contient que le mot `on`** : le domaine `light` ne garde ni la luminosité ni
+la couleur (déjà su depuis « Garder »), donc la ligne est vide de sens. Lu en
+direct sur le couloir : un Govee en train de marcher écrivait **692 lignes en
+cinq minutes**, toutes identiques (`on`, `{"friendly_name": "Plafond 1"}`),
+pendant que le cerveau ne lui envoyait que 149 commandes à l'heure.
+
+**Mesuré sur l'ampoule, même arc, même durée** (140° en 50 s, un H6008) :
+un ordre avec une transition de 50 s = **91 changements d'état** ; vingt ordres
+de 7° **sans transition** = **20**, un par ordre. **4,5 fois moins.**
+
+Donc : une ampoule qui raconte son mouvement n'est pas priée de bouger — elle
+est **pas à pas**, au plancher de la marche (la granularité que l'œil a réglée
+à H42-r, celle de la boucle d'avant), et **sans transition** : c'est la rampe
+qu'elle raconte. Sa propre électronique lisse chaque pas (le H6008 rampe à
+chaque changement, lecture du dossier arcade). Le Zigbee garde sa jambe, qui ne
+coûte toujours rien.
+
+`stepped()` et `ramps()` dans l'arithmétique du marcheur, testés ; le pont de
+Matter perd son « premier ordre dit deux fois » (un pas toutes les 2,5 s le
+rend inutile).
+
 ## 0.40.0 — une ampoule de couleur est déclarée avec tout ce qu'elle sait dire (2026-09-07)
 
 Zigbee2MQTT ne nomme à Home Assistant **qu'un seul** mode de couleur par

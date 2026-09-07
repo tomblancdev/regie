@@ -175,6 +175,33 @@ def order_at(
     return Order(leg.end % 360, max(left, FLOOR), left, True, leg.up, leg.end - here)
 
 
+# THE BACKENDS THAT ARE STEPPED RATHER THAN ASKED FOR A LEG (0.41). A leg is
+# one order because the bulb then moves in SILENCE — a TRÅDFRI reports nothing
+# at all while it turns, which is the whole of the walker's saving. A MATTER
+# bulb is the opposite: it reports every ~1.5° it moves, and every one of those
+# reports is a recorder row holding the word `on` and nothing else (the light
+# domain keeps no colour). Measured on a Govee H6008, the same 140° over the
+# same 50 s: one order with a 50 s transition = 91 state changes; twenty orders
+# of 7° with NO transition = 20, one per order — 4.5 times cheaper. So a bulb
+# that narrates its own movement is not asked to move: it is stepped at the
+# walk's floor, the granularity the eye settled at H42-r, and its own firmware
+# ramps each step (the H6008 ramps every change).
+STEPPED = ("matter", "ha")
+
+
+def stepped(backend: str) -> bool:
+    """Is this backend walked step by step instead of one order per leg?"""
+    return backend in STEPPED
+
+
+def ramps(backend: str) -> bool:
+    """Does an order to this backend carry a transition? A Matter bulb is asked
+    to JUMP — a ramp is what it narrates, and the narration is the cost. Every
+    other backend keeps the transition it always had: a bulb with no firmware
+    ramp of its own needs it to look like movement."""
+    return backend != "matter"
+
+
 def step_order(
     now: float,
     period: float,

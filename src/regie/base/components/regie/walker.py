@@ -11,9 +11,12 @@ Four things this file owns, and nothing else:
 
 - **the order**, per backend: a Zigbee bulb gets raw ZCL through
   Zigbee2MQTT's `set` topic (`moveToHue` + `transtime`, or `moveHue` at a rate
-  when the look asks for the move order); a Matter bulb gets Home Assistant's
-  own `light.turn_on` with a `transition`; anything else gets the same
-  service at the floor, which is the loop of before, one order at a time.
+  when the look asks for the move order) and then moves in SILENCE, which is
+  what makes one order per leg worth having. A Matter bulb narrates every
+  ~1.5° it moves, so it is not asked to move at all: it is stepped at the
+  walk's floor with no transition, one report per order instead of five
+  (measured, `STEPPED` below). Anything else is stepped too, with the
+  transition the loop always had.
 - **the clock**, one timer per walker: each order says when to ask again, and
   every answer is computed from the time — nothing is stored, so a brain that
   restarts mid-leg re-anchors with one order for what is left of it.
@@ -43,7 +46,19 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
-from .walk import FLOOR, SPAN, Order, ended, hue_at, order_at, rate_of, step_order, zcl_hue
+from .walk import (
+    FLOOR,
+    SPAN,
+    Order,
+    ended,
+    hue_at,
+    order_at,
+    ramps,
+    rate_of,
+    step_order,
+    stepped,
+    zcl_hue,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -54,12 +69,7 @@ DATA_WALKS = "regie_walks"
 # `transtime` (a uint16 of tenths — 109 minutes, far past any leg)
 SHORTEST, UP, DOWN = 0, 2, 3
 TRANSTIME_MAX = 65535
-# a Matter bulb idle for a long while drops its first command (read live
-# 2026-09-04 and again at the bench, on the Govee) — the first leg is said
-# twice, the second time recomputed
-REPEAT_FIRST = 1.5
-# after an order of ours, the bulb's own reports are not a hand: a Matter bulb
-# reports every 2 s while it ramps
+# after an order of ours, the bulb's own reports are not a hand
 QUIET = 3.0
 
 WALKER_SCHEMA = vol.Schema(
@@ -121,7 +131,6 @@ class Walker:
     cancel: Any = None
     quiet_until: float = 0.0
     brightness: Any = None
-    first: bool = True
 
 
 @dataclass
@@ -232,10 +241,10 @@ class Walks:
             return
         arc = self._arc(walk)
         now = time.time()
-        order = (
-            step_order(now, w.period, w.phase, arc.lo, arc.width, arc.accent, walk.step)
-            if w.backend == "ha"
-            else order_at(
+        if stepped(w.backend):
+            order = step_order(now, w.period, w.phase, arc.lo, arc.width, arc.accent, walk.step)
+        else:
+            order = order_at(
                 now,
                 w.period,
                 w.phase,
@@ -246,7 +255,6 @@ class Walks:
                 walk.step,
                 anchor=w.order == "move",
             )
-        )
         # a bulb that is not lit is never painted: a colour command would light
         # it again, and a hand's off must hold (0.25.5). The timer stays armed
         # all the same — the `on` report is the fast path, the next leg's
@@ -254,14 +262,6 @@ class Walks:
         lit = self.hass.states.is_state(w.entity, "on")
         if order.hue is not None and lit:
             await self._say(walk, w, order, arc)
-            if w.first and w.backend == "matter":
-                # the dropped first command (the Govee, twice read): say it
-                # again, recomputed, once the bulb is surely awake
-                w.first = False
-                self._later(walk, w, REPEAT_FIRST)
-                return
-        if lit:
-            w.first = False
         self._later(walk, w, order.wait)
 
     def _later(self, walk: Walk, w: Walker, seconds: float) -> None:
@@ -316,16 +316,10 @@ class Walks:
                 },
             )
             return
-        await self.hass.services.async_call(
-            "light",
-            "turn_on",
-            {
-                "entity_id": w.entity,
-                "hs_color": [round(order.hue, 1), arc.saturation],
-                "transition": round(max(order.seconds, FLOOR), 1),
-            },
-            blocking=False,
-        )
+        data = {"entity_id": w.entity, "hs_color": [round(order.hue, 1), arc.saturation]}
+        if ramps(w.backend):
+            data["transition"] = round(max(order.seconds, FLOOR), 1)
+        await self.hass.services.async_call("light", "turn_on", data, blocking=False)
 
     async def _halt(self, walk: Walk, w: Walker) -> None:
         """Stop the motion where it is. Zigbee has the word for it
