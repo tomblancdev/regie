@@ -114,6 +114,28 @@ def test_the_settings_of_a_room_live_with_the_room(rendered):
     }
 
 
+def test_a_room_with_nothing_gets_no_reglages_page(house_with, secrets, tmp_path):
+    """V15: a room with no thing and no configurable card has nothing a
+    Réglages page would say — the button and the page it points to agree,
+    silent together, rather than a tap that lands nowhere. A room that has a
+    thing but nothing to configure (Cuisine: no roles, no scenes) still keeps
+    its page — its health cards are the whole point (rendered/rendered)."""
+
+    def mutate(d):
+        d["areas"].append({"id": "cellar", "label": "Cave"})
+
+    out = tmp_path / "out"
+    render(load_house(house_with(mutate)), out, secrets)
+    v = views(out)
+    assert "cellar-settings" not in v
+    assert all(
+        c.get("tap_action", {}).get("navigation_path") != "/regie-phone/cellar-settings"
+        for s in v["cellar"]["sections"]
+        for c in s["cards"]
+    )
+    assert "kitchen-settings" in v, "a thing with nothing to configure still gets its health page"
+
+
 def test_a_parking_room_shows_its_things_and_acts_on_none(rendered):
     """Le carton: what has no room yet. Visible, testable, and nothing in the
     house moves it — no look, no default, no automation, by declaration."""

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.45.2 — le bouton et la page se répondent (2026-09-08)
+
+**V15, le dernier verdict de l'audit.** « Pas de page Réglages pour une
+pièce sans rien à régler » — le bouton « Réglages » de `_room()` (`dash.py`)
+était posé sans aucune condition, tandis que `build()` ne construisait la vue
+`<pièce>-settings` que si une carte de pack ou `health_cards()` répondait
+quelque chose. Une pièce sans aucune chose et sans aucune carte de pack
+tombait entre les deux : un bouton qui menait à une page jamais construite.
+
+**Le choix de Tom (pas une lecture qui tranche seule) : le bouton reste pour
+toute pièce qui a QUELQUE CHOSE à montrer, pas seulement quelque chose à
+régler.** Une pièce sans lumière mais avec un capteur (la Cuisine du témoin :
+aucun rôle, aucune scène) garde sa page — ses cartes de santé (« Santé de la
+pièce ») sont tout ce qu'elle a à dire, et rien d'autre ne les montre. Seule
+une pièce **vraiment vide** (aucune chose, aucune carte de pack) perd le
+bouton : `build()` calcule une fois `has_settings = bool(cards or
+health_cards(house, area))` et la passe à `_room()`, qui pose le bouton sous
+la même condition que `build()` pose la page — les deux lisent maintenant la
+même phrase.
+
+**LA PREUVE :** le rendu du témoin, byte pour byte identique — aucune pièce
+du témoin ne touche ce chemin (chacune a au moins une chose) —, un test
+neuf (`test_a_room_with_nothing_gets_no_reglages_page`) qui ajoute une pièce
+vide et vérifie l'absence du bouton et de la page, pendant qu'une pièce à un
+seul capteur (la Cuisine) garde les deux ; 482 tests verts.
+
+L'audit des quinze verdicts est clos : V1–V15 tous atterris, H52 landing 1
+posé, landings 2/3 en attente d'un ami nommé.
+
 ## 0.45.1 — le rendu retrouve le C qui dormait à côté (2026-09-08)
 
 **V11, le rendu sous les trois secondes.** L'audit avait mesuré un rendu à

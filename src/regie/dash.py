@@ -233,7 +233,7 @@ def _parking(house: House, area: dict, extra: list[dict]) -> dict:
     return _view(area["label"], area["id"], sections, icon=area.get("icon"))
 
 
-def _room(house: House, area: dict, extra: list[dict]) -> dict:
+def _room(house: House, area: dict, extra: list[dict], has_settings: bool) -> dict:
     ui = house.labels.ui
     if house.parking(area):
         return _parking(house, area, extra)
@@ -274,9 +274,10 @@ def _room(house: House, area: dict, extra: list[dict]) -> dict:
 
     if extra:
         sections.append(_grid(extra))
-    sections.append(
-        _grid([nav_button(ui.room_settings, "mdi:tune", link(f"{area['id']}-settings"), FULL)])
-    )
+    if has_settings:
+        sections.append(
+            _grid([nav_button(ui.room_settings, "mdi:tune", link(f"{area['id']}-settings"), FULL)])
+        )
     return _view(area["label"], area["id"], sections, icon=area.get("icon"))
 
 
@@ -402,11 +403,15 @@ def build(
         views.append(_plan(house))
     settled = []
     for area in house.areas:
-        views.append(_room(house, area, room_cards.get(area["id"], [])))
+        cards = room_settings.get(area["id"], [])
+        # a room with no configurable card and no thing to show has nothing a
+        # Réglages page would say (V15): the button and the page it points to
+        # now read the same condition, never one without the other
+        has_settings = bool(cards or health_cards(house, area))
+        views.append(_room(house, area, room_cards.get(area["id"], []), has_settings))
         if house.other_scenes(area):
             views.append(_looks(house, area))
-        cards = room_settings.get(area["id"], [])
-        if cards or health_cards(house, area):
+        if has_settings:
             views.append(_settings(house, area, cards))
             settled.append(area)
         for page in house.nav_pages(area):
