@@ -1,0 +1,104 @@
+# fx_neon — rendered by La Régie: `regie share <home.yml> fx neon`.
+# The shape itself is packs/fx/shapes/neon.yml in github.com/tomblancdev/regie;
+# a tag whose blueprints differ from what its shapes render is refused by CI.
+blueprint:
+  name: fx — neon
+  description: |-
+    a neon starting up — stutters cold, then on
+
+    One effect of **La Régie**'s `fx` pack, travelling alone: a script built out of Home Assistant's own light and scene services. No helper, no custom code, nothing else to install.
+
+    Create the script from this blueprint, then call it with the lights you want it on: it snapshots them, runs, and puts the snapshot back as it was.
+
+    Fields: `target` · `level` · `restore`.
+
+    Compiled for the generic light-service loop, whose finest step is 0.05 s:
+    - neon: asks 0.02 s steps, ha gives 0.05
+    - neon: holds down to 0.02 s asked, the backend gives 0.05 → the low end stretched
+  domain: script
+  homeassistant:
+    min_version: 2024.8.0
+  input: {}
+alias: fx — neon
+description: 'a neon starting up — stutters cold, then on (La Régie, pack fx: a shape compiled for the ha backend)'
+icon: mdi:led-strip-variant
+mode: parallel
+max: 10
+fields:
+  target:
+    name: target
+    description: 'the light or the group (a room''s role: light.<room>_<role>)'
+    required: true
+    selector:
+      entity:
+        domain: light
+        multiple: true
+  level:
+    name: level
+    selector:
+      number:
+        min: 0
+        max: 100
+        step: 0.01
+        mode: box
+    default: 100
+  restore:
+    name: restore
+    description: put the target back as it was, after
+    default: false
+    selector:
+      boolean: null
+variables:
+  level: '{{ level | default(100) }}'
+  snapshot: fx_{{ this.entity_id[7:] }}_{{ now().strftime('%Y%m%d%H%M%S%f') }}
+  restore: '{{ restore | default(False) }}'
+sequence:
+- action: scene.create
+  data:
+    scene_id: '{{ snapshot }}'
+    snapshot_entities: '{{ target }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ dict({''brightness_pct'': (range(30, 101) | random), ''transition'': 0}, color_temp_kelvin=5500) }}'
+- delay: '{{ [((range(20, 81) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': (range(0, 21) | random), ''transition'': 0} }}'
+- delay: '{{ [((range(20, 151) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ dict({''brightness_pct'': (range(40, 101) | random), ''transition'': 0}, color_temp_kelvin=5500) }}'
+- delay: '{{ [((range(20, 81) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': (range(0, 21) | random), ''transition'': 0} }}'
+- delay: '{{ [((range(20, 151) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ dict({''brightness_pct'': (range(30, 91) | random), ''transition'': 0}, color_temp_kelvin=5500) }}'
+- delay: '{{ [((range(20, 81) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': (range(0, 21) | random), ''transition'': 0} }}'
+- delay: '{{ [((range(20, 121) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ dict({''brightness_pct'': level, ''transition'': 0}, color_temp_kelvin=5500) }}'
+- delay: 0.1
+- if:
+  - condition: template
+    value_template: '{{ restore }}'
+  then:
+  - action: scene.turn_on
+    target:
+      entity_id: scene.{{ snapshot }}
+- action: scene.delete
+  target:
+    entity_id: scene.{{ snapshot }}

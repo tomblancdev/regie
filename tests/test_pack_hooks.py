@@ -1,10 +1,12 @@
 """A pack that carries code (0.38, the audit's V9): the pack folder IS the
 plugin shape — `hooks: hooks.py` beside pack.yml, and the engine calls
-`vocabulary`, `check`, `context` and `apply` at the four places it has for a
-pack (`vocabulary` since 0.44, V14: the words a pack adds to the house, which
-is how one pack reads another's without importing it). And the declared module
-is the pack's FACE, not the limit of its code: the folder is a package, so a
-pack whose arithmetic outgrows one file keeps it beside its hooks.
+`vocabulary`, `check`, `context` and `apply` at the four places a RUN has for
+a pack (`vocabulary` since 0.44, V14: the words a pack adds to the house,
+which is how one pack reads another's without importing it), and `share` when
+a person asks for one of its things by the verb of the same name (0.45, H52 —
+its own file, test_share.py). And the declared module is the pack's FACE, not
+the limit of its code: the folder is a package, so a pack whose arithmetic
+outgrows one file keeps it beside its hooks.
 
 Proven here through a HOUSE pack, the witness's own `chalet`: what a house may
 do from a directory of its own is exactly what a product pack does, one loader
@@ -245,12 +247,12 @@ def test_a_hook_that_raises_names_its_pack(house_with):
 
 def test_a_module_that_answers_to_nothing(house_with):
     """A misspelt hook name is silence — so a declared module that answers to
-    none of the three is a fault, not a pack that changed its mind."""
+    none of the five is a fault, not a pack that changed its mind."""
     path = house_with(lambda d: None)
     pack_code(path, "def contxt(house):\n    return {}\n")
     with pytest.raises(HouseError) as exc:
         load_house(path)
-    assert "answers to none of vocabulary, check, context, apply" in str(exc.value)
+    assert "answers to none of vocabulary, check, context, apply, share" in str(exc.value)
 
 
 def test_a_hook_that_is_not_a_function(house_with):

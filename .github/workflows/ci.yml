@@ -37,6 +37,21 @@ jobs:
       - run: regie check examples/maison-temoin/home.yml --secrets examples/maison-temoin/secrets.example.yml
       - run: regie render examples/maison-temoin/home.yml --secrets examples/maison-temoin/secrets.example.yml --out /tmp/brain
       - run: find /tmp/brain -type f | sort
+      # one thing travels alone (0.45, H52): the product's own shelf, rendered
+      # from the witness. The files under blueprints/ ARE the public URLs a
+      # friend imports from, so a tree whose shapes render something else
+      # would publish a lie. The suite says it from the inside
+      # (tests/test_share.py); this says it from the outside, on the tree
+      # about to be tagged — and it is the run that WRITES them.
+      - run: regie share examples/maison-temoin/home.yml fx --out blueprints
+      - name: the committed blueprints are what the shapes render
+        run: |
+          if [ -n "$(git status --porcelain -- blueprints)" ]; then
+            git status --porcelain -- blueprints
+            git --no-pager diff -- blueprints
+            echo "^ run: regie share examples/maison-temoin/home.yml fx --out blueprints"
+            exit 1
+          fi
       # the WHEEL, not the checkout: a host installs the package (a venv, pip
       # from the tag) - every data file the engine reads must ship in it
       # (base.yml did not, once: found at the first converge, 2026-08-29)

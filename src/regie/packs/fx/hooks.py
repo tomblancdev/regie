@@ -11,7 +11,11 @@ here, and nothing of the effects lives outside this folder any more.
     envelope stretches;
   * `check` — does the house name a backend and shapes that exist;
   * `context` — `fx_scripts`, which `templates/packages/fx.yaml.j2` and
-    nothing else reads.
+    nothing else reads;
+  * `share` — the pack's luggage (0.45, H52): a shape as a script blueprint,
+    for a friend's plain Home Assistant. fx is the first user of the fifth
+    hook, in the release that adds it — a mechanism with no real user is
+    unproven (V9's rule).
 
 `compiler.py` beside this file is the arithmetic: shapes flattened, holds
 clamped, one Home Assistant script per enabled shape. It is reached as a
@@ -19,8 +23,18 @@ module of THIS package — the engine loads a pack's declared module with the
 pack's own folder as its search path, so a house pack carrying its own
 compiler is a folder, on exactly these terms."""
 
+from regie.house import KELVIN
+
 from . import compiler  # noqa: F401 — the arithmetic, reachable through the pack's face
-from .compiler import compile_all, known_backends, load_shapes, moves_colour
+from .compiler import (
+    blueprint_file,
+    compile_all,
+    compile_shape,
+    known_backends,
+    load_backend,
+    load_shapes,
+    moves_colour,
+)
 
 
 def vocabulary(house):
@@ -79,3 +93,32 @@ def check(house):
 def context(house):
     scripts, _notes, _backend = compile_all(house.fx(), house.data["house"]["label"])
     return {"fx_scripts": scripts}
+
+
+def share(house, kind, id):
+    """A shape, for a friend who does not run La Régie (0.45, H52).
+
+    Its library, not its `enable:` list: what a house RUNS on its own ceilings
+    and what it is willing to send are two questions, and a shape it does not
+    enable is still one it wrote. `id` absent means the whole shelf — which is
+    what CI renders into the product's `blueprints/` at every tag.
+
+    Always compiled for `ha`, whatever backend this house runs on: the generic
+    light-service loop is exactly what a plain brain has, and a file compiled
+    for a radio the friend's brain cannot drive would be a promise, not a
+    gift. The house's own white words travel with it — a `warm` this house
+    set to 2400 K leaves as 2400 K, because that is what the shape means
+    here."""
+    if kind != "fx":
+        return None
+    fx = house.fx()
+    shapes = load_shapes(fx.get("shapes"))
+    backend = load_backend("ha")
+    kelvin = {**KELVIN, **(fx.get("kelvin") or {})}
+    ids = sorted(shapes) if id is None else [id]
+    return {
+        f"script/regie/fx_{shape_id}.yaml": blueprint_file(
+            compile_shape(shape_id, shapes, backend, kelvin), backend
+        )
+        for shape_id in ids
+    }

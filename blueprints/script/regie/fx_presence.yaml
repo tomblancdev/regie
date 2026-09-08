@@ -1,0 +1,108 @@
+# fx_presence — rendered by La Régie: `regie share <home.yml> fx presence`.
+# The shape itself is packs/fx/shapes/presence.yml in github.com/tomblancdev/regie;
+# a tag whose blueprints differ from what its shapes render is refused by CI.
+blueprint:
+  name: fx — presence
+  description: |-
+    the light sinks away, and comes back cold, dim and still
+
+    One effect of **La Régie**'s `fx` pack, travelling alone: a script built out of Home Assistant's own light and scene services. No helper, no custom code, nothing else to install.
+
+    Create the script from this blueprint, then call it with the lights you want it on: it snapshots them, runs, and puts the snapshot back as it was.
+
+    Fields: `target` · `colour` · `level` · `stay` · `restore`.
+  domain: script
+  homeassistant:
+    min_version: 2024.8.0
+  input: {}
+alias: fx — presence
+description: 'the light sinks away, and comes back cold, dim and still (La Régie, pack fx: a shape compiled for the ha backend)'
+icon: mdi:snowflake-alert
+mode: parallel
+max: 10
+fields:
+  target:
+    name: target
+    description: 'the light or the group (a room''s role: light.<room>_<role>)'
+    required: true
+    selector:
+      entity:
+        domain: light
+        multiple: true
+  colour:
+    name: colour
+    description: '#rrggbb — the target''s own colour when empty'
+    selector:
+      text: null
+    default: '#1438a0'
+  level:
+    name: level
+    selector:
+      number:
+        min: 0
+        max: 100
+        step: 0.01
+        mode: box
+    default: 14
+  stay:
+    name: stay
+    selector:
+      number:
+        min: 0
+        max: 3600
+        step: 0.01
+        mode: box
+    default: 25
+  restore:
+    name: restore
+    description: put the target back as it was, after
+    default: true
+    selector:
+      boolean: null
+variables:
+  colour: '{{ colour | default(''#1438a0'') }}'
+  level: '{{ level | default(14) }}'
+  stay: '{{ stay | default(25) }}'
+  snapshot: fx_{{ this.entity_id[7:] }}_{{ now().strftime('%Y%m%d%H%M%S%f') }}
+  colour_rgb: '{{ [colour[1:3] | int(base=16), colour[3:5] | int(base=16), colour[5:7] | int(base=16)] if colour else none }}'
+  restore: '{{ restore | default(True) }}'
+sequence:
+- action: scene.create
+  data:
+    scene_id: '{{ snapshot }}'
+    snapshot_entities: '{{ target }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': 3, ''transition'': 4} }}'
+- delay: 4.5
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': 0, ''transition'': 0} }}'
+- delay: '{{ [((range(2000, 5001) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{% set d = {''brightness_pct'': level, ''transition'': 0} %}{% if colour_rgb %}{% set d = dict(d, rgb_color=colour_rgb) %}{% endif %}{{ d }}'
+- delay: '{{ [stay | float, 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': 2, ''transition'': 3} }}'
+- delay: 3.2
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': 0, ''transition'': 0} }}'
+- delay: 0.5
+- if:
+  - condition: template
+    value_template: '{{ restore }}'
+  then:
+  - action: scene.turn_on
+    target:
+      entity_id: scene.{{ snapshot }}
+- action: scene.delete
+  target:
+    entity_id: scene.{{ snapshot }}

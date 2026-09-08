@@ -326,3 +326,101 @@ def test_an_unknown_backend_is_still_refused(house_with):
     (path.parent / "fx.yml").write_text("backend: pigeon\n", encoding="utf-8")
     with pytest.raises(HouseError, match="fx: unknown backend 'pigeon'"):
         load_house(path)
+
+
+# --- the luggage (0.45, H52): a shape as a script blueprint --------------------
+def a_blueprint(house, shape_id="strike"):
+    files = fx.share(house, "fx", shape_id)
+    (name,) = files
+    assert name == f"script/regie/fx_{shape_id}.yaml"
+    return files[name], yaml.safe_load(files[name])
+
+
+def test_a_shape_leaves_as_the_rendered_script_under_a_six_line_head(witness):
+    """The contract of an effect (H52): its own two fields, filled at each
+    call, so the blueprint takes ZERO inputs — the file IS the script the
+    house runs, with six lines above it."""
+    text, doc = a_blueprint(witness)
+    head = doc["blueprint"]
+    assert list(head) == ["name", "description", "domain", "homeassistant", "input"]
+    assert head["domain"] == "script" and head["input"] == {}
+    assert head["homeassistant"]["min_version"] == "2024.8.0"
+    assert head["name"] == "fx — strike"
+    # the script itself, whole: its five fields with their selectors, and the
+    # snapshot it puts back
+    assert list(doc["fields"]) == ["target", "colour", "intensity", "back", "restore"]
+    assert doc["fields"]["target"]["selector"] == {"entity": {"domain": "light", "multiple": True}}
+    assert doc["sequence"][0]["action"] == "scene.create"
+    assert doc["sequence"][-1]["action"] == "scene.delete"
+    # a stranger's file says where the thing lives, so nobody edits the copy
+    assert text.startswith("# fx_strike — rendered by La Régie")
+
+
+def test_a_travelling_file_names_no_house(witness):
+    """A file that lands in somebody else's brain is about THEIR house. The
+    same script rendered for this one still carries its label — the two are
+    one function, told apart by one argument."""
+    text, doc = a_blueprint(witness)
+    label = witness.data["house"]["label"]
+    assert label not in text
+    assert doc["description"].endswith("(La Régie, pack fx: a shape compiled for the ha backend)")
+    at_home = fx.context(witness)["fx_scripts"]["fx_strike"]
+    assert f"pack fx — {label}:" in at_home["description"]
+    # and nothing else moved: the two scripts are the same object otherwise
+    assert {k: v for k, v in doc.items() if k not in ("blueprint", "description")} == {
+        k: v for k, v in at_home.items() if k != "description"
+    }
+
+
+def test_the_head_says_what_the_backend_stretched(witness):
+    """A hold this loop cannot honour is SAID in the prose a friend reads —
+    the notes `regie check` prints at home go in the description, not into
+    silence."""
+    _text, doc = a_blueprint(witness)
+    description = doc["blueprint"]["description"]
+    assert "Fields: `target` · `colour` · `intensity` · `back` · `restore`." in description
+    assert "whose finest step is 0.05 s:" in description
+    assert "- strike: asks 0.04 s steps, ha gives 0.05" in description
+
+
+def test_no_id_is_the_whole_shelf_the_library_not_the_enable_list(house_with):
+    """What a house RUNS and what it is willing to SEND are two questions: a
+    shape it does not enable is still one it wrote."""
+    from regie.house import load_house
+
+    path = house_with(lambda d: None)
+    (path.parent / "fx.yml").write_text(
+        "backend: ha\nenable: [pulse]\n"
+        "shapes:\n  wink: { summary: a wink, steps: [{ level: 0, hold: 0.2 }] }\n",
+        encoding="utf-8",
+    )
+    house = load_house(path)
+    assert len(fx.context(house)["fx_scripts"]) == 1, "one script rendered, as `enable:` says"
+    files = fx.share(house, "fx", None)
+    assert len(files) == len(load_shapes()) + 1
+    assert "script/regie/fx_wink.yaml" in files
+
+
+def test_a_shape_that_is_not_one_is_refused_in_the_pack_s_words(witness):
+    with pytest.raises(HouseError, match="fx: unknown shape 'chandelle'"):
+        fx.share(witness, "fx", "chandelle")
+
+
+def test_the_pack_answers_for_its_own_kind_alone(witness):
+    """`None` is how the engine finds the one pack that owns a kind, without
+    a register anybody has to keep."""
+    assert fx.share(witness, "look", "living_room/game") is None
+    assert fx.share(witness, "hands", None) is None
+
+
+def test_a_house_on_another_backend_still_sends_the_plain_one(house_with):
+    """A friend has Home Assistant's own light services and nothing else: a
+    file compiled for a radio their brain cannot drive would be a promise."""
+    from regie.house import load_house
+
+    path = house_with(lambda d: None)
+    (path.parent / "fx.yml").write_text("backend: zigbee\n", encoding="utf-8")
+    house = load_house(path)
+    assert house.fx()["backend"] == "zigbee"
+    _name, text = next(iter(fx.share(house, "fx", "flash").items()))
+    assert "ha backend" in yaml.safe_load(text)["description"]

@@ -36,7 +36,11 @@ HERE = Path(__file__).parent / "packs"
 # words a pack adds to the house — read while the house is cross-checked, and
 # printed by `regie check` — then the cross-check's own questions, the
 # render's context, the conductor's run. A pack answers to none, some or all.
-HOOKS = ("vocabulary", "check", "context", "apply")
+# `share` (0.45, H52) is the odd one: no run meets it. It is a VERB's hook —
+# `regie share` asks a pack to strip one of its things for a friend's plain
+# Home Assistant, and the pack that renders a thing is the one that knows how
+# to send it (see share.py for the contract it answers by).
+HOOKS = ("vocabulary", "check", "context", "apply", "share")
 
 
 @dataclass

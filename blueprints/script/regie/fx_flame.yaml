@@ -1,0 +1,103 @@
+# fx_flame — rendered by La Régie: `regie share <home.yml> fx flame`.
+# The shape itself is packs/fx/shapes/flame.yml in github.com/tomblancdev/regie;
+# a tag whose blueprints differ from what its shapes render is refused by CI.
+blueprint:
+  name: fx — flame
+  description: |-
+    a flame's brightness alone — wander, flare, dip
+
+    One effect of **La Régie**'s `fx` pack, travelling alone: a script built out of Home Assistant's own light and scene services. No helper, no custom code, nothing else to install.
+
+    Create the script from this blueprint, then call it with the lights you want it on: it snapshots them, runs, and puts the snapshot back as it was.
+
+    Fields: `target` · `cycles` · `restore`.
+  domain: script
+  homeassistant:
+    min_version: 2024.8.0
+  input: {}
+alias: fx — flame
+description: 'a flame''s brightness alone — wander, flare, dip (La Régie, pack fx: a shape compiled for the ha backend)'
+icon: mdi:fire
+mode: parallel
+max: 10
+fields:
+  target:
+    name: target
+    description: 'the light or the group (a room''s role: light.<room>_<role>)'
+    required: true
+    selector:
+      entity:
+        domain: light
+        multiple: true
+  cycles:
+    name: cycles
+    selector:
+      number:
+        min: 0
+        max: 3600
+        step: 0.01
+        mode: box
+    default: 12
+  restore:
+    name: restore
+    description: put the target back as it was, after
+    default: true
+    selector:
+      boolean: null
+variables:
+  cycles: '{{ cycles | default(12) }}'
+  snapshot: fx_{{ this.entity_id[7:] }}_{{ now().strftime('%Y%m%d%H%M%S%f') }}
+  restore: '{{ restore | default(True) }}'
+sequence:
+- action: scene.create
+  data:
+    scene_id: '{{ snapshot }}'
+    snapshot_entities: '{{ target }}'
+- repeat:
+    count: '{{ cycles }}'
+    sequence:
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(55, 69) | random), ''transition'': 0.25} }}'
+    - delay: '{{ [((range(250, 501) | random) / 1000), 0.05] | max }}'
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(48, 63) | random), ''transition'': 0.2} }}'
+    - delay: '{{ [((range(200, 451) | random) / 1000), 0.05] | max }}'
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(58, 73) | random), ''transition'': 0.15} }}'
+    - delay: '{{ [((range(150, 351) | random) / 1000), 0.05] | max }}'
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(82, 97) | random), ''transition'': 0.12} }}'
+    - delay: '{{ [((range(150, 301) | random) / 1000), 0.05] | max }}'
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(52, 67) | random), ''transition'': 0.3} }}'
+    - delay: '{{ [((range(300, 551) | random) / 1000), 0.05] | max }}'
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(18, 31) | random), ''transition'': 0.25} }}'
+    - delay: '{{ [((range(250, 501) | random) / 1000), 0.05] | max }}'
+    - action: light.turn_on
+      target:
+        entity_id: '{{ target }}'
+      data: '{{ {''brightness_pct'': (range(50, 65) | random), ''transition'': 0.35} }}'
+    - delay: '{{ [((range(350, 601) | random) / 1000), 0.05] | max }}'
+- if:
+  - condition: template
+    value_template: '{{ restore }}'
+  then:
+  - action: scene.turn_on
+    target:
+      entity_id: scene.{{ snapshot }}
+- action: scene.delete
+  target:
+    entity_id: scene.{{ snapshot }}

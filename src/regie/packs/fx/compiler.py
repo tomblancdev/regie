@@ -35,6 +35,7 @@ import yaml
 
 from regie.errors import HouseError
 from regie.house import KELVIN  # warm / neutral / cool: the HOUSE's white words
+from regie.share import as_yaml  # the one dump every travelling file is written with
 
 HERE = Path(__file__).parent
 SHAPES = HERE / "shapes"
@@ -394,9 +395,13 @@ def compile_shape(
     return Compiled(shape_id, shape, fields, actions, notes, bool(shape.get("restore", True)))
 
 
-def script(c: Compiled, house_label: str) -> dict:
+def script(c: Compiled, house_label: str | None) -> dict:
     """The Home Assistant script for a compiled shape: target + the shape's
-    fields, a snapshot, the steps, the snapshot put back."""
+    fields, a snapshot, the steps, the snapshot put back.
+
+    `house_label` is None for a script that LEAVES the house (0.45, `share`):
+    a file going to a friend names no house — theirs is the only one it is
+    about once it lands."""
     fields: dict = {
         "target": {
             "name": "target",
@@ -465,7 +470,8 @@ def script(c: Compiled, house_label: str) -> dict:
     return {
         "alias": f"fx — {c.id}",
         "description": (c.shape.get("summary") or c.id)
-        + f" (La Régie, pack fx — {house_label}: a shape compiled for the ha backend)",
+        + f" (La Régie, pack fx{f' — {house_label}' if house_label else ''}: "
+        "a shape compiled for the ha backend)",
         "icon": c.shape.get("icon", "mdi:creation"),
         "mode": "parallel",
         "max": 10,
@@ -473,6 +479,66 @@ def script(c: Compiled, house_label: str) -> dict:
         "variables": variables,
         "sequence": sequence,
     }
+
+
+# --- the luggage (0.45, H52) ---------------------------------------------------
+# A shape is the one thing of this house that already travelled: it names four
+# things outside itself and all four are Home Assistant's own services. So it
+# leaves as the rendered script under a six-line blueprint head, with ZERO
+# inputs — the friend picks the lights when they call it, exactly as the house
+# does. Always compiled for `ha`, whatever backend the house runs on: the
+# generic light-service loop is what a plain brain has.
+BLUEPRINT_MIN_VERSION = "2024.8.0"  # `action:` in a sequence — 2024.8's word for `service:`
+
+
+def _luggage_description(c: Compiled, body: dict, backend: dict) -> str:
+    """The prose a stranger gets. It is the only part of the file a person
+    reads, so it says what the thing is, what it needs (nothing), and what the
+    backend stretched — a hold this loop cannot honour is said here rather
+    than felt as a shape that drags."""
+    paragraphs = [
+        c.shape.get("summary") or c.id,
+        "One effect of **La Régie**'s `fx` pack, travelling alone: a script built out of Home "
+        "Assistant's own light and scene services. No helper, no custom code, nothing else to "
+        "install.",
+        "Create the script from this blueprint, then call it with the lights you want it on: it "
+        "snapshots them, runs, and puts the snapshot back as it was.",
+        "Fields: " + " · ".join(f"`{name}`" for name in body["fields"]) + ".",
+    ]
+    if c.notes:
+        step = (backend.get("envelope") or {}).get("step", 0)
+        paragraphs.append(
+            f"Compiled for the generic light-service loop, whose finest step is {step:g} s:\n"
+            + "\n".join(f"- {note}" for note in c.notes)
+        )
+    return "\n\n".join(paragraphs)
+
+
+def blueprint(c: Compiled, backend: dict) -> dict:
+    """One shape as a script blueprint: the rendered script, and above it the
+    six lines Home Assistant needs to take it through the Import door."""
+    body = script(c, None)
+    return {
+        "blueprint": {
+            "name": body["alias"],
+            "description": _luggage_description(c, body, backend),
+            "domain": "script",
+            "homeassistant": {"min_version": BLUEPRINT_MIN_VERSION},
+            "input": {},
+        },
+        **body,
+    }
+
+
+def blueprint_file(c: Compiled, backend: dict) -> str:
+    """The text of the file, header included — it names where the shape lives,
+    because a stranger's first instinct on a rendered file is to edit it."""
+    header = (
+        f"# fx_{c.id} — rendered by La Régie: `regie share <home.yml> fx {c.id}`.\n"
+        f"# The shape itself is packs/fx/shapes/{c.id}.yml in github.com/tomblancdev/regie;\n"
+        "# a tag whose blueprints differ from what its shapes render is refused by CI.\n"
+    )
+    return as_yaml(blueprint(c, backend), header)
 
 
 def compile_all(fx: dict | None, house_label: str) -> tuple[dict[str, dict], list[str], dict]:

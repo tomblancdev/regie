@@ -721,6 +721,13 @@ class House:
     def units_dir(self) -> str:
         return self.data.get("paths", {}).get("units_dir") or self.profile.units_dir
 
+    def share_url(self) -> str:
+        """Where this house publishes what it shares (0.45, H52): the base a
+        shared file's name is appended to. A house that declares none still
+        shares — `regie share` writes the file and says it has no URL, which
+        is a thing a friend cannot import yet."""
+        return str((self.data.get("share") or {}).get("url") or "")
+
     def owner(self) -> dict:
         """The brain's own owner — the break-glass account `regie apply` creates at
         the first boot; its password is the secret `owner_password`."""

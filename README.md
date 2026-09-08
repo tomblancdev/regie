@@ -25,11 +25,12 @@ the first commit or never are:
   directory of its choosing — the same loader, the same shape — so what must
   stay private never enters this repo.
 
-### A pack that carries code (0.38 · 0.44)
+### A pack that carries code (0.38 · 0.44 · 0.45)
 
 A pack folder may name one Python module beside its `pack.yml` —
 `hooks: hooks.py`, a declaration, so a stray `.py` in a folder never runs —
-and the engine calls it at the four places it has for a pack:
+and the engine calls it at the four places a run has for a pack, and at a
+fifth when a person asks:
 
 | hook | called | does |
 |---|---|---|
@@ -37,6 +38,7 @@ and the engine calls it at the four places it has for a pack:
 | `check(house)` | the house cross-checked, after the engine's own words | returns `(errors, warnings, hints)` — lines in the pack's own wording, the engine prefixes none |
 | `context(house)` | the render's context is built | returns names for the templates, merged **flat** (`fx_scripts`, not `packs.fx.scripts`) — two packs claiming one name, or a pack claiming the engine's, is refused at render, never a silent overwrite |
 | `apply(conductor)` | the conductor's run, after its own steps | `conductor.step(name, state, detail)`, with `.house`, `.ha`, `.root`, `.check` and the open websocket at `.ws` |
+| `share(house, kind, id)` | `regie share`, never a run | returns `{file name: text}` for a thing of this house stripped for a friend's plain Home Assistant, or `None` when the kind is not this pack's — which is how the engine finds the one pack that owns `fx`. `id` absent means every one of that kind. A thing that cannot travel raises a `HouseError` saying why |
 
 Each is optional; the module is imported once, **from its path** — the packs
 ship as data, and a house pack lives outside the installed engine entirely,
@@ -100,6 +102,7 @@ prints in the family's words in any house.
 | `regie link home.yml <thing>` | one thing's integration with a person at hand: the PIN typed from its screen, the consent's address printed for a browser and the brain's callback awaited — then the entry, the same walker. A consent comes back through `my.home-assistant.io` (Home Assistant's default) unless the house says `house.my: false` — then the brain's own door is the callback (`<url>/auth/external/callback`, the address a vendor's app registers) and `default_config` is rendered without `my` | 0.3 |
 | `regie doctor home.yml` | **the brain's health after a converge** (0.30), one line per check, read and never written: every unit active and running the image its unit names (since when), the brain's own version against the pin (the profile's tested one — a house's own is said), `up` with nothing left to do, the configuration valid as the brain reads it, every entity the packages and the dashboards name present in the brain, no repair open, no ghost (an entity the registry keeps and nothing provides any more), the mesh's join window closed; beside the verdict, what is nobody's fault — the things that do not answer, the log since the start, the recorder (its file, the open run, whether the last one closed clean or was killed). A red line is a disagreement between the brain and the files: exit 1. The collection's `brain` role runs it after `apply` and, strict, fails the play on a red | 0.30 |
 | `regie backup` / `restore` | Home Assistant's own backup through its API | 0.8 |
+| `regie share home.yml <kind> [<id>]` | **one thing travels alone** (0.45): a thing of this house as a **blueprint** a friend imports into a plain Home Assistant — no La Régie, no component, no HACS, and no helper, because the app's Import door (the only one a person who never opens a file can use) cannot make one. `share home.yml fx strike` writes `script/regie/fx_strike.yaml` under `--out` (default `blueprints/` beside `home.yml`) and prints the URL to paste, appended to `share.url:`; no id sends every one of that kind. An **effect** travels whole with ZERO inputs — the rendered script under a six-line `blueprint:` head, its own `target` and `restore` filled at each call — and it names no house. What to send and how to strip it is the pack's (`share`, the fifth hook); the verb and the refusals are the engine's. The product's own 33 shapes are rendered into [`blueprints/`](blueprints) at every tag, and a tag whose shapes render something else is refused | 0.45 |
 | `regie pair home.yml --room <area> [--role <role> --at <place>]` | **the walk's Zigbee half**: the room is the session — the join window opens on the radio, a person holds the thing's reset button, and the thing introduces itself. Its kind is read from its own interview (the `exposes` list), its vendor and model come with it, the name is generated, and the **row is printed, never written**; a control that can send commands is proposed bound to its room, a light blinks and ends dark. The window is closed again whatever happens. `--adopt <address>` takes a thing already in the mesh (an interrupted walk), `--time` shortens the window, `--coordinator` picks the radio | 0.7 |
 | `regie pair home.yml --matter --room <area> [--code <code>]` | **the walk's Matter half**: the thing commissioned by the phone (a fresh one — Bluetooth, the phone puts it on the Wi-Fi) or by a code the server commissions over IP, then adopted into a proposed row keyed on its serial; `apply` rooms and names the device from the row | 0.5 |
 | `regie suggest` | the mesh's opinion on rooms, from link quality — suggests, never assigns | 0.8 |
@@ -170,6 +173,7 @@ through the same code, so the fleet never has a feature the house lacks.
 | packs | `lighting` — room groups (+ per role, per layout row), the rooms that sense (0.17: one automation per room on its occupancy, the look of the hour when `<room>_dark` says so, off only what the sensors lit, a switch and a pin per room), silent alerts, the room's health sensor · the vocabulary: `signals` (+ `<room>_dark` and the occupancy's hold, 0.17) · `modes` · `scenes` (+ the room's look memory, 0.17) · `fx` (shapes/ the bricks, backends/ the envelopes) · `notify` · `scenarios` · `when` (0.18: a thing's state, or the house's mode, picks a look, a mode or a story — one automation per thing, a switch each; the verbs in `verbs.py`, rendered once) · `hands` (0.19: the remotes — a gesture profile per model in `hands.py`, a behaviour from the shelf per remote, one automation per remote) · **the packs that carry code** (0.38): `fx` (`hooks.py` — the shapes' words, the backend and the shapes checked, `fx_scripts` compiled; and since 0.44 `compiler.py` + `schema.json` beside them: the whole use case in one folder), `palette` (`hooks.py` — the kept palettes settled at every converge) | [`src/regie/packs/`](src/regie/packs) |
 | labels | the family's words, per language | [`src/regie/labels/`](src/regie/labels) |
 | the witness | `maison-temoin` | [`examples/`](examples) |
+| the luggage | the product's own blueprints — 33 effects, one file each, for a plain Home Assistant; rendered by `regie share` at every tag, never written by hand | [`blueprints/`](blueprints) |
 | the collection | `tomblancdev.regie` — the fleet driver | [`ansible/`](ansible) |
 | the image | `ghcr.io/tomblancdev/regie` | [`Containerfile`](Containerfile) |
 

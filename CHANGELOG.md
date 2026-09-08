@@ -1,5 +1,92 @@
 # Changelog
 
+## 0.45.0 — une chose voyage seule (2026-09-08)
+
+**H52, atterrissage 1 — et le cinquième crochet.** L'audit demandait si un
+effet, un look ou le geste d'une télécommande pouvaient partir chez un ami qui
+ne fait pas tourner La Régie. La lecture a répondu : un ami prend une chose par
+**trois portes** — l'Import de l'application (un *blueprint*, depuis une URL :
+aucun fichier ouvert, aucun assistant à créer, ré-importer = mettre à jour), le
+dossier de configuration (un *package* : une main dans un fichier, aucun chemin
+de mise à jour) et HACS (du **code**, rien d'autre) — et **seule la première
+est ouverte à quelqu'un qui n'ouvre jamais un fichier**. Elle ne prend qu'un
+blueprint, et un blueprint **ne sait pas fabriquer un helper**. Donc tout
+contrat qui voyage doit n'en demander aucun.
+
+**L'effet était déjà prêt.** Lu sur les paquets rendus du cerveau :
+`script.fx_strike` nomme **quatre** choses hors de lui-même, et les quatre sont
+des services de Home Assistant (`light.turn_on`, `scene.create`,
+`scene.turn_on`, `scene.delete`). Zéro nom de la maison dans les 28 scripts
+d'effets. Son contrat, ce sont ses deux champs — `target` et `restore` — remplis
+à chaque appel : **le blueprint ne demande donc RIEN à l'import**. Le fichier
+*est* le script que la maison exécute, avec six lignes au-dessus.
+
+**Le cinquième crochet — `share(house, kind, id)`.** Le pack qui rend une chose
+est celui qui sait la préparer pour le voyage (la règle de V14, reprise) : le
+moteur garde le verbe et les refus, le pack garde le dépouillement. Le crochet
+rend `{nom de fichier: texte}`, ou **`None` quand la sorte n'est pas la sienne**
+— c'est ainsi que le moteur trouve le seul pack qui possède `fx` sans registre
+que quelqu'un devrait tenir à jour. `id` absent veut dire *tout ce que cette
+maison pourrait envoyer de cette sorte*. Une chose qui ne peut pas voyager lève
+une `HouseError` **dans les mots du pack**, jamais un silence.
+
+Et **fx en est le premier usager, dans la release qui l'ajoute** : un mécanisme
+sans usager réel n'est pas prouvé (la règle de V9).
+
+**Ce que le moteur refuse lui-même**, pour qu'aucun pack n'ait à le faire : une
+sorte que personne ne partage (la phrase nomme les packs qui partagent quelque
+chose), un crochet qui répond la mauvaise forme, un pack qui réclame une sorte
+et ne donne aucun fichier, et **un nom de fichier qui sort du dossier** où on
+l'écrit — un `..` est une erreur bien plus souvent qu'un plan.
+
+**Ce que le pack fx décide, et qui n'appartient qu'à lui :**
+
+* **sa bibliothèque, pas sa liste `enable:`** — ce qu'une maison *exécute* sur
+  ses plafonds et ce qu'elle *accepte d'envoyer* sont deux questions ; une forme
+  qu'elle n'active pas reste une forme qu'elle a écrite ;
+* **toujours compilé pour `ha`**, quel que soit le backend de la maison : la
+  boucle générique des services de lumière est exactement ce qu'un cerveau nu
+  possède, et un fichier compilé pour une radio que son cerveau ne pilote pas
+  serait une promesse, pas un cadeau ;
+* **les mots blancs de la maison partent avec** : un `warm` réglé à 2400 K part
+  à 2400 K, parce que c'est ce que la forme veut dire ici ;
+* **la prose qu'un inconnu lit** — la description du blueprint dit la forme, ses
+  champs, et **ce que l'enveloppe a étiré** : une forme qui demande des pas de
+  40 ms reçoit le plancher de 50 ms de Home Assistant, et le dit là plutôt que
+  de se faire sentir comme un effet qui traîne.
+
+**Un fichier qui voyage ne nomme aucune maison.** Le même script rendu pour
+celle-ci porte toujours son label : c'est **une seule fonction**, distinguée par
+un argument (`house_label=None`). Rien d'autre n'a bougé entre les deux — le
+test le vérifie clé par clé.
+
+**`share.url:` dans `home.yml`** — la base à laquelle le nom d'un fichier est
+ajouté pour faire l'URL qu'un ami colle dans son application. Une maison qui
+n'en déclare aucune rend quand même ses fichiers, et s'entend dire qu'elle ne
+partage pas encore.
+
+**L'étagère du produit — [`blueprints/`](blueprints).** 33 formes, un fichier
+chacune, sous `script/regie/`, plus un README qui est la porte d'entrée d'un
+ami. **Ils sont rendus, jamais écrits à la main** : la CI les rend depuis la
+maison-témoin à chaque poussée et à chaque tag, et refuse un arbre dont les
+formes rendraient autre chose — la discipline des trois marques de version,
+appliquée aux bagages, parce que ces fichiers *sont* les URL publiques.
+
+**LA PREUVE, dans un conteneur Home Assistant 2026.8.3 jetable** (l'image du
+cerveau, `--network none`, la configuration sous `/tmp`, retirée après ; le
+cerveau n'a pas été touché) : les **33 blueprints** montés en 33 scripts par
+`use_blueprint:` — `check_config` **Successful config**, sortie 0, aucune
+erreur, et `fx_strike` **garde ses cinq champs avec leurs sélecteurs**
+(`target` en `entity/light/multiple`, `colour` en texte, `intensity` et `back`
+en nombres, `restore` en booléen) et sa séquence entière, du `scene.create` au
+`scene.delete`.
+
+**Trouvé à côté, et laissé tel quel** : le sélecteur de `intensity` va de 0 à
+3600 (le `max` des champs numériques est 3600 sauf pour `level`), alors que
+c'est un pourcentage. C'est ce que la maison rend déjà aujourd'hui ; le corriger
+aurait changé les fichiers rendus du cerveau au milieu d'un atterrissage qui
+promet `changed=0`.
+
 ## 0.44.0 — fx est le premier greffon (2026-09-08)
 
 **V14 de l'audit, la dernière des trois.** V9 avait donné au dossier d'un pack

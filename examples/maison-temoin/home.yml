@@ -28,6 +28,13 @@ packs: [modes, signals, scenes, fx, notify, scenarios, lighting, when, hands, ma
 controls: { panel: true, presence: true, restore_default: true, palette: true }
 paths:
   house_packs: packs
+# one thing travels alone (0.45): where what this house SHARES is published —
+# `regie share` appends a file's name to it and prints the URL a friend pastes
+# into their own Home Assistant. This one is the product's own shelf: CI
+# renders every shape here into blueprints/ at each tag, so the witness's base
+# is the product's raw URL.
+share:
+  url: https://raw.githubusercontent.com/tomblancdev/regie/main/blueprints/
 # one file holds one thing (0.4): the rooms' looks, the modes, the effects and
 # the stories live beside this file and are merged in before validation
 include:

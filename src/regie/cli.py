@@ -618,6 +618,31 @@ things:
     return 0
 
 
+def cmd_share(args) -> int:
+    """One thing of this house, for a friend's plain Home Assistant (0.45,
+    H52). The verb and the refusal are the engine's; what to send and how to
+    strip it belongs to the pack that renders it."""
+    from .share import files_of, write
+
+    house = load_house(args.home)
+    files = files_of(house, args.kind, args.id)
+    out = Path(args.out) if args.out else args.home.parent / "blueprints"
+    written, unchanged = write(files, out)
+    print(f"shared into {out}: {len(written)} written, {len(unchanged)} unchanged")
+    base = house.share_url()
+    for name in sorted(files):
+        mark = "+" if name in written else "="
+        print(f"  {mark} {name}")
+        if base:
+            print(f"    import: {base.rstrip('/')}/{name}")
+    if not base:
+        print(
+            "  ~ this house declares no `share.url:` — a blueprint is imported from a URL, "
+            "so publish these files and write their base there"
+        )
+    return 0
+
+
 def cmd_packs(args) -> int:
     from .packs import _load
 
@@ -857,6 +882,21 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--timezone", default="UTC")
     s.add_argument("--profile", default="ct", choices=known_profiles())
     s.set_defaults(func=cmd_init)
+
+    s = sub.add_parser(
+        "share",
+        help="one thing of this house, as a blueprint a friend imports into a plain Home "
+        "Assistant (0.45): `share <home.yml> fx strike` writes script/regie/fx_strike.yaml — "
+        "the whole shelf of a kind when no id is given; what cannot travel is refused in a "
+        "sentence that says why",
+    )
+    s.add_argument("home", type=Path)
+    s.add_argument("kind", help="what kind of thing (fx: a shape)")
+    s.add_argument("id", nargs="?", help="which one (default: every one of that kind)")
+    s.add_argument(
+        "--out", type=Path, help="the blueprints folder (default: blueprints/ beside home.yml)"
+    )
+    s.set_defaults(func=cmd_share)
 
     s = sub.add_parser("packs", help="the product's packs")
     s.set_defaults(func=cmd_packs)

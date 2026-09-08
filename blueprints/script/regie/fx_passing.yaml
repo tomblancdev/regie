@@ -1,0 +1,85 @@
+# fx_passing — rendered by La Régie: `regie share <home.yml> fx passing`.
+# The shape itself is packs/fx/shapes/passing.yml in github.com/tomblancdev/regie;
+# a tag whose blueprints differ from what its shapes render is refused by CI.
+blueprint:
+  name: fx — passing
+  description: |-
+    a shadow crosses the light — one smooth dip, and doubt
+
+    One effect of **La Régie**'s `fx` pack, travelling alone: a script built out of Home Assistant's own light and scene services. No helper, no custom code, nothing else to install.
+
+    Create the script from this blueprint, then call it with the lights you want it on: it snapshots them, runs, and puts the snapshot back as it was.
+
+    Fields: `target` · `level` · `depth` · `restore`.
+  domain: script
+  homeassistant:
+    min_version: 2024.8.0
+  input: {}
+alias: fx — passing
+description: 'a shadow crosses the light — one smooth dip, and doubt (La Régie, pack fx: a shape compiled for the ha backend)'
+icon: mdi:account-arrow-right-outline
+mode: parallel
+max: 10
+fields:
+  target:
+    name: target
+    description: 'the light or the group (a room''s role: light.<room>_<role>)'
+    required: true
+    selector:
+      entity:
+        domain: light
+        multiple: true
+  level:
+    name: level
+    selector:
+      number:
+        min: 0
+        max: 100
+        step: 0.01
+        mode: box
+    default: 60
+  depth:
+    name: depth
+    selector:
+      number:
+        min: 0
+        max: 3600
+        step: 0.01
+        mode: box
+    default: 12
+  restore:
+    name: restore
+    description: put the target back as it was, after
+    default: true
+    selector:
+      boolean: null
+variables:
+  level: '{{ level | default(60) }}'
+  depth: '{{ depth | default(12) }}'
+  snapshot: fx_{{ this.entity_id[7:] }}_{{ now().strftime('%Y%m%d%H%M%S%f') }}
+  restore: '{{ restore | default(True) }}'
+sequence:
+- action: scene.create
+  data:
+    scene_id: '{{ snapshot }}'
+    snapshot_entities: '{{ target }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': depth, ''transition'': 0.25} }}'
+- delay: '{{ [((range(250, 451) | random) / 1000), 0.05] | max }}'
+- action: light.turn_on
+  target:
+    entity_id: '{{ target }}'
+  data: '{{ {''brightness_pct'': level, ''transition'': 0.35} }}'
+- delay: 0.4
+- if:
+  - condition: template
+    value_template: '{{ restore }}'
+  then:
+  - action: scene.turn_on
+    target:
+      entity_id: scene.{{ snapshot }}
+- action: scene.delete
+  target:
+    entity_id: scene.{{ snapshot }}

@@ -110,6 +110,17 @@
         }
       }
     },
+    "share": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "where this house publishes what it shares (`regie share`) — a friend imports a blueprint from a URL, so a shared file is only shareable once it has one",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "the base a shared file's name is appended to, e.g. https://raw.githubusercontent.com/<you>/<repo>/main/blueprints/ — printed by `regie share`, never fetched by anything"
+        }
+      }
+    },
     "owner": {
       "type": "object",
       "additionalProperties": false,
