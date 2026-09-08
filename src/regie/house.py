@@ -21,7 +21,6 @@ from jsonschema import Draft202012Validator
 from . import palette as palette_mod
 from . import theme as theme_lib
 from .errors import HouseError
-from .fx import KELVIN, load_shapes
 from .include import merge_includes
 from .labels import Labels
 from .packs import Pack, call_hook, hooks_of, load_packs
@@ -29,6 +28,13 @@ from .profiles import Profile, load_profile
 
 SCHEMA_VERSION = 1
 SCHEMA_PATH = Path(__file__).parent / "schema" / "home.schema.json"
+
+# what warm / neutral / cool mean. THE HOUSE'S white words, not any one pack's:
+# a look says `ct: warm`, `regie look` reads a bulb back into one of them, the
+# palette paints with them, and a house overrides them with `fx.kelvin:`. It
+# sat in the effects' compiler until 0.44 (the audit's V14) because the effects
+# were the first to need it; the compiler now reads it from here.
+KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 
 # the entity domain a kind lands in; None = a thing with no entity of its own
 # (a remote sends events, a coordinator is a radio, a proxy relays)
@@ -1304,13 +1310,50 @@ class House:
             cache[key] = palette_mod.scene_palette(self, area, plan)
         return cache[key]
 
-    def shapes(self) -> dict:
-        """The fx shapes, loaded once per house (the library is files on disk)."""
-        if "_shapes" not in self.__dict__:
-            from .fx import load_shapes
+    def vocabulary(self) -> tuple[dict, list[str]]:
+        """The words the PACKS add to the house (0.44, the audit's V14), read
+        once: what the rest of the house may read of them, merged flat with the
+        render context's own rule — two packs claiming one name is a fault, never
+        a silent overwrite — and the lines `regie check` prints under the
+        vocabulary, in the house's pack order, each pack writing its own prefix.
 
-            self.__dict__["_shapes"] = load_shapes(self.fx().get("shapes"))
-        return self.__dict__["_shapes"]
+        This is how one pack reads another's words without importing it: the
+        palette's `life:` asks which shapes exist and which of them send a
+        colour, and the fx pack answers, out of its own folder."""
+        if "_vocabulary" not in self.__dict__:
+            words: dict = {}
+            lines: list[str] = []
+            claimed: dict[str, str] = {}
+            for pack, fn in hooks_of(self.packs, "vocabulary"):
+                said = call_hook(pack, "vocabulary", fn, self)
+                ok = (
+                    isinstance(said, tuple | list)
+                    and len(said) == 2
+                    and isinstance(said[0], dict)
+                    and isinstance(said[1], tuple | list)
+                )
+                if not ok:
+                    raise HouseError(
+                        f"pack {pack.name}: the vocabulary hook returns (words, lines) — "
+                        f"a mapping and a list of lines; it returned {said!r}"
+                    )
+                for key, value in said[0].items():
+                    if key in claimed:
+                        raise HouseError(
+                            f"pack {pack.name}: the word {key!r} is already pack {claimed[key]}'s"
+                        )
+                    claimed[key] = pack.name
+                    words[key] = value
+                lines += list(said[1])
+            self.__dict__["_vocabulary"] = (words, lines)
+        return self.__dict__["_vocabulary"]
+
+    def shapes(self) -> dict:
+        """The effects' shapes as the pack that owns them says them: {name:
+        {"moves_colour": bool}}. The library is files in `packs/fx/`, and what
+        a step of one MEANS is that pack's arithmetic — the engine reads the
+        word, never the shape (0.44)."""
+        return self.vocabulary()[0].get("shapes") or {}
 
     def drift_places(self, area: dict, spec: dict) -> list[tuple[str, str, list]]:
         """The (place, entity, things) a drift walks, in layout order: the
@@ -2573,7 +2616,7 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
     # `packs/fx/hooks.py`). What stays here needs them for somebody else: the
     # palette's rules are checked against the shapes and against `fx.enable`
     fx = house.fx()
-    shapes = load_shapes(fx.get("shapes"))
+    shapes = house.shapes()
     dup = [i for i, n in Counter(s["id"] for s in house.scenarios).items() if n > 1]
     if dup:
         errors.append(f"scenario ids used twice: {', '.join(sorted(dup))}")

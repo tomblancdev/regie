@@ -2,14 +2,16 @@
 # a target. shapes/ are THE BRICKS (what, never how: steps of level, colour,
 # hold, transition; repeats; bricks composed with `use:`); backends/ are THE
 # COMPILERS (how; each declares its ENVELOPE — the finest step it honours,
-# what it cannot do). The engine (src/regie/fx.py) flattens a shape, clamps
-# every hold to the backend's step and says so, and renders one script per
-# enabled shape: script.fx_<shape> with `target` + the shape's fields;
+# what it cannot do). compiler.py HERE (0.44, the audit's V14 — the engine's
+# own tree until then) flattens a shape, clamps every hold to the backend's
+# step and says so, and renders one script per enabled shape:
+# script.fx_<shape> with `target` + the shape's fields;
 # snapshot → run → restore. 0.4 compiles for `ha` only — the generic
 # light-service loop, the slowest rung; the per-protocol folders carry their
 # envelope, written down, measured at their bench.
 name: fx
-hooks: hooks.py   # 0.38 (V9): the backend and the shapes checked, fx_scripts compiled
+hooks: hooks.py   # 0.38 (V9): the words, the check, fx_scripts — compiler.py beside it (0.44)
+schema: schema.json   # 0.44 (V14): the `fx:` block, out of the engine's home.schema.json
 summary: script.fx_<shape> per shape — flash · fade · pulse · blackout · strike, compiled for the ha backend
 kinds: []
 services: []

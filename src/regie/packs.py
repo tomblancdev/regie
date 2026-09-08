@@ -5,6 +5,12 @@ apply. The product ships its own; a house adds its own from a directory of
 its choosing — same loader, same shape, so what must stay private never
 enters the public product, and the plugin shape IS the pack folder.
 
+A pack that carries code carries as MUCH code as it needs: the declared
+module is loaded as a package whose search path is the pack's own folder, so
+`hooks.py` says `from .compiler import …` and the rest of the pack lives
+beside it (0.44, the audit's V14 — fx's four hundred lines of arithmetic came
+home that way). One module is the FACE; the folder is the plugin.
+
 A pack that declares `hooks:` is CODE: the module runs inside the engine's
 own process, as whoever runs `regie` — root, on the brain, with the
 conductor's token in reach. Loading such a pack trusts its author exactly as
@@ -26,9 +32,11 @@ from .errors import HouseError
 
 HERE = Path(__file__).parent / "packs"
 
-# the three call sites (0.38): the house cross-checked, the render's context,
-# the conductor's run. A pack answers to none, some or all of them.
-HOOKS = ("check", "context", "apply")
+# the call sites, in the order a run meets them (0.38, a fourth at 0.44): the
+# words a pack adds to the house — read while the house is cross-checked, and
+# printed by `regie check` — then the cross-check's own questions, the
+# render's context, the conductor's run. A pack answers to none, some or all.
+HOOKS = ("vocabulary", "check", "context", "apply")
 
 
 @dataclass
@@ -87,7 +95,11 @@ class Pack:
         Loaded from its PATH, never as `regie.packs.<name>`: the packs ship as
         data (there is no `__init__.py` anywhere under `packs/`) and a house
         pack lives outside the installed engine altogether. One loader for
-        both, so a house pack is a plugin on exactly the product's terms."""
+        both, so a house pack is a plugin on exactly the product's terms.
+
+        It is loaded as a PACKAGE rooted in the pack's folder (0.44): a pack
+        whose code outgrows one file says `from .compiler import …` and the
+        engine finds it — inside the folder, never outside it."""
         if not self.hooks_file:
             return None
         if self._module is None:
@@ -98,10 +110,19 @@ class Pack:
 def _import(pack: Pack):
     file = pack.path / pack.hooks_file
     name = f"regie_pack_{pack.origin}_{pack.name}"
-    spec = importlib.util.spec_from_file_location(name, file)
+    # a package, its search path the pack's own folder: `from .compiler import`
+    # inside the declared module reaches the file beside it and nothing else
+    spec = importlib.util.spec_from_file_location(
+        name, file, submodule_search_locations=[str(pack.path)]
+    )
     if spec is None or spec.loader is None:
         raise HouseError(f"pack {pack.name}: {file} is not a Python module")
     module = importlib.util.module_from_spec(spec)
+    # a pack imported again is imported WHOLE: the modules beside the face are
+    # dropped first, or a house pack whose file changed on disk between two
+    # loads would run the previous load's code (0.44)
+    for stale in [m for m in sys.modules if m == name or m.startswith(f"{name}.")]:
+        del sys.modules[stale]
     # named in sys.modules before it runs: a dataclass, a typing lookup or a
     # relative helper inside the module asks for its own name while importing
     sys.modules[name] = module
@@ -160,6 +181,16 @@ def _packs_in(directory: Path | None) -> dict[str, Path]:
 
 def product_packs() -> dict[str, Path]:
     return _packs_in(HERE)
+
+
+def product_pack(name: str) -> Pack:
+    """One of the product's own packs, loaded on its own — the door a pack's
+    tests come in by, and the only one: a pack's modules are never importable
+    as `regie.packs.<name>.<module>`."""
+    paths = product_packs()
+    if name not in paths:
+        raise HouseError(f"unknown pack {name!r} — product packs: {', '.join(sorted(paths))}")
+    return _load(name, paths[name], "product")
 
 
 def house_packs(house_dir: Path, rel: str | None) -> dict[str, Path]:

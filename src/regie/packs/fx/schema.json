@@ -1,0 +1,144 @@
+{
+  "$comment": "The fx pack's own fields (0.44, the audit's V14): the block moved out of the engine's home.schema.json with the compiler. A house that does not carry pack `fx` has no `fx:` block — which is what a fragment means.",
+  "properties": {
+    "fx": {
+      "$ref": "#/$defs/fx"
+    }
+  },
+  "$defs": {
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "steps"
+      ],
+      "description": "an effect's SHAPE — what, never how: steps of level / colour / hold / transition, repeats, bricks composed (`use:`); a backend compiles it at the protocol's resolution",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "needs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "the finest hold it asks for, seconds"
+            }
+          }
+        },
+        "fields": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          },
+          "description": "the shape's knobs with their defaults — the script's fields; a step refers to one as $name"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "use": {
+                "$ref": "#/$defs/id"
+              },
+              "level": {},
+              "colour": {},
+              "hold": {},
+              "transition": {}
+            }
+          }
+        },
+        "repeat": {
+          "description": "how many times the steps run ($times, or a number)"
+        },
+        "restore": {
+          "type": "boolean",
+          "default": true,
+          "description": "snapshot before, put back after"
+        }
+      }
+    },
+    "fx": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "which effects the house enables, on which backend, its own shapes",
+      "properties": {
+        "backend": {
+          "$ref": "#/$defs/id",
+          "default": "ha",
+          "description": "the compiler every target goes through at 0.4 (ha: the generic light-service loop); per-protocol backends land with their bench"
+        },
+        "enable": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "description": "the shapes rendered as scripts; every shape when absent"
+        },
+        "shapes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/shape"
+          },
+          "description": "the house's own shapes, beside the product's"
+        },
+        "kelvin": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "warm": {
+              "type": "integer"
+            },
+            "neutral": {
+              "type": "integer"
+            },
+            "cool": {
+              "type": "integer"
+            }
+          },
+          "description": "what warm / neutral / cool mean in a scene (2700 / 4000 / 5500 by default)"
+        },
+        "palettes": {
+          "type": "object",
+          "description": "the palettes (0.20): named ones with numbers, `today` with rules",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "properties": {
+            "today": {
+              "$ref": "#/$defs/house_palette_today"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/house_palette"
+          }
+        }
+      }
+    }
+  }
+}

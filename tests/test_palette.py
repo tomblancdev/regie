@@ -456,15 +456,8 @@ def test_a_named_palette_bakes_its_numbers(house_with, tmp_path):
 
 
 # --- step 3 (0.22): life --------------------------------------------------------------
-def test_a_shape_that_sends_a_colour_is_told_apart():
-    from regie.fx import load_shapes
-
-    shapes = load_shapes(None)
-    assert not P.moves_colour("glitch", shapes)  # its colour field is null: the target's own
-    assert not P.moves_colour("flicker", shapes)
-    assert P.moves_colour("lightning", shapes)  # "#cfe0ff" by default
-    assert P.moves_colour("ember", shapes)  # the colour set once
-    assert P.moves_colour("neon", shapes)  # a ct step
+# whether a shape sends a colour is the fx pack's own word since 0.44 (the
+# audit's V14): its test moved with it, into packs/fx/tests/test_fx.py
 
 
 def test_the_witness_life_loop_renders_behind_the_looks_switch(rendered, witness):

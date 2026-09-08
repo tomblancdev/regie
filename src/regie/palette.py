@@ -407,42 +407,18 @@ def scene_palette(house, area: dict, plan: dict) -> dict | None:
 
 
 # --- step 3: life — a random effect on a random bulb, now and then -------------------
-def moves_colour(shape_id: str, shapes: dict, bindings: dict | None = None) -> bool:
-    """Does a shape send a COLOUR (a colour or a ct in one of its steps, its
-    bricks included)? A level-only shape may land on any bulb, a roaming one
-    included — a level flash sits on top of the colour and the next drift step
-    paints over it; a colour shape aborts the ramp inside a bulb and lands on
-    still bulbs alone."""
-    shape = shapes.get(shape_id) or {}
-    fields = dict(shape.get("fields") or {})
-    bound = {**fields, **(bindings or {})}
-
-    def value(v):
-        if isinstance(v, str) and v.startswith("$"):
-            return bound.get(v[1:])
-        return v
-
-    for step in shape.get("steps") or []:
-        if not isinstance(step, dict):
-            continue
-        if "ct" in step:
-            return True
-        if value(step.get("colour")) not in (None, "", False):
-            return True
-        if "use" in step:
-            inner = {k: value(v) for k, v in step.items() if k != "use"}
-            if moves_colour(step["use"], shapes, inner):
-                return True
-    return False
-
-
 def life_plan(house, area: dict, plan: dict, shapes: dict) -> dict | None:
     """A look that reads a palette with life: the loop's own shape — which
     bulbs may take a level shape (every one), which a colour shape (the still
     ones: never a roamer, and a candidate only on a day that left it still),
     the pace, and whether the room said no. For `today` the shapes and the
     pace are the SENSOR's (none on a day without life); for a named palette
-    they are its own."""
+    they are its own.
+
+    `shapes` is the house's vocabulary as the pack that owns it says it (0.44,
+    the audit's V14): {name: {"moves_colour": bool}}. Whether a shape sends a
+    colour is read from a shape's steps, its bricks and its fields — the fx
+    pack's arithmetic, in the fx pack's folder; here it is a word."""
     if plan.get("life") is False:
         return None
     spal = house.scene_palette(area, plan)
@@ -471,7 +447,7 @@ def life_plan(house, area: dict, plan: dict, shapes: dict) -> dict | None:
     lit = [t for t in spal["targets"] if t["data"] is not None and t["domain"] == "light"]
     if not lit:
         return None
-    colour_shapes = [s for s in life["shapes"] if moves_colour(s, shapes)]
+    colour_shapes = [s for s in life["shapes"] if (shapes.get(s) or {}).get("moves_colour")]
     level_shapes = [s for s in life["shapes"] if s not in colour_shapes]
     any_pool = [t["entities"][0] for t in lit]
     # the still bulbs: never a roamer; a candidate only when the day left it still

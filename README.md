@@ -25,14 +25,15 @@ the first commit or never are:
   directory of its choosing — the same loader, the same shape — so what must
   stay private never enters this repo.
 
-### A pack that carries code (0.38)
+### A pack that carries code (0.38 · 0.44)
 
 A pack folder may name one Python module beside its `pack.yml` —
 `hooks: hooks.py`, a declaration, so a stray `.py` in a folder never runs —
-and the engine calls it at the three places it has always had for a pack:
+and the engine calls it at the four places it has for a pack:
 
 | hook | called | does |
 |---|---|---|
+| `vocabulary(house)` | the house cross-checked, and `regie check` | returns `(words, lines)` — the words this pack adds to the house, merged **flat** so another pack may read them (`house.shapes()` is the fx pack's), and the lines `regie check` prints under the vocabulary. Two packs claiming one word is refused |
 | `check(house)` | the house cross-checked, after the engine's own words | returns `(errors, warnings, hints)` — lines in the pack's own wording, the engine prefixes none |
 | `context(house)` | the render's context is built | returns names for the templates, merged **flat** (`fx_scripts`, not `packs.fx.scripts`) — two packs claiming one name, or a pack claiming the engine's, is refused at render, never a silent overwrite |
 | `apply(conductor)` | the conductor's run, after its own steps | `conductor.step(name, state, detail)`, with `.house`, `.ha`, `.root`, `.check` and the open websocket at `.ws` |
@@ -43,6 +44,15 @@ so one loader serves both and a house pack is a plugin on exactly the
 product's terms. A hook's own `HouseError` is the pack's word; anything else
 raised is renamed with the pack that raised it — the family never meets a
 traceback.
+
+**The declared module is the pack's face, not the limit of its code** (0.44):
+it is loaded as a package whose search path is the pack's own folder, so
+`hooks.py` says `from .compiler import …` and the rest of the pack lives
+beside it — inside the folder, never outside. `fx` is the worked example: its
+shapes, its backends, its four-hundred-line compiler, its schema fragment and
+its tests are one folder, and the engine holds none of an effect's
+arithmetic. A house pack shipping its own shapes and its own compiler is a
+folder, on exactly these terms.
 
 **What a hook may own.** It PLACES what leaves with the pack's own rendered
 files (the palette pack's kept palettes are the phone's own documents in the component's store, never a rendered object the manifest
@@ -61,7 +71,10 @@ the file.
 
 The **schema is the contract** (`schema: 1`, [`home.schema.json`](src/regie/schema/home.schema.json)):
 `kind` and `via` are open vocabularies — an unknown value is a warning,
-never an error, so a new use case is a pack, not a schema bump. Labels come
+never an error, so a new use case is a pack, not a schema bump. **A pack's
+own fields are its own file** — `schema: schema.json` beside its `pack.yml`,
+merged in when the house carries the pack: a house that does not enable `fx`
+has no `fx:` block at all. Labels come
 from a table per language ([`labels/`](src/regie/labels)); the same dashboard
 prints in the family's words in any house.
 
@@ -154,7 +167,7 @@ through the same code, so the fleet never has a feature the house lacks.
 | the base | the config tree every profile renders, the dashboard's descent (`dash.py`) and the skin (`theme.py`, `base/fonts/`) | [`src/regie/base/`](src/regie/base) |
 | themes | the skins the product carries — `nuit` · `verre` · `atelier` | [`src/regie/themes/`](src/regie/themes) |
 | profiles | `ct` — Quadlet units, host networking | [`src/regie/profiles/`](src/regie/profiles) |
-| packs | `lighting` — room groups (+ per role, per layout row), the rooms that sense (0.17: one automation per room on its occupancy, the look of the hour when `<room>_dark` says so, off only what the sensors lit, a switch and a pin per room), silent alerts, the room's health sensor · the vocabulary: `signals` (+ `<room>_dark` and the occupancy's hold, 0.17) · `modes` · `scenes` (+ the room's look memory, 0.17) · `fx` (shapes/ the bricks, backends/ the envelopes) · `notify` · `scenarios` · `when` (0.18: a thing's state, or the house's mode, picks a look, a mode or a story — one automation per thing, a switch each; the verbs in `verbs.py`, rendered once) · `hands` (0.19: the remotes — a gesture profile per model in `hands.py`, a behaviour from the shelf per remote, one automation per remote) · **the packs that carry code** (0.38): `fx` (`hooks.py` — the backend and the shapes checked, `fx_scripts` compiled), `palette` (`hooks.py` — the kept palettes settled at every converge) | [`src/regie/packs/`](src/regie/packs) |
+| packs | `lighting` — room groups (+ per role, per layout row), the rooms that sense (0.17: one automation per room on its occupancy, the look of the hour when `<room>_dark` says so, off only what the sensors lit, a switch and a pin per room), silent alerts, the room's health sensor · the vocabulary: `signals` (+ `<room>_dark` and the occupancy's hold, 0.17) · `modes` · `scenes` (+ the room's look memory, 0.17) · `fx` (shapes/ the bricks, backends/ the envelopes) · `notify` · `scenarios` · `when` (0.18: a thing's state, or the house's mode, picks a look, a mode or a story — one automation per thing, a switch each; the verbs in `verbs.py`, rendered once) · `hands` (0.19: the remotes — a gesture profile per model in `hands.py`, a behaviour from the shelf per remote, one automation per remote) · **the packs that carry code** (0.38): `fx` (`hooks.py` — the shapes' words, the backend and the shapes checked, `fx_scripts` compiled; and since 0.44 `compiler.py` + `schema.json` beside them: the whole use case in one folder), `palette` (`hooks.py` — the kept palettes settled at every converge) | [`src/regie/packs/`](src/regie/packs) |
 | labels | the family's words, per language | [`src/regie/labels/`](src/regie/labels) |
 | the witness | `maison-temoin` | [`examples/`](examples) |
 | the collection | `tomblancdev.regie` — the fleet driver | [`ansible/`](ansible) |

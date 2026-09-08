@@ -1,11 +1,16 @@
 """A pack that carries code (0.38, the audit's V9): the pack folder IS the
 plugin shape — `hooks: hooks.py` beside pack.yml, and the engine calls
-`check`, `context` and `apply` at the three places it has always had for a
-pack. Proven here through a HOUSE pack, the witness's own `chalet`: what a
-house may do from a directory of its own is exactly what a product pack
-does, one loader for both. The product's two first users are elsewhere —
-the fx pack's check and its `fx_scripts` (test_fx.py, and the render of the
-witness), the palette pack's stores at every converge (test_pull.py)."""
+`vocabulary`, `check`, `context` and `apply` at the four places it has for a
+pack (`vocabulary` since 0.44, V14: the words a pack adds to the house, which
+is how one pack reads another's without importing it). And the declared module
+is the pack's FACE, not the limit of its code: the folder is a package, so a
+pack whose arithmetic outgrows one file keeps it beside its hooks.
+
+Proven here through a HOUSE pack, the witness's own `chalet`: what a house may
+do from a directory of its own is exactly what a product pack does, one loader
+for both. The product's users are elsewhere — the fx pack's words, check,
+`fx_scripts` and its four-hundred-line compiler (test_fx.py, and the render of
+the witness), the palette pack's stores at every converge (test_pull.py)."""
 
 import pytest
 import yaml
@@ -81,7 +86,7 @@ def test_the_code_lives_inside_the_folder(house_with, named):
     assert "a pack's code lives inside its own folder" in str(exc.value)
 
 
-# --- the three hooks ----------------------------------------------------------
+# --- the four hooks -----------------------------------------------------------
 
 THREE = """
 def check(house):
@@ -95,6 +100,41 @@ def context(house):
 def apply(conductor):
     conductor.step("chalet", "ok", f"the websocket is at hand: {conductor.ws is not None}")
 """
+
+
+WORDS = """
+def vocabulary(house):
+    return {"chalet_woods": ["oak", "pine"]}, ["chalet: two woods, seasoned"]
+"""
+
+
+def test_vocabulary_reaches_the_house_and_regie_check(house_with, secrets, capsys):
+    """The words a pack adds: readable by the rest of the house — this is how
+    the palette asks the fx pack which shapes send a colour, with neither pack
+    importing the other — and said by `regie check`, in the pack's own wording."""
+    path = house_with(lambda d: None)
+    pack_code(path, WORDS)
+    house = load_house(path)
+    assert house.vocabulary()[0]["chalet_woods"] == ["oak", "pine"]
+    report(house, secrets)
+    assert "chalet: two woods, seasoned" in capsys.readouterr().out.splitlines()
+
+
+def test_two_packs_may_not_claim_one_word(house_with):
+    same = 'def vocabulary(house):\n    return {"bois": 1}, []\n'
+    path = second_pack(house_with, same)
+    pack_code(path, same)
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "the word 'bois' is already pack chalet's" in str(exc.value)
+
+
+def test_a_vocabulary_that_answers_the_wrong_shape(house_with):
+    path = house_with(lambda d: None)
+    pack_code(path, 'def vocabulary(house):\n    return {"bois": 1}\n')
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "the vocabulary hook returns (words, lines)" in str(exc.value)
 
 
 def test_check_speaks_in_its_own_words(house_with):
@@ -153,6 +193,37 @@ def apply_steps(house, secrets, tmp_path, ha=None, check=False):
     return apply(house, secrets, tmp_path, ha or FakeHA(), check=check)
 
 
+# --- the folder is the plugin, not the file -----------------------------------
+
+
+def test_a_pack_folder_carries_more_than_one_module(house_with, secrets):
+    """0.44 (V14): the declared module is the pack's face; a pack whose code
+    outgrows one file keeps the rest beside it and says `from .x import`. This
+    is what let fx's compiler come home — four hundred lines that were the
+    engine's, now the folder's."""
+    path = house_with(lambda d: None)
+    folder = pack_code(
+        path,
+        "from .grenier import WORD\n\n\ndef context(house):\n    return {'chalet_word': WORD}\n",
+    )
+    (folder / "grenier.py").write_text("WORD = 'foin'\n", encoding="utf-8")
+    assert context(load_house(path), secrets)["chalet_word"] == "foin"
+    # and a pack loaded again is loaded WHOLE: the file beside the face is read
+    # from disk each time, never left over from the load before
+    (folder / "grenier.py").write_text("WORD = 'paille'\n", encoding="utf-8")
+    assert context(load_house(path), secrets)["chalet_word"] == "paille"
+
+
+def test_a_relative_import_may_not_leave_the_folder(house_with):
+    """The search path is the pack's own folder and stops there: reaching a
+    step above it is not a door onto the engine, it is an import that fails."""
+    path = house_with(lambda d: None)
+    pack_code(path, "from ..ailleurs import x\n\n\ndef check(house):\n    return [], [], []\n")
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "chalet: hooks.py does not import" in str(exc.value)
+
+
 # --- what a broken pack says --------------------------------------------------
 
 
@@ -179,7 +250,7 @@ def test_a_module_that_answers_to_nothing(house_with):
     pack_code(path, "def contxt(house):\n    return {}\n")
     with pytest.raises(HouseError) as exc:
         load_house(path)
-    assert "answers to none of check, context, apply" in str(exc.value)
+    assert "answers to none of vocabulary, check, context, apply" in str(exc.value)
 
 
 def test_a_hook_that_is_not_a_function(house_with):

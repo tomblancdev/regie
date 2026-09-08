@@ -1,17 +1,43 @@
-"""The fx pack's hooks (0.38, the audit's V9).
+"""The fx pack's hooks (0.38, the audit's V9; the compiler beside them 0.44,
+V14).
 
-Two questions only this pack can answer, moved out of the engine and into the
-folder that owns them: does the house name a backend and shapes that exist
-(`check`), and what does the compiler put in front of the templates
-(`context` — `fx_scripts`, which `templates/packages/fx.yaml.j2` and nothing
-else reads).
+The pack's FACE: everything the engine asks of the effects passes through
+here, and nothing of the effects lives outside this folder any more.
 
-The compiler itself is still `src/regie/fx.py`, with `shapes/` and
-`backends/` already here; it moves into this folder with the rest of the pack
-(the audit's V14). Nothing about the words below changed in the move: the
-lines a house reads are the engine's own, to the character."""
+  * `vocabulary` — the words fx adds to the house: which shapes exist and
+    which of them send a COLOUR (the palette's `life:` asks, to know which
+    bulbs a sign may land on), and the line `regie check` prints — the
+    backend, its step, the scripts, and every hold or temperature the
+    envelope stretches;
+  * `check` — does the house name a backend and shapes that exist;
+  * `context` — `fx_scripts`, which `templates/packages/fx.yaml.j2` and
+    nothing else reads.
 
-from regie.fx import compile_all, known_backends, load_shapes
+`compiler.py` beside this file is the arithmetic: shapes flattened, holds
+clamped, one Home Assistant script per enabled shape. It is reached as a
+module of THIS package — the engine loads a pack's declared module with the
+pack's own folder as its search path, so a house pack carrying its own
+compiler is a folder, on exactly these terms."""
+
+from . import compiler  # noqa: F401 — the arithmetic, reachable through the pack's face
+from .compiler import compile_all, known_backends, load_shapes, moves_colour
+
+
+def vocabulary(house):
+    fx = house.fx()
+    shapes = load_shapes(fx.get("shapes"))
+    words = {"shapes": {name: {"moves_colour": moves_colour(name, shapes)} for name in shapes}}
+    if fx.get("backend") not in known_backends():
+        # the shapes are still the house's words; the backend is refused by
+        # `check` below, once, in a sentence that names every backend there is
+        return words, []
+    scripts, notes, backend = compile_all(fx, house.data["house"]["label"])
+    lines = [
+        f"fx: backend {backend['name']} (step {backend['envelope'].get('step', 0)} s) · "
+        f"{len(scripts)} script(s): {', '.join(s[3:] for s in scripts)}"
+    ]
+    lines += [f"  ~ {n}" for n in notes]
+    return words, lines
 
 
 def check(house):

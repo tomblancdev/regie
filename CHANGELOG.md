@@ -1,5 +1,96 @@
 # Changelog
 
+## 0.44.0 — fx est le premier greffon (2026-09-08)
+
+**V14 de l'audit, la dernière des trois.** V9 avait donné au dossier d'un pack
+la forme d'un greffon — `hooks.py` à côté de `pack.yml`, appelé au `check`, au
+`context` et à l'`apply` — et fx fut l'un des deux premiers cas d'usage sortis
+du moteur. Mais son **compilateur de 446 lignes** et son fragment de schéma
+vivaient encore dans l'arbre du moteur : le dossier `packs/fx/` portait les
+briques et les enveloppes, et l'arithmétique qui transforme les unes par les
+autres était ailleurs. Elle est rentrée. **Le moteur ne porte plus une seule
+ligne de l'arithmétique d'une forme.**
+
+**Ce qui a bougé — et rien d'autre :**
+
+* `src/regie/fx.py` → **`src/regie/packs/fx/compiler.py`**, 446 lignes, mot pour
+  mot ;
+* les 137 lignes du bloc `fx:` de `home.schema.json` → **`packs/fx/schema.json`**,
+  déclaré par `schema:` dans le `pack.yml`. Une maison qui ne porte pas le pack
+  `fx` n'a plus de bloc `fx:` du tout — c'est ce que veut dire un fragment ;
+* `palette.moves_colour` → le compilateur. **C'est ce que la lecture a trouvé, et
+  que la feuille de route ne nommait pas** : le moteur marchait dans les `steps`
+  d'une forme, ses briques `use:` et ses `$champs` pour décider si elle envoie
+  une COULEUR (la palette le demande pour savoir sur quelle ampoule un signe de
+  vie peut se poser — une forme de niveau se pose sur n'importe laquelle, une
+  forme de couleur casse la rampe d'une dérive et ne se pose que sur une ampoule
+  immobile). Laisser ça derrière aurait fait de V14 un demi-déménagement ;
+* `KELVIN` (warm / neutral / cool = 2700 / 4000 / 5500) est monté dans
+  `house.py`, en sens inverse : ce ne sont pas les mots des effets, ce sont **les
+  mots blancs de la MAISON** — un look dit `ct: warm`, `regie look` relit une
+  ampoule dans un de ces mots, la palette peint avec, et une maison les redéfinit
+  par `fx.kelvin:`. Ils vivaient dans le compilateur parce que les effets en ont
+  eu besoin les premiers ; le compilateur les lit maintenant chez le moteur.
+
+**Un quatrième point d'appel : `vocabulary`.** Le moteur avait besoin de deux
+choses de fx AVANT tout rendu — quelles formes existent, et lesquelles envoient
+une couleur. Aucun des trois crochets ne pouvait répondre : `context` ne tourne
+qu'au rendu. Alors `vocabulary(house)` rend **`(mots, lignes)`** — les mots que
+ce pack ajoute à la maison, fusionnés à plat sous la règle du contexte (deux
+packs qui réclament un même mot est une faute, jamais un écrasement silencieux),
+et les lignes que `regie check` imprime sous le vocabulaire, dans les mots du
+pack. **C'est ainsi qu'un pack lit le vocabulaire d'un autre sans l'importer :**
+`house.shapes()` est désormais la réponse du pack fx — `{nom: {"moves_colour":
+bool}}` — et la ligne `fx: backend ha (step 0.05 s) · 33 script(s): …` avec
+chacun de ses étirements est écrite par le pack, plus par `cli.py`.
+
+**Le module déclaré est le VISAGE du pack, pas la limite de son code.** Il est
+chargé comme un paquet dont le chemin de recherche est le dossier du pack :
+`hooks.py` dit `from .compiler import …` et le reste du pack vit à côté —
+dedans, jamais dehors (`from ..ailleurs` ne s'importe pas, et le dit). C'est ce
+qui a permis au compilateur de rentrer, et c'est ce qui permet à une maison
+d'apporter ses propres formes, sa propre enveloppe et son propre compilateur :
+un dossier, aux mêmes conditions exactement. Le pack fx est le cas travaillé —
+`shapes/`, `backends/`, `hooks.py`, `compiler.py`, `schema.json`,
+`templates/`, `tests/` : le cas d'usage entier dans un dossier.
+
+**La bibliothèque est lue une fois par chargement.** `product_shapes()` relisait
+trente-trois fichiers à chaque appel — 205 ms, trois ou quatre fois par maison
+chargée — alors qu'ils ne peuvent pas changer sous un chargement. La table est
+en cache et chaque appel en rend une copie fraîche, donc le quatrième crochet
+ne coûte rien et la suite y gagne. **Et un pack ré-importé l'est ENTIER** : les
+modules à côté du visage sont retirés de `sys.modules` avant l'exécution, sinon
+une maison chargée deux fois de suite ferait tourner le code du chargement
+précédent — ce qui est exactement ce qu'une suite fait, et ce qu'une maison
+fait à chaque `regie` d'une paire de sessions.
+
+**LA PREUVE — rien de ce qu'une maison lit n'a bougé :**
+
+* le rendu de la maison témoin, **54 fichiers, octet pour octet identiques** :
+  l'arbre rendu avant la première ligne écrite, `diff -r` contre celui d'après ;
+* la sortie de `regie check` sur le témoin, **identique ligne pour ligne** ;
+* le fragment du pack + le schéma du moteur **== le schéma de 0.43.1, valeur
+  pour valeur** (une comparaison de valeurs, pas de texte) ;
+* la suite : **462 tests au vert**, 9 min 07 en podman (456 à 0.43.1 : six neufs — le quatrième crochet, ses deux refus, le dossier qui porte plus d'un module et son import qui ne sort pas du dossier, les mots que le pack donne à la maison ; `moves_colour` a suivi son code).
+
+**Et pas de photographie.** Une réécriture qui doit prouver qu'elle n'a rien
+déplacé est exactement ce à quoi sert une photographie (0.43.1) — mais de
+l'autre côté d'une photographie il y a du code que le produit NE FAIT PLUS
+TOURNER, et ici il tourne, mot pour mot, depuis un autre dossier. Une réplique
+de code vivant n'est pas une preuve, c'est une copie : la règle de V12,
+appliquée à V14. La preuve est le `diff` ci-dessus, faite une fois, à
+l'atterrissage.
+
+**Une seule sémantique change**, et elle est dite ici : les formes sont
+désormais le mot du pack fx. Une maison qui écrit `fx.palettes.…life.shapes`
+sans activer le pack `fx` n'a plus de formes du tout, et son `check` le lui dit.
+Les deux maisons qui existent portent le pack.
+
+**Ce qui reste dans le moteur et pourrait suivre :** `hands.py` lit encore
+`packs/hands/behaviours/` depuis l'arbre du moteur, et les profils de gestes de
+chaque modèle de télécommande sont chez lui. Le pack `hands` est le prochain
+candidat, sur exactement le chemin que fx vient d'ouvrir.
+
 ## 0.43.1 — une photographie se déclare (2026-09-08)
 
 **V12 de l'audit.** La suite mélangeait deux choses depuis deux versions sans

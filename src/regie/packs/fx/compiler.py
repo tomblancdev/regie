@@ -16,26 +16,29 @@ backend's step (and says so: a refusal is a line, never silence), and emits
 Home Assistant actions — a script per shape, its fields the shape's.
 
 The compiled script snapshots its target, runs, and puts the snapshot back
-(`restore: false` keeps the last step)."""
+(`restore: false` keeps the last step).
+
+THIS MODULE LIVES IN THE PACK'S OWN FOLDER since 0.44 (the audit's V14): the
+shapes, the backends and the arithmetic that turns one into the other are one
+folder, and the engine holds none of it — a house pack carrying its own
+shapes, its own envelope and its own compiler is a folder, on exactly these
+terms. `hooks.py` beside it is the pack's face: the engine asks that, never
+this module. Nothing of what a house reads moved in the move."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 import yaml
 
-from .errors import HouseError
+from regie.errors import HouseError
+from regie.house import KELVIN  # warm / neutral / cool: the HOUSE's white words
 
-HERE = Path(__file__).parent / "packs" / "fx"
+HERE = Path(__file__).parent
 SHAPES = HERE / "shapes"
 BACKENDS = HERE / "backends"
-
-
-# ce que warm / neutral / cool veulent dire. La carte VIT ICI parce que c'est le
-# vocabulaire des effets ; `house.py` l'importe, et une maison la surcharge par
-# `fx.kelvin:`. Une seule vérité, un seul endroit.
-KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 
 
 def _ct(raw, kelvin: dict, where: str):
@@ -76,11 +79,22 @@ def _ct_note(value, backend: dict, notes: list[str], where: str) -> None:
         )
 
 
-def product_shapes() -> dict[str, dict]:
+@cache
+def _library() -> dict[str, dict]:
     out = {}
     for p in sorted(SHAPES.glob("*.yml")):
         out[p.stem] = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     return out
+
+
+def product_shapes() -> dict[str, dict]:
+    """The bricks the product ships, read ONCE while this module lives: the
+    thirty-three files cannot change under a load, and they were re-read at
+    every call until 0.44 — 200 ms a time, three or four times a house. The
+    mapping is a fresh one each call — a caller lays its own shapes over it —
+    and nobody edits a shape in place. A pack re-imported drops the cache with
+    the module, so a house pack's own shapes are never a load behind."""
+    return dict(_library())
 
 
 def load_shapes(house_shapes: dict | None = None) -> dict[str, dict]:
@@ -101,6 +115,36 @@ def load_backend(name: str) -> dict:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     data.setdefault("name", name)
     return data
+
+
+# --- what a shape says about itself -------------------------------------------
+def moves_colour(shape_id: str, shapes: dict, bindings: dict | None = None) -> bool:
+    """Does a shape send a COLOUR (a colour or a ct in one of its steps, its
+    bricks included)? A level-only shape may land on any bulb, a roaming one
+    included — a level flash sits on top of the colour and the next drift step
+    paints over it; a colour shape aborts the ramp inside a bulb and lands on
+    still bulbs alone."""
+    shape = shapes.get(shape_id) or {}
+    fields = dict(shape.get("fields") or {})
+    bound = {**fields, **(bindings or {})}
+
+    def value(v):
+        if isinstance(v, str) and v.startswith("$"):
+            return bound.get(v[1:])
+        return v
+
+    for step in shape.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        if "ct" in step:
+            return True
+        if value(step.get("colour")) not in (None, "", False):
+            return True
+        if "use" in step:
+            inner = {k: value(v) for k, v in step.items() if k != "use"}
+            if moves_colour(step["use"], shapes, inner):
+                return True
+    return False
 
 
 # --- values -------------------------------------------------------------------

@@ -145,8 +145,6 @@ def report(house: House, secrets: dict) -> None:
 
 def vocabulary(house: House) -> None:
     """The words the house writes, resolved by role — what renders, what waits."""
-    from .fx import compile_all
-
     m = house.modes()
     if m:
         periods = ", ".join(f"{p['id']} {p['time']}" for p in m["periods"])
@@ -184,14 +182,10 @@ def vocabulary(house: House) -> None:
         if a.get("defaults"):
             line += " · defaults per period"
         print(line)
-    if house.has_pack("fx"):
-        scripts, notes, backend = compile_all(house.fx(), house.data["house"]["label"])
-        print(
-            f"fx: backend {backend['name']} (step {backend['envelope'].get('step', 0)} s) · "
-            f"{len(scripts)} script(s): {', '.join(s[3:] for s in scripts)}"
-        )
-        for n in notes:
-            print(f"  ~ {n}")
+    # what a pack says of its own words (0.44, the audit's V14): the effects'
+    # backend and its stretches used to be compiled here, in the engine
+    for line in house.vocabulary()[1]:
+        print(line)
     if house.scenarios:
         print(f"scenarios: {', '.join(s['id'] for s in house.scenarios)}")
     if house.included:

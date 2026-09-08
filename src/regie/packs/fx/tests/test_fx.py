@@ -1,4 +1,10 @@
-"""The fx pack — shapes compiled for the ha backend: bricks, fields, ranges."""
+"""The fx pack — shapes compiled for the ha backend: bricks, fields, ranges.
+
+The compiler is the pack's own since 0.44 (the audit's V14), so its tests
+reach it the way the engine does: the pack loaded, its declared module — the
+pack's face — and the arithmetic beside it. There is no `regie.packs.fx`
+to import; a house pack's tests would say exactly this, with `house_packs`
+in place of `product_pack`."""
 
 import re
 
@@ -6,7 +12,14 @@ import pytest
 import yaml
 
 from regie.errors import HouseError
-from regie.fx import compile_shape, load_backend, load_shapes, product_shapes
+from regie.packs import product_pack
+
+fx = product_pack("fx").hooks
+compile_shape = fx.compiler.compile_shape
+load_backend = fx.compiler.load_backend
+load_shapes = fx.compiler.load_shapes
+moves_colour = fx.compiler.moves_colour
+product_shapes = fx.compiler.product_shapes
 
 # The shapes the product ships. VERBS, never nouns: a product shape says what a
 # light DOES and may never name a room, a role, a place or a French title —
@@ -264,14 +277,44 @@ def test_enable_narrows_the_scripts(house_with, secrets, tmp_path):
     # refusal above is `hooks.py`'s `check`, the fx.yaml above its `context`
 
 
-def test_the_pack_carries_its_own_check_and_context():
-    """The plugin shape (0.38, V9): the two questions that are fx's alone live
-    in the pack folder, not in the engine — the compiler follows in V14."""
-    from regie.packs import _load, product_packs
+def test_a_shape_that_sends_a_colour_is_told_apart():
+    """Which bulbs a sign of life may land on: a level-only shape sits on top
+    of any bulb, a colour one aborts a drift's ramp and lands on a still bulb
+    alone. The palette asks; the answer is here, because only this folder
+    knows what a step MEANS (0.44 — it was `palette.moves_colour` until V14)."""
+    shapes = load_shapes(None)
+    assert not moves_colour("glitch", shapes)  # its colour field is null: the target's own
+    assert not moves_colour("flicker", shapes)
+    assert moves_colour("lightning", shapes)  # "#cfe0ff" by default
+    assert moves_colour("ember", shapes)  # the colour set once
+    assert moves_colour("neon", shapes)  # a ct step
 
-    pack = _load("fx", product_packs()["fx"], "product")
+
+def test_the_pack_carries_its_own_words_check_context_and_compiler():
+    """The plugin shape, whole (0.38 V9, 0.44 V14): every question that is
+    fx's alone is answered inside this folder — and the folder carries as much
+    code as it needs, the declared module being the face, not the limit."""
+    pack = product_pack("fx")
     assert pack.hooks_file == "hooks.py"
-    assert callable(pack.hooks.check) and callable(pack.hooks.context)
+    assert all(callable(getattr(pack.hooks, h)) for h in ("vocabulary", "check", "context"))
+    assert pack.hooks.compiler.__file__.endswith("packs/fx/compiler.py")
+    assert pack.fragment["properties"]["fx"], "the `fx:` block is the pack's own schema now"
+
+
+def test_the_words_the_pack_gives_the_house(witness):
+    """What the rest of the house may read of the effects, and what `regie
+    check` prints: the shapes with the one thing another pack asks of them,
+    then the backend's line and every stretch the envelope spoke."""
+    words, lines = fx.vocabulary(witness)
+    assert set(words["shapes"]) == BRICKS
+    assert words["shapes"]["neon"] == {"moves_colour": True}
+    assert words["shapes"]["flicker"] == {"moves_colour": False}
+    assert lines[0].startswith("fx: backend ha (step 0.05 s) · 33 script(s): ")
+    assert (
+        "  ~ strike: holds down to 0.04 s asked, the backend gives 0.05 → the low end stretched"
+    ) in lines
+    # the house reads the same words, through the engine's own door
+    assert witness.shapes() == words["shapes"]
 
 
 def test_an_unknown_backend_is_still_refused(house_with):

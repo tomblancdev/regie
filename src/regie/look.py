@@ -15,8 +15,7 @@ look may already use); anything else is said per place, in the layout's order.
 from __future__ import annotations
 
 from .errors import HouseError
-from .fx import KELVIN
-from .house import House
+from .house import KELVIN, House
 
 CT_TOLERANCE = 150  # kelvins: this close to one of the house's words, it IS that word
 
