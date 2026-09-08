@@ -1,5 +1,96 @@
 # Changelog
 
+## 0.43.0 — les règles du jour sont un document, et le fichier redevient la parole (2026-09-08)
+
+**V8b de l'audit, troisième et dernière marche de H51.** Les règles du jour —
+les poids des harmonies, le quart évité, la saturation, la courbe de niveau,
+l'éparpillement, les vives, la vie — c'étaient **vingt et un helpers** rendus
+dans le package, semés depuis `fx.yml` à chaque converge et suivis un par un
+par la règle de V4 sous la forme d'un GROUPE, le seul de tout le moteur. Ce
+sont **un document** du même store que les palettes gardées
+(`.storage/regie.palettes`, clé `rules`), écrit dans la forme même du fichier,
+et le groupe n'existe plus.
+
+**L'état ordinaire, c'est l'absence.** Tant qu'aucune main n'a bougé un
+curseur, il n'y a pas de document du tout : la maison porte ce que disent les
+fichiers, le converge dit « follows the files » en trois mots et n'écrit rien.
+La première main qui touche un curseur dans l'Atelier écrit le document ; le
+converge le nomme « edited on the phone, kept — not yet pulled » ; `regie pull
+home.yml palettes` pose les règles dans `palettes.today` **clé par clé** — une
+règle que personne n'a bougée garde la ligne du fichier, son commentaire, son
+orthographe, et une règle remise au silence est RETIRÉE au lieu d'être écrite
+à plat ; le converge suivant libère le document et la maison suit de nouveau
+les fichiers.
+
+**La graine vit DANS le document, et c'est une décision.** La graine d'une
+palette gardée est définitionnelle : les fichiers la portent ou ne la portent
+pas. Les règles, elles, sont TOUJOURS déclarées par les fichiers — la même
+lecture aurait dit « à la main » à chaque curseur bougé. Le document porte
+donc la parole des fichiers **telle qu'elle était quand la main s'en est
+écartée**, frappée une fois à la naissance et jamais réécrite : c'est la
+troisième lecture que la règle de V4 demande, et elle voyage avec la chose
+qu'elle décrit. Un curseur bougé après que le fichier a bougé dit « les deux
+ont bougé », pas « le téléphone a raison ».
+
+**Le cerveau lit `regie: palette:` une fois au démarrage**, et un converge qui
+change le package le redémarre avant que le hook du pack ne tourne. Si ce
+n'était pas le cas, l'étape le DIT (« the brain has not read the files' rules
+yet ») au lieu de prétendre que la maison suit un fichier que personne n'a lu.
+
+**Une porte de plus, la cinquième :** `regie/palettes/rules`. Avec un bloc,
+elle écrit le document ; **sans bloc, elle le libère** — c'est
+« Suivre les fichiers » sur la carte, et c'est ce que fait `regie push
+home.yml palettes`. `regie/palettes/list` rend les règles vivantes, la parole
+des fichiers et la graine à côté, pour que l'onglet dise laquelle des deux la
+maison porte. L'Atelier ne touche plus **aucun** helper des règles : il ne lui
+reste que les cinq commandes de la famille.
+
+**« Change à » reste un helper**, parce que c'est une règle ET une des cinq
+commandes de la famille, sur le tableau de bord. C'est un knob à lui seul
+maintenant, avec sa propre feuille (`palettes.today.turns`) — le groupe de
+vingt et un auquel il appartenait est parti, et une mécanique générale a
+remplacé le cas particulier.
+
+**LA PREUVE, DE LA MÊME FORME QUE CELLE DE V8a.** `tests/frozen_0_41.py`
+garde maintenant les DEUX moitiés de l'ancien chemin telles quelles :
+`rule_seeds`, la projection d'un bloc de règles sur les vingt et un helpers,
+et le Jinja du capteur de 0.41 qui les LISAIT. La suite sème les helpers
+depuis un bloc de règles, rend ce capteur, et le tient contre le tirage que le
+composant fait aujourd'hui depuis le document — **octet pour octet, sur dix
+ans de jours et deux tirages**, et une règle bougée bouge le tirage de la même
+façon des deux côtés. Le trajet complet est déroulé dans `test_pull.py` : pas
+de document → une main → gardé → `regie pull` → libéré → les deux ont bougé →
+`regie push`.
+
+**Un signe gardé quand la part des jours est à zéro.** L'ancienne forme
+jetait `life` dès que la chance tombait à 0 et les formes choisies étaient
+perdues ; elles restent nommées maintenant, éteintes (`draw` ne les tire
+jamais : `lf * 100 < 0` n'est jamais vrai). Une famille qui coupe les signes
+une semaine n'a pas à les rechoisir.
+
+**LE COMPTE : la plomberie propre de la palette passe de 31 à DIX** — les cinq
+commandes de la famille, le tirage derrière « Une autre », les trois
+automatisations et le capteur du composant. Deux cents entités portaient le
+mot *palette* avant 0.42. Le composant passe en **0.4.0**.
+
+**La porte refuse ce que le fichier se ferait refuser.** Le déroulé en direct
+a trouvé le trou : l'Atelier acceptait un poids (`libre: 4` avec un quart évité
+qui ne laisse que 175°) dont `check` ne veut pas, et la maison le portait
+jusqu'à ce qu'un converge échoue. Les harmonies et l'arc sont dits UNE fois,
+dans le composant (`rules_refusal`), et `check` les lit de là : la porte répond
+maintenant `invalid_format — the avoided arc leaves 175° and the widest harmony
+wants 220°` et n'écrit rien. Le trou existait déjà avec les vingt et un helpers
+— il part avec eux.
+
+Avec : les vingt-deux mots que cette marche rend orphelins quittent les deux
+fichiers de langue (`palette_rules`, les dix-neuf `rule_*`, `alive_all`,
+`store_shapes`), et les sept que 0.42 avait laissés derrière avec eux
+(`palette_slot`, `palette_try`, `palette_add`, `palette_name`, `alive_none`,
+`life_none`, `life_like`). Trois mots nouveaux : `atelier_follow`,
+`atelier_moved_note`, `atelier_files_note`. `regie palette --root` qui trouve
+un DIFFER dit maintenant si les règles ont été bougées sur le téléphone, au
+lieu de laisser un écart qui se lit comme un bug d'arithmétique.
+
 ## 0.42.1 — l'Atelier se redessine quand la main touche un document (2026-09-07)
 
 Une modification d'un document ne fait bouger aucune entité, donc rien ne

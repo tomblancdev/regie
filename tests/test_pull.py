@@ -9,6 +9,7 @@ import json
 import pytest
 import yaml
 
+from regie import palette as palette_mod
 from regie import pull as P
 from regie.apply import apply
 from regie.dash import link
@@ -202,27 +203,46 @@ def test_a_rooms_look_for_a_period_pulls_into_its_defaults(secrets, tmp_path, ho
     assert "night: evening }" in living.read_text(encoding="utf-8"), "the period's line gone"
 
 
-def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
+def test_the_days_rules_are_a_document_and_a_store_is_kept_freed_or_a_hand(
     secrets, tmp_path, house_with
 ):
-    """The palette's Réglages: twenty helpers, ONE thing under the rule — a
-    helper moved in a way the rules cannot say is no edit. A store kept on
-    the phone is named at every converge until pulled; the pull adds it to
-    fx.yml as a block and touches the rules' leaves that moved, the file's
-    notes kept; the next converge frees the store. A store the files carry
+    """The palette's own three-way, on TWO documents of one store (0.43, V8b).
+
+    The day's rules were twenty-one helpers of a group until then; they are one
+    document beside the kept palettes now, read the same way and freed the same
+    way. THE FILES: `fx.yml`'s `palettes.today`. THE PHONE: the document, or —
+    the ordinary state — nothing at all, and then the house follows the files
+    with no seeding and nothing to free. THE SEED: the files' word the hand
+    departed from, stamped into the document at its birth.
+
+    A store kept on the phone is named at every converge until pulled; the pull
+    writes the rules' leaves that moved and adds the palette as a block, the
+    file's notes kept; the next converge frees both. What the files carry
     differently waits for a hand; push frees it."""
     path = house_with(lambda d: None)
     house = load_house(path)
     fx = path.parent / "fx.yml"
     ha = FakeHA()
+    ha.palette_file_rules = palette_mod.rules_normal(house.palettes()["today"])
     apply(house, secrets, tmp_path, ha, check=False)
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert detail(steps, "palette rules") == "follows the files"
-    ha.states["input_number.house_palette_today_weight_libre"] = "1.0"
-    ha.states["input_number.house_palette_today_alive_max"] = "3.0"  # under « toutes »: no edit
+    # no document: the ordinary state, and nothing is written to say so
+    assert detail(steps, "the day's rules") == "follows the files"
+    assert ha.palette_rules is None
+
+    def door(**kw):
+        with ha.ws() as ws:
+            return ws.call("regie/palettes/rules", **kw)
+
+    # a hand moves a weight in the Atelier: the document is born, stamped
+    rules = dict(ha.palette_file_rules)
+    door(rules={**rules, "harmonies": {**rules["harmonies"], "libre": 1}})
+    assert ha.palette_rules_seed == ha.palette_file_rules
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert detail(steps, "palette rules") == (
-        "edited on the phone (weight_libre 0.0 → 1.0), kept — not yet pulled: "
+    assert states(steps)["the day's rules"] == "ok"
+    assert detail(steps, "the day's rules") == (
+        "edited on the phone (harmonies {'degrade': 5, 'duo': 3, 'uni': 2, 'libre': 0} → "
+        "{'degrade': 5, 'duo': 3, 'uni': 2, 'libre': 1}), kept — not yet pulled: "
         "`regie pull home.yml palettes` writes it"
     )
     doc = {
@@ -243,6 +263,8 @@ def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
     lines = P.pull(house, ha, tmp_path, ["palettes"], P.house_files(house), link)
     assert any(line.startswith("  + fx.yml: palettes.today.harmonies ") for line in lines)
     assert "  + fx.yml: palettes.nuit_rouge ← palette « Nuit rouge »" in lines
+    # a rule NOBODY moved keeps the file's own line, comment and spelling
+    assert not any("palettes.today.avoid" in line for line in lines)
     after = fx.read_text(encoding="utf-8")
     assert "    harmonies: { degrade: 5, duo: 3, uni: 2, libre: 1 }\n" in after
     assert (
@@ -255,13 +277,18 @@ def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
         yaml.safe_load(after)["palettes"]["nuit_bleue"]
         == yaml.safe_load(before)["palettes"]["nuit_bleue"]
     )
+    # the next converge: the files carry both now, and both documents are freed
     house = load_house(path)
+    ha.palette_file_rules = palette_mod.rules_normal(house.palettes()["today"])
     steps = apply(house, secrets, tmp_path, ha, check=False)
-    assert detail(steps, "palette rules") == "follows the files"
+    assert states(steps)["the day's rules"] == "changed"
+    assert detail(steps, "the day's rules") == "freed — the files carry the day's rules now"
+    assert ha.palette_rules is None, "the document is deleted, not left lying about"
     assert states(steps)["palette « Nuit rouge »"] == "changed"
     assert detail(steps, "palette « Nuit rouge »") == "freed — the files carry `nuit_rouge` now"
     assert "nuit_rouge" not in ha.palettes, "the document is deleted, not blanked"
     steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert detail(steps, "the day's rules") == "follows the files"
     assert "palette « Nuit rouge »" not in states(steps), "a store with nothing in it says nothing"
     # kept again with a number touched: the files carry it differently — a hand
     ha.palettes["nuit_rouge"] = {**doc, "accent": 120}
@@ -273,13 +300,59 @@ def test_the_days_rules_are_one_thing_and_a_store_is_kept_freed_or_a_hand(
         "`regie push home.yml palettes` the files'"
     )
     assert "nuit_rouge" in ha.palettes, "kept"
+    # BOTH MOVED, on the rules: the hand moved them, then the file moved too —
+    # the seed stamped at the document's birth is what tells the two apart
+    door(rules={**ha.palette_file_rules, "saturation": [50, 60]})
+    fx.write_text(
+        set_leaf(fx.read_text(encoding="utf-8"), ["palettes", "today", "avoid"], [10, 20]),
+        encoding="utf-8",
+    )
+    house = load_house(path)
+    # the brain reads `regie: palette:` once at start: until the converge that
+    # changes the package has restarted it, the step SAYS the brain has not read
+    # the file — a step must never claim the house follows a word nobody read
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert states(steps)["the day's rules"] == "hand"
+    assert detail(steps, "the day's rules").startswith(
+        "the brain has not read the files' rules yet (it restarts at a converge that "
+        "changes the package) — edited on the phone"
+    )
+    ha.palette_file_rules = palette_mod.rules_normal(house.palettes()["today"])  # restarted
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert states(steps)["the day's rules"] == "hand"
+    assert detail(steps, "the day's rules") == (
+        "edited on the phone (saturation [85, 100] → [50, 60]) and the files moved too "
+        "(avoid [45, 105] → [10, 20]) — kept, by hand: `regie pull home.yml palettes` "
+        "keeps the phone's, `regie push home.yml palettes` the files'"
+    )
     lines = P.push(house, ha, tmp_path, ["palettes"], link)
+    assert "  + the day's rules: freed — the files' version stands" in lines
     assert "  + palette « Nuit rouge »: freed — the files' version stands" in lines
-    assert "nuit_rouge" not in ha.palettes
+    assert ha.palette_rules is None and "nuit_rouge" not in ha.palettes
     # a palette the files do not carry is not push's to free
     ha.palettes["aube"] = {**doc, "label": "Aube"}
     P.push(house, ha, tmp_path, ["palettes"], link)
     assert "aube" in ha.palettes
+
+
+def test_the_hour_the_palette_turns_is_a_knob_of_its_own(secrets, tmp_path, house_with):
+    """« Change à » is a rule of the day AND one of the family's five controls:
+    it stays a helper (0.43) and is owned on its own — the group of twenty-one
+    it belonged to is gone, and the leaf it writes is its own line in fx.yml."""
+    path = house_with(lambda d: None)
+    house = load_house(path)
+    fx = path.parent / "fx.yml"
+    ha = FakeHA()
+    ha.palette_file_rules = palette_mod.rules_normal(house.palettes()["today"])
+    apply(house, secrets, tmp_path, ha, check=False)
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert detail(steps, "knob house_palette_turns") == "06:30 — follows the files"
+    ha.states["input_datetime.house_palette_turns"] = "07:15:00"
+    steps = apply(house, secrets, tmp_path, ha, check=False)
+    assert states(steps)["knob house_palette_turns"] == "ok"
+    lines = P.pull(house, ha, tmp_path, ["palettes"], P.house_files(house), link)
+    assert "  + fx.yml: palettes.today.turns ← knob house_palette_turns" in lines
+    assert 'turns: "07:15"' in fx.read_text(encoding="utf-8"), "an hour is quoted, never a number"
 
 
 def test_the_plans_draft_is_the_same_thing_under_the_same_rule(secrets, tmp_path, house_with):

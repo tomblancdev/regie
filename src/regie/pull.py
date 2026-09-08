@@ -1,15 +1,18 @@
 """What the phone owns (0.33, the audit's V4): ONE rule for every thing a
-person may tune on the phone that the files also declare — a knob (a
-period's hour, a room's look for a stretch of the day, the day's palette
-rules as one thing), the plan's draft, a palette store. Three mechanisms
-said it three ways before (the knobs' marks with the UI winning for good,
-the workbench's seed, a store freed on its name alone); they read the same
-three things now and speak the same words.
+person may tune on the phone that the files also declare — a knob (a period's
+hour, a room's look for a stretch of the day, the hour the palette turns), the
+plan's draft, the palette's store (a kept palette, and since 0.43 the day's
+rules). Three mechanisms said it three ways before (the knobs' marks with the
+UI winning for good, the workbench's seed, a store freed on its name alone);
+they read the same three things now and speak the same words.
 
 THE RULE — three readings and one word. The FILES: what the house declares.
 The PHONE: what the brain holds. The SEED: what the conductor last wrote to
 the brain, its memory (`.regie/knobs.json`, `.regie/plan-seed.json`; a
-store's seed is definitional — the conductor only ever frees one).
+kept palette's seed is definitional — the conductor only ever frees one — and
+the day's rules carry theirs INSIDE the document, the files' word the hand
+departed from, because the files always declare rules and « both moved » would
+otherwise be unsayable).
 
   phone == files            → agree:  it FOLLOWS THE FILES (the memory refreshed)
   no memory                 → blind:  the kind says — a fresh helper has no word
@@ -116,7 +119,7 @@ def words(
 class Owned:
     """One thing the phone may own, read three ways."""
 
-    kind: str  # knobs | plan | palettes — the pull's word
+    kind: str  # knobs | plan | palettes | looks — the pull's word
     name: str  # the step's name
     files: object
     phone: object
@@ -201,7 +204,6 @@ def read_knobs(house, ha, marks: dict) -> tuple[list[Owned], list[dict]]:
     does not have is left alone."""
     owned: list[Owned] = []
     born: list[dict] = []
-    groups: dict[str, list] = {}
     for k in house.knobs():
         entity = k["entity"]
         status, st = ha.get(f"/api/states/{entity}")
@@ -212,9 +214,6 @@ def read_knobs(house, ha, marks: dict) -> tuple[list[Owned], list[dict]]:
         if status != 200:
             raise HouseError(f"{entity}: {status} {st}")
         shown = _shown(k, st.get("state", "unknown"))
-        if k.get("group"):
-            groups.setdefault(k["group"], []).append((k, shown))
-            continue
         if k.get("born"):
             if entity not in marks:
                 born.append(
@@ -235,8 +234,6 @@ def read_knobs(house, ha, marks: dict) -> tuple[list[Owned], list[dict]]:
                 )
             continue
         owned.append(_single(ha, marks, k, name, shown))
-    for group, members in groups.items():
-        owned.append(_grouped(house, ha, marks, group, members))
     return owned, born
 
 
@@ -269,50 +266,6 @@ def _single(ha, marks: dict, k: dict, name: str, shown: str) -> Owned:
         remember=remember,
         head=shown,
         leaf=k.get("leaf") or {},
-    )
-
-
-def _grouped(house, ha, marks: dict, group: str, members: list) -> Owned:
-    """The day's rules as ONE thing: its helpers' values as a dict, the
-    phone's reading round-tripped through the rules (a helper moved in a way
-    the rules cannot say — a count under « toutes » — is no edit)."""
-    by_entity = {k["entity"]: k for k, _ in members}
-    files = {k["entity"]: k["value"] for k, _ in members}
-    raw = {k["entity"]: shown for k, shown in members}
-    phone = palette_mod.rules_round_trip(raw, house.palettes()["today"], house.kelvin())
-    if all(e in marks for e in files):
-        seed: object = {e: marks[e] for e in files}
-    else:
-        seed = NO_MEMORY
-
-    def describe(a, b):
-        a, b = a or {}, b or {}
-        moved = [
-            f"{e.split('_today_', 1)[-1] if '_today_' in e else e.split('.', 1)[1]} "
-            f"{a.get(e)} → {b.get(e)}"
-            for e in files
-            if a.get(e) != b.get(e)
-        ]
-        return ", ".join(moved[:4]) + (f", +{len(moved) - 4}" if len(moved) > 4 else "")
-
-    def write(value):
-        for e, v in value.items():
-            if raw.get(e) != v:
-                _service(ha, by_entity[e], e, v)
-
-    def remember(value):
-        marks.update(value)
-
-    return Owned(
-        kind=members[0][0].get("pull", "palettes"),
-        name=group,
-        files=files,
-        phone=phone,
-        seed=seed,
-        describe=describe,
-        write=write,
-        remember=remember,
-        wrote="seeded",
     )
 
 
@@ -372,7 +325,7 @@ def read_stores(house, ws) -> list[Owned]:
         ) from exc
     docs = answer.get("palettes") or {}
     named = house.palettes()["named"]
-    out = []
+    out = [read_rules(house, ws, answer)]
     for pid, doc in sorted(docs.items()):
         p = palette_mod.store_clean(doc)
         slug = palette_mod.slug(p["label"])
@@ -402,6 +355,59 @@ def read_stores(house, ws) -> list[Owned]:
             )
         )
     return out
+
+
+def read_rules(house, ws, answer: dict) -> Owned:
+    """The day's rules, one document under the same rule (0.43, the audit's
+    V8b) — they were twenty-one helpers of a group until then.
+
+    THE FILES: `fx.yml`'s `palettes.today` under the one grammar. THE PHONE:
+    the store's document, or the files themselves when no hand has moved them
+    — the ordinary state, the one with nothing to write and nothing to free.
+    THE SEED: the files' word the hand departed from, stamped into the document
+    when it was born; a store carrying no document carries no seed and wants
+    none.
+
+    A document that has come to agree with the files is FREED, exactly as a
+    kept palette is: the house follows the files again and the store is empty.
+    The pull writes the rules key by key, so a rule nobody moved keeps the
+    file's own words — its comment, its spelling — and a rule moved back to
+    silence is removed rather than written flat."""
+    files = palette_mod.rules_normal(house.palettes()["today"])
+    moved = bool(answer.get("rules_moved"))
+    phone = palette_mod.rules_normal(answer.get("rules")) if moved else files
+    stamp = answer.get("rules_seed") if moved else None
+    seed = palette_mod.rules_normal(stamp) if isinstance(stamp, dict) else files
+
+    def write(_value):
+        # no block at all: the document is freed and the files stand
+        ws.call("regie/palettes/rules")
+
+    # the brain reads `regie: palette:` once at start, and a converge that
+    # changes the package restarts it before this hook runs — if it has not,
+    # the step must not claim the brain follows a file it has not read
+    brain = answer.get("rules_files")
+    lag = (
+        "the brain has not read the files' rules yet (it restarts at a converge "
+        "that changes the package)"
+        if isinstance(brain, dict) and palette_mod.rules_normal(brain) != files
+        else ""
+    )
+    return Owned(
+        kind="palettes",
+        name="the day's rules",
+        files=files,
+        phone=phone,
+        seed=seed,
+        describe=palette_mod.describe_rules,
+        write=write,
+        remember=write,
+        stale=moved,  # a document that agrees is freed, not left lying about
+        wrote="freed",
+        head=lag,
+        settled="freed — the files carry the day's rules now",
+        leaf={"file": "fx", "path": ["palettes", palette_mod.AUTO], "value": phone, "by_key": True},
+    )
 
 
 # --- the looks: a look kept on the phone (0.36, the audit's V5) -----------------------------
@@ -832,32 +838,37 @@ def pull_knobs(owned: list[Owned], files: dict) -> list[str]:
     return lines
 
 
-def pull_palettes(house, ha, owned: list[Owned], files: dict) -> list[str]:
-    """The kept stores and the day's rules, into the fx file's `palettes:`
-    block leaf by leaf — a rule the phone did not move is not touched."""
+def pull_palettes(owned: list[Owned], files: dict) -> list[str]:
+    """Everything the palette owns on the phone, into the fx file: the day's
+    rules KEY BY KEY — a rule nobody moved keeps the file's own words, and one
+    moved back to silence is removed rather than written flat — each kept
+    palette under its own name, and « Change à » at its own leaf."""
     lines = []
     fx = files.get("fx")
     if fx is None:
         return ["  ! no fx file to write — the house includes none (include.fx)"]
-
-    def read(e):
-        status, st = ha.get(f"/api/states/{e}")
-        return st if status == 200 else None
-
-    mine = house.palettes()["today"]
-    theirs = palette_mod.rules_from_helpers(read, mine)
-    a, b = palette_mod.rules_normal(mine), palette_mod.rules_normal(theirs)
-    for key in ("harmonies", "avoid", "saturation", "level", "alive", "life", "turns"):
-        if a.get(key) == b.get(key):
-            continue
-        value = theirs.get(key)
-        if _write_leaf(fx, ["palettes", palette_mod.AUTO, key], value):
-            lines.append(f"  + {fx.name}: palettes.{palette_mod.AUTO}.{key} {a.get(key)} → {value}")
     for o in owned:
         if o.kind != "palettes" or not o.leaf or o.decide() not in ("phone", "both"):
             continue
-        if _write_leaf(fx, o.leaf["path"], o.leaf["value"]):
-            lines.append(f"  + {fx.name}: palettes.{o.leaf['path'][-1]} ← {o.name}")
+        leaf = o.leaf
+        said = leaf.get("value", o.phone)
+        value = said(o.phone) if callable(said) else said
+        if not leaf.get("by_key"):
+            lines.append(
+                f"  + {fx.name}: {'.'.join(leaf['path'])} ← {o.name}"
+                if _write_leaf(fx, leaf["path"], value)
+                else f"  = {fx.name}: {'.'.join(leaf['path'])} unchanged"
+            )
+            continue
+        was = o.files if isinstance(o.files, dict) else {}
+        for key, v in value.items():
+            if was.get(key) == v:
+                continue
+            path = leaf["path"] + [key]
+            if _write_leaf(fx, path, v):
+                lines.append(f"  + {fx.name}: {'.'.join(path)} {was.get(key)} → {v}")
+            else:
+                lines.append(f"  = {fx.name}: {'.'.join(path)} unchanged")
     return lines
 
 
@@ -920,7 +931,9 @@ def pull(house, ha, root: Path, kinds: list[str], files: dict, link) -> list[str
         out.append("palettes:")
         with ha.ws() as ws:
             kept = read_stores(house, ws)
-        out += pull_palettes(house, ha, kept, files) or ["  = nothing the phone moved"]
+        # « Change à » is a knob of its own (0.43): it rides with the store's
+        # own things, since `palettes` is the kind that names it
+        out += pull_palettes(kept + owned, files) or ["  = nothing the phone moved"]
     if "looks" in kinds:
         # the memory is read, never written here: the next converge settles a
         # keep the files now agree with

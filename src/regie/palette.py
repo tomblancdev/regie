@@ -8,9 +8,9 @@ A named palette gives numbers; `today` gives RULES, and the day draws within
 them.
 
 THE ARITHMETIC IS NOT HERE ANY MORE (0.42, the audit's V8a). The draw, the
-room's own draws, a kept palette's normal form and the day's rules as the
-helpers hold them live in the COMPONENT's own `palette.py`, which the brain
-imports as one of its modules and the engine reads by path
+room's own draws, a kept palette's normal form and — since 0.43, the audit's
+V8b — the day's rules' own live in the COMPONENT's `palette.py`, which the
+brain imports as one of its modules and the engine reads by path
 (`regie.component`). Until 0.41 the same steps were written twice — Python
 here, a generated Jinja body there — and a test kept them in step over ten
 years of days; the sensor is the component's now, so there is one copy and
@@ -46,8 +46,7 @@ JITTER_MAX = _A.JITTER_MAX
 LIFE_EVERY_MIN = _A.LIFE_EVERY_MIN
 AUTO = _A.AUTO
 PERIODS = _A.PERIODS
-RULES_PREFIX = _A.RULES_PREFIX
-RULE_NUMBERS = _A.RULE_NUMBERS
+RULE_KEYS = _A.RULE_KEYS
 salt_of = _A.salt_of
 day_of = _A.day_of
 free_arc = _A.free_arc
@@ -63,11 +62,11 @@ source_of = _A.source_of
 label_of = _A.label_of
 option_labels = _A.option_labels
 store_clean = _A.store_clean
-rules_from_helpers = _A.rules_from_helpers
-rules_entities = _A.rules_entities
+rules_normal = _A.rules_normal
+rules_refusal = _A.rules_refusal
+describe_rules = _A.describe_rules
 _num = _A._num
 _txt = _A._txt
-_shapes = _A._shapes
 
 
 # --- the house's palettes, normalised -------------------------------------------
@@ -174,24 +173,12 @@ def check(palettes: dict, shapes: set[str], enabled: list[str] | None, periods: 
         _life(where, p.get("life"))
 
     where = f"palette {AUTO}"
+    # the harmonies and the arc: said in the COMPONENT, so the store's door
+    # refuses on the phone exactly what `check` refuses in the file (0.43)
+    refusal = rules_refusal(rules)
+    if refusal:
+        errors.append(f"{where}: {refusal}")
     weights = rules["harmonies"]
-    for name, wt in weights.items():
-        if name not in HARMONIES:
-            errors.append(f"{where}: harmony {name!r} is not one ({', '.join(ORDER)})")
-        elif wt < 0:
-            errors.append(f"{where}: harmony {name} weighs less than nothing")
-    if not any(weights.get(n, 0) > 0 for n in ORDER):
-        errors.append(f"{where}: no harmony weighs anything — nothing to draw")
-    av = rules["avoid"]
-    if len(av) != 2 or not all(0 <= a <= 360 for a in av):
-        errors.append(f"{where}: avoid is [from, to] on the hue circle — it may wrap through 0°")
-    else:
-        free = free_arc(av[0], av[1])
-        widest = max((HARMONIES[n][1] for n in ORDER if weights.get(n, 0) > 0), default=0)
-        if free < widest:
-            errors.append(
-                f"{where}: the avoided arc leaves {free}° and the widest harmony wants {widest}°"
-            )
     sat = rules["saturation"]
     if len(sat) != 2 or not 0 <= sat[0] <= sat[1] <= 100:
         errors.append(f"{where}: saturation is [min, max], 0–100")
@@ -504,55 +491,15 @@ def life_plan(house, area: dict, plan: dict, shapes: dict) -> dict | None:
     }
 
 
-# --- step 4 → the Atelier's step 1 (0.24), the store since 0.42 ------------------
+# --- step 4 → the Atelier's step 1 (0.24), the store since 0.42/0.43 -------------
 ACCENT_DWELL = 0.2  # the part of a roaming bulb's cycle spent on the accent (the walk's constant)
-# A kept palette is a DOCUMENT in the component's store now, not seventeen
-# helpers in one of eight numbered slots: no ceiling, no ghost after a
-# deletion, nothing to seed at a converge. What is left here is the day's
-# RULES, which are still the family's helpers (V8b moves them into the same
-# store) and whose grammar — RULE_NUMBERS — is the component's, read above.
-
-
-def rule_seeds(rules: dict, kelvin: dict | None = None) -> dict:
-    """The day's rules as the helpers' values — what the conductor seeds."""
-    w = rules["harmonies"]
-    level = rules.get("level") or {}
-    jit = level.get("jitter", 0)
-    jit = jit if isinstance(jit, list) else [jit, jit]
-    alive = rules.get("alive")
-    if alive is None:
-        a_min, a_max, a_all = 0, 0, False
-    elif alive == "all":
-        a_min, a_max, a_all = 0, 0, True
-    elif isinstance(alive, list):
-        a_min = int(alive[0])
-        a_all = alive[1] == "all"
-        a_max = 0 if a_all else int(alive[1])
-    else:
-        a_min, a_max, a_all = int(alive), int(alive), False
-    life = rules.get("life") or {}
-    curve = level.get("curve") or {}
-    out = {f"input_number.{RULES_PREFIX}_weight_{n}": float(w.get(n, 0)) for n in ORDER}
-    out.update(
-        {
-            f"input_number.{RULES_PREFIX}_avoid_from": float(rules["avoid"][0]),
-            f"input_number.{RULES_PREFIX}_avoid_to": float(rules["avoid"][1]),
-            f"input_number.{RULES_PREFIX}_saturation_min": float(rules["saturation"][0]),
-            f"input_number.{RULES_PREFIX}_saturation_max": float(rules["saturation"][1]),
-            f"input_number.{RULES_PREFIX}_jitter_min": float(jit[0]),
-            f"input_number.{RULES_PREFIX}_jitter_max": float(jit[1]),
-            f"input_number.{RULES_PREFIX}_alive_min": float(a_min),
-            f"input_number.{RULES_PREFIX}_alive_max": float(a_max),
-            f"input_boolean.{RULES_PREFIX}_alive_all": "on" if a_all else "off",
-            f"input_text.{RULES_PREFIX}_shapes": ", ".join(life.get("shapes") or []),
-            f"input_number.{RULES_PREFIX}_every_min": float((life.get("every") or [120, 600])[0]),
-            f"input_number.{RULES_PREFIX}_every_max": float((life.get("every") or [120, 600])[1]),
-            f"input_number.{RULES_PREFIX}_chance": float(life.get("chance", 100) if life else 0),
-        }
-    )
-    for period in PERIODS:
-        out[f"input_number.{RULES_PREFIX}_curve_{period}"] = float(curve.get(period, 100))
-    return out
+# NOTHING OF THE PHONE'S PALETTE IS RENDERED ANY MORE. A kept palette was
+# seventeen helpers in one of eight numbered slots until 0.42, and the day's
+# rules twenty-one helpers until 0.43: both are documents in the component's
+# store now — no ceiling, no ghost after a deletion, nothing to seed at a
+# converge, and one grammar (`rules_normal`, `store_normal`) the two sides
+# read, compare and write under. What the FILES alone can say still comes from
+# here: `component_config` below.
 
 
 def auto_label(palettes: dict, ui) -> str:
@@ -568,41 +515,6 @@ def options(palettes: dict, ui) -> list[dict]:
     deleted (palettes.py's `async_names`, the automation's job until 0.41)."""
     out = [{"id": AUTO, "label": auto_label(palettes, ui)}]
     out += [{"id": pid, "label": p["label"]} for pid, p in palettes["named"].items()]
-    return out
-
-
-def knob_value(entity: str, value) -> str:
-    """A helper's value as the conductor reads and compares it: a number as
-    `str(float)`, an hour to the minute, a switch's word, a text."""
-    domain = entity.split(".", 1)[0]
-    if domain == "input_number":
-        return str(float(value))
-    if domain == "input_datetime":
-        return str(value)[:5]
-    return str(value)
-
-
-def rules_round_trip(raw: dict, file_rules: dict, kelvin: dict | None = None) -> dict:
-    """The rules' helpers as the phone holds them, read into the rules and
-    seeded back — a helper moved in a way the rules cannot say (a count under
-    « toutes ») reads as no edit."""
-
-    def read(e):
-        return {"state": raw[e]} if e in raw else None
-
-    rules = rules_from_helpers(read, file_rules)
-    seeds = rule_seeds(rules, kelvin)
-    seeds["input_datetime.house_palette_turns"] = rules["turns"]
-    return {e: knob_value(e, v) for e, v in seeds.items() if e in raw}
-
-
-def rules_normal(rules: dict) -> dict:
-    """The day's rules in the shape the helpers can say — the pull compares
-    the file's and the phone's under it, leaf by leaf."""
-    seeds = rule_seeds(rules)
-    seeds["input_datetime.house_palette_turns"] = rules["turns"] + ":00"
-    out = rules_from_helpers(lambda e: {"state": seeds[e]} if e in seeds else None, rules)
-    out.pop("label", None)
     return out
 
 
@@ -665,6 +577,9 @@ def house_plan(house) -> dict:
             "accent",
             "file_note",
             "avoid_note",
+            "follow",
+            "moved_note",
+            "files_note",
             "weight",
             "chance",
             "week",
@@ -679,8 +594,6 @@ def house_plan(house) -> dict:
         "chip": chip,
         "repaint": repaint,
         "flip": flip,
-        "rules_prefix": RULES_PREFIX,
-        "rule_numbers": RULE_NUMBERS,
         "periods": PERIODS,
         "whites": list(house.kelvin()),
         # the card (0.25): the file's palettes read-only, the shapes it may chip,

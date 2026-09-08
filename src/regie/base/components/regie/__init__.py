@@ -5,9 +5,9 @@ The pieces rendered YAML cannot say live here, each a tenant of one domain
 tenants so far: the porter (conversation.py, porter.py), a conversation agent
 in front of the house's LLM, the walker (walker.py, walk.py), which runs a
 look's colour walks one order per leg (0.39, the audit's V7), and the palette
-(palettes.py, sensor.py, palette.py), whose kept palettes are documents in a
-store of ours and whose sensor is computed here from the arithmetic the engine
-reads by path (0.42, the audit's V8a).
+(palettes.py, sensor.py, palette.py), whose kept palettes AND whose day's rules
+are documents in a store of ours and whose sensor is computed here from the
+arithmetic the engine reads by path (0.42 and 0.43, the audit's V8a and V8b).
 
 The component SHIPS WITH EVERY HOUSE since 0.39: `configuration.yaml` carries
 the bare `regie:` that loads it, and a pack that has something to configure —

@@ -1,22 +1,26 @@
-/* regie-atelier — L'Atelier des palettes (La Régie 0.25, the store since 0.42):
- * a window that opens from a button on Réglages to edit a palette in full, or
- * the day's rules, with a colour ring, a level curve and chips for the signs of
- * life. Shipped by the product into the brain's own www/, loaded as a Lovelace
- * resource (never an extra module: the registry polyfill).
+/* regie-atelier — L'Atelier des palettes (La Régie 0.25, the store since 0.42,
+ * the rules with it since 0.43): a window that opens from a button on Réglages
+ * to edit a palette in full, or the day's rules, with a colour ring, a level
+ * curve and chips for the signs of life. Shipped by the product into the
+ * brain's own www/, loaded as a Lovelace resource (never an extra module: the
+ * registry polyfill).
  *
- * TWO SOURCES, TWO DOORS. A KEPT PALETTE is a document in the component's own
- * store, read and written through four websocket commands —
- * regie/palettes/list · save · delete · random. There is no slot and no
- * ceiling: « Nouvelle » and « Enregistrer sous » both save a new document,
- * « Supprimer » deletes one, and no helper is left behind. THE DAY'S RULES are
- * still the family's helpers, read and written through the `hass` object every
- * card is handed (V8b moves them into the same store).
+ * EVERYTHING THE WINDOW EDITS IS A DOCUMENT, through five websocket commands —
+ * regie/palettes/list · save · delete · random · rules. A KEPT PALETTE has no
+ * slot and no ceiling: « Nouvelle » and « Enregistrer sous » both save a new
+ * document and « Supprimer » deletes one. THE DAY'S RULES are one document
+ * more (0.43): `list` hands them over with the files' own word beside them, so
+ * the tab can say whether the house is following the files and offer the way
+ * back — « Suivre les fichiers », which frees the document. The only helpers
+ * this card still touches are the family's five controls: the select,
+ * « Change à », « Une autre ».
  *
  * The week strip under the rules draws with the product's own arithmetic
  * (palette.py) ported here — the same seven draws in the same order. It is a
- * PREVIEW: it must follow a slider as the finger moves, faster than a sensor
- * recomputed on the helper's echo. What the house wears is never drawn here —
- * that is sensor.house_palette's word, and the component's alone. */
+ * PREVIEW: it must follow a slider as the finger moves, faster than a value
+ * recomputed on a round trip through the store. What the house wears is never
+ * drawn here — that is sensor.house_palette's word, and the component's
+ * alone. */
 (function () {
   "use strict";
   const M = 2147483647, A = 16807;
@@ -56,6 +60,49 @@
     if (v.alive_all) doc.alive = "all";
     else if (v.alive) doc.alive = Math.round(v.alive);
     if (v.shapes && v.shapes.length) doc.life = { shapes: v.shapes.slice(), every: [Math.round(v.every_min), Math.round(v.every_max)] };
+    return doc;
+  }
+
+  // --- the day's rules: the document the store holds, and the flat values the controls edit ---
+  function rulesOf(r) {
+    r = r || {};
+    const level = r.level || {}, curve = level.curve || {}, life = r.life || null;
+    let jit = level.jitter || 0;
+    jit = Array.isArray(jit) ? jit : [jit, jit];
+    const alive = r.alive;
+    const row = Array.isArray(alive) ? alive : (alive === "all" ? ["all"] : [alive || 0, alive || 0]);
+    const v = {
+      harmonies: Object.fromEntries(ORDER.map((h) => [h, (r.harmonies || {})[h] || 0])),
+      avoid: (r.avoid || [45, 105]).slice(),
+      saturation: (r.saturation || [85, 100]).slice(),
+      jitter: [jit[0] || 0, jit[1] || 0],
+      curve: Object.fromEntries(PERIODS.map((p) => [p, curve[p] === undefined ? 100 : curve[p]])),
+      alive: [row[0] === "all" ? 0 : (row[0] || 0), row[row.length - 1] === "all" ? 0 : (row[row.length - 1] || 0)],
+      alive_all: alive === "all" || row[row.length - 1] === "all",
+      shapes: life && life.shapes ? life.shapes.slice() : [],
+      every: life && life.every ? life.every.slice() : [120, 600],
+      chance: life ? (life.chance === undefined ? 100 : life.chance) : 0,
+    };
+    return v;
+  }
+  function rulesDoc(v) {
+    const doc = {
+      harmonies: Object.fromEntries(ORDER.map((h) => [h, Math.round(v.harmonies[h] || 0)])),
+      avoid: [Math.round(v.avoid[0]), Math.round(v.avoid[1])],
+      saturation: [Math.round(v.saturation[0]), Math.round(v.saturation[1])],
+    };
+    const curve = {}, level = {};
+    let moved = false;
+    for (const p of PERIODS) { curve[p] = Math.round(v.curve[p]); if (curve[p] !== 100) moved = true; }
+    if (moved) level.curve = curve;
+    if (v.jitter[0] || v.jitter[1]) level.jitter = [Math.round(v.jitter[0]), Math.round(v.jitter[1])];
+    doc.level = Object.keys(level).length ? level : null;
+    // `[0, all]` is not `all`: one draws between nothing and every bulb, the
+    // other is every bulb. The component says the same, and writes it so.
+    doc.alive = v.alive_all ? [Math.round(v.alive[0]), "all"] : (v.alive[0] || v.alive[1] ? [Math.round(v.alive[0]), Math.round(v.alive[1])] : null);
+    // a shape picked with the chance still at zero is KEPT, off: the same rule
+    // the component's `_life_normal` holds, so the round trip loses nothing
+    doc.life = v.shapes.length ? { shapes: v.shapes.slice(), every: [Math.round(v.every[0]), Math.round(v.every[1])], chance: Math.round(v.chance) } : null;
     return doc;
   }
 
@@ -142,6 +189,8 @@
       this._open = false;
       this._pending = {};
       this._docs = {};   // the store, read when the window opens
+      this._rules = null;   // the day's rules: the document, or the files' word
+      this._rulesMoved = false;   // a hand has moved them: the files are not what the house wears
       this._read = false;
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
       this._render();
@@ -161,16 +210,12 @@
       return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
     }
     _signature() {
-      // what the WINDOW shows: the store's documents (they change on our own
-      // saves and on another phone's) and, on the rules tab, their helpers
-      const c = this._config, parts = [this._tab || "", JSON.stringify(this._docs)];
+      // what the WINDOW shows: the store's documents and the rules document
+      // (they change on our own saves and on another phone's), and on the
+      // rules tab the two helpers the week strip reads
+      const parts = [this._tab || "", JSON.stringify(this._docs), JSON.stringify(this._rules), String(this._rulesMoved)];
       if (this._tab === "today") {
-        const px = c.rules.prefix;
-        const keys = ORDER.map((h) => `input_number.${px}_weight_${h}`).concat(
-          ["avoid_from", "avoid_to", "saturation_min", "saturation_max", "jitter_min", "jitter_max", "alive_min", "alive_max", "every_min", "every_max", "chance"].map((k) => `input_number.${px}_${k}`),
-          PERIODS.map((p) => `input_number.${px}_curve_${p}`),
-          [`input_boolean.${px}_alive_all`, `input_text.${px}_shapes`, "counter.house_palette_roll", "input_datetime.house_palette_turns"]);
-        for (const e of keys) parts.push(this.st(e, ""));
+        for (const e of ["counter.house_palette_roll", "input_datetime.house_palette_turns"]) parts.push(this.st(e, ""));
       }
       return parts.join("|");
     }
@@ -184,21 +229,20 @@
     }
     num(entity, fallback) { const v = parseFloat(this.st(entity, NaN)); return isNaN(v) ? fallback : v; }
     call(domain, service, data) { return this._hass.callService(domain, service, data); }
-    setNumber(entity, value) {
-      // a slider fires many times a second: the brain hears the last value only
-      clearTimeout(this._pending[entity]);
-      this._pending[entity] = setTimeout(() => this.call("input_number", "set_value", { entity_id: entity, value: Math.round(value) }), 120);
-    }
-    setText(entity, value) { return this.call("input_text", "set_value", { entity_id: entity, value }); }
-    setBool(entity, on) { return this.call("input_boolean", on ? "turn_on" : "turn_off", { entity_id: entity }); }
     setSelect(entity, option) { return this.call("input_select", "select_option", { entity_id: entity, option }); }
     press(entity) { return this.call("input_button", "press", { entity_id: entity }); }
 
-    // --- the store (0.42): the component's four doors ------------------------------
+    // --- the store (0.42, the rules with it since 0.43): the component's doors ------
     ws(type, extra) { return this._hass.callWS({ type, ...(extra || {}) }); }
     fetch() {
       return this.ws("regie/palettes/list")
-        .then((r) => { this._docs = r.palettes || {}; this._read = true; })
+        .then((r) => {
+          this._docs = r.palettes || {};
+          this._rules = r.rules || null;
+          this._rulesFiles = r.rules_files || null;
+          this._rulesMoved = !!r.rules_moved;
+          this._read = true;
+        })
         .catch((e) => { this._docs = {}; this._read = true; this._error = String((e && e.message) || e); });
     }
     stores() {
@@ -218,20 +262,20 @@
       clearTimeout(this._pending[id]);
       this._pending[id] = setTimeout(() => this.saveDoc(id, this._docs[id]), 150);
     }
-    rulesValues() {
-      const px = this._config.rules.prefix, n = (k, d) => this.num(`input_number.${px}_${k}`, d);
-      return {
-        harmonies: Object.fromEntries(ORDER.map((h) => [h, n(`weight_${h}`, 0)])),
-        avoid: [n("avoid_from", 45), n("avoid_to", 105)],
-        saturation: [n("saturation_min", 85), n("saturation_max", 100)],
-        jitter: [n("jitter_min", 0), n("jitter_max", 0)],
-        curve: Object.fromEntries(PERIODS.map((p) => [p, n(`curve_${p}`, 100)])),
-        alive: [n("alive_min", 0), n("alive_max", 0)],
-        alive_all: this.st(`input_boolean.${px}_alive_all`, "off") === "on",
-        shapes: (this.st(`input_text.${px}_shapes`, "") || "").split(/[,;]/).map((s) => s.trim()).filter(Boolean),
-        every: [n("every_min", 120), n("every_max", 600)],
-        chance: n("chance", 0),
-      };
+    rulesValues() { return rulesOf(this._rules); }
+    saveRules(rules) {
+      return this.ws("regie/palettes/rules", rules === null ? {} : { rules })
+        .then((r) => { this._rules = r.rules; this._rulesMoved = r.moved; this._renderWindow(true); })
+        .catch((e) => { this._note(String((e && e.message) || e)); });
+    }
+    // a slider fires many times a second: the store hears the last rules only
+    editRules(mutate) {
+      const v = this.rulesValues();
+      mutate(v);
+      this._rules = rulesDoc(v);
+      this._rulesMoved = true;
+      clearTimeout(this._pending.rules);
+      this._pending.rules = setTimeout(() => this.saveRules(this._rules), 150);
     }
 
     // --- the card's face -----------------------------------------------------------------
@@ -421,7 +465,7 @@
 
     // the day's rules, and the week they give
     _renderRules(body) {
-      const L = this._config.labels || {}, px = this._config.rules.prefix, r = this.rulesValues();
+      const L = this._config.labels || {}, r = this.rulesValues();
       body.innerHTML = `
         <div class="grid">
           <div>
@@ -440,22 +484,34 @@
             <div class="field"><div class="lab"><span>${L.week || "La semaine, avec ces règles"}</span></div><div class="week"></div></div>
           </div>
         </div>
-        <div class="actions"><button class="btn solid try">${L.try_today || "Essayer le jour"}</button><button class="btn another">${L.another || "Une autre"}</button></div>`;
+        <div class="actions"><button class="btn solid try">${L.try_today || "Essayer le jour"}</button><button class="btn another">${L.another || "Une autre"}</button>${this._rulesMoved ? `<button class="btn follow">${L.follow || "Suivre les fichiers"}</button>` : ""}</div>
+        <div class="note">${this._rulesMoved ? (L.moved_note || "Ces règles ont été modifiées ici : elles priment sur le fichier jusqu'à `regie pull`.") : (L.files_note || "Ces règles viennent des fichiers de la maison.")}</div>`;
+      // every control writes the ONE document (0.43): the pair of numbers a
+      // key names — `avoid`, `saturation`, `jitter`, `alive`, `every` — is a
+      // row of two, and `data-k` says which row and which end
+      const PAIRS = { avoid_from: ["avoid", 0], avoid_to: ["avoid", 1], saturation_min: ["saturation", 0], saturation_max: ["saturation", 1], jitter_min: ["jitter", 0], jitter_max: ["jitter", 1], alive_min: ["alive", 0], alive_max: ["alive", 1], every_min: ["every", 0], every_max: ["every", 1] };
       this._ring(body, { lo: 0, width: 0, accent: null, sat: 90 }, {
         avoid: r.avoid, avoidHandles: true,
-        onAvoid: (from, to) => { this.setNumber(`input_number.${px}_avoid_from`, from); this.setNumber(`input_number.${px}_avoid_to`, to); },
+        onAvoid: (from, to) => this.editRules((v) => { v.avoid = [from, to]; }),
       });
-      this._curve(body, PERIODS.map((p) => r.curve[p]), (i, val) => this.setNumber(`input_number.${px}_curve_${PERIODS[i]}`, val));
-      for (const h of ORDER) this._bindSlider(body, `weight_${h}`, (val) => this.setNumber(`input_number.${px}_weight_${h}`, val));
-      this._bindSlider(body, "chance", (val) => this.setNumber(`input_number.${px}_chance`, val));
-      body.querySelectorAll("input.n").forEach((i) => i.addEventListener("change", (e) => this.setNumber(`input_number.${px}_${e.target.dataset.k}`, parseFloat(e.target.value || "0"))));
-      body.querySelector(".chip.all").addEventListener("click", () => this.setBool(`input_boolean.${px}_alive_all`, !r.alive_all));
+      this._curve(body, PERIODS.map((p) => r.curve[p]), (i, val) => this.editRules((v) => { v.curve[PERIODS[i]] = val; }));
+      for (const h of ORDER) this._bindSlider(body, `weight_${h}`, (val) => this.editRules((v) => { v.harmonies[h] = val; }));
+      this._bindSlider(body, "chance", (val) => this.editRules((v) => { v.chance = val; }));
+      body.querySelectorAll("input.n").forEach((i) => i.addEventListener("change", (e) => {
+        const row = PAIRS[e.target.dataset.k], val = parseFloat(e.target.value || "0");
+        if (row) this.editRules((v) => { v[row[0]][row[1]] = val; });
+      }));
+      body.querySelector(".chip.all").addEventListener("click", () => this.editRules((v) => { v.alive_all = !v.alive_all; }));
       body.querySelectorAll(".chips.shapes .chip").forEach((b) => b.addEventListener("click", () => {
-        const s = b.dataset.s, next = r.shapes.includes(s) ? r.shapes.filter((x) => x !== s) : r.shapes.concat([s]);
-        this.setText(`input_text.${px}_shapes`, next.join(", "));
+        const s = b.dataset.s;
+        this.editRules((v) => { v.shapes = v.shapes.includes(s) ? v.shapes.filter((x) => x !== s) : v.shapes.concat([s]); });
       }));
       body.querySelector(".try").addEventListener("click", () => this.setSelect(this._config.select, this._config.auto_label));
       body.querySelector(".another").addEventListener("click", () => this.press("input_button.house_palette_another"));
+      const follow = body.querySelector(".follow");
+      // « Suivre les fichiers »: the document is freed and the house wears what
+      // the files say again — the same gesture `regie push home.yml palettes` is
+      if (follow) follow.addEventListener("click", () => this.saveRules(null));
       // the coming week, drawn with these rules
       const week = body.querySelector(".week"), salt = this._config.salt, turns = (this.st("input_datetime.house_palette_turns", "06:30") || "06:30").split(":");
       const tsec = parseInt(turns[0], 10) * 3600 + parseInt(turns[1], 10) * 60;

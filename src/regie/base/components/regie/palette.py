@@ -50,9 +50,10 @@ JITTER_MAX = 30
 LIFE_EVERY_MIN = 60
 AUTO = "today"
 PERIODS = ("morning", "day", "evening", "night")
-# the day's rules as helpers, the family's since 0.24 (V8b moves them to the
-# store); the sensor reads them at every draw, so their names live here
-RULES_PREFIX = "house_palette_today"
+# the four helpers the palette still reads: « Change à » (the hour the day
+# turns, one of the family's five controls), the select, the roll, and the
+# sensor's own name. The day's RULES were twenty-one helpers until 0.43 and
+# are one document in the store now (`rules_normal`, below)
 TURNS_ENTITY = "input_datetime.house_palette_turns"
 SELECT_ENTITY = "input_select.house_palette"
 ROLL_ENTITY = "counter.house_palette_roll"
@@ -379,39 +380,126 @@ def store_clean(raw: dict | None) -> dict:
     return out
 
 
-# --- the day's rules, as the family holds them on the phone -------------------------
-RULE_NUMBERS = {  # the day's rules as helpers, seeded from fx.yml; key: (min, max, step, default)
-    "weight_degrade": (0, 20, 1, 5),
-    "weight_duo": (0, 20, 1, 3),
-    "weight_uni": (0, 20, 1, 2),
-    "weight_libre": (0, 20, 1, 0),
-    "avoid_from": (0, 360, 1, 45),
-    "avoid_to": (0, 360, 1, 105),
-    "saturation_min": (0, 100, 1, 85),
-    "saturation_max": (0, 100, 1, 100),
-    "jitter_min": (0, JITTER_MAX, 1, 0),
-    "jitter_max": (0, JITTER_MAX, 1, 0),
-    "curve_morning": (0, 200, 5, 100),
-    "curve_day": (0, 200, 5, 100),
-    "curve_evening": (0, 200, 5, 100),
-    "curve_night": (0, 200, 5, 100),
-    "alive_min": (0, 40, 1, 0),
-    "alive_max": (0, 40, 1, 0),
-    "every_min": (LIFE_EVERY_MIN, 3600, 10, 120),
-    "every_max": (LIFE_EVERY_MIN, 3600, 10, 600),
-    "chance": (0, 100, 5, 0),
-}
+# --- the day's rules, one document in the store (0.43, the audit's V8b) -------------
+RULE_KEYS = ("harmonies", "avoid", "saturation", "level", "alive", "life")
 
 
-def rules_entities() -> list[str]:
-    """Every helper `rules_from_helpers` reads — the sensor watches exactly
-    this list, and the engine renders exactly it: one grammar, written once."""
-    px = RULES_PREFIX
-    return (
-        [f"input_number.{px}_{k}" for k in RULE_NUMBERS]
-        + [f"input_boolean.{px}_alive_all", f"input_text.{px}_shapes"]
-        + [TURNS_ENTITY]
-    )
+def _clamp(x, lo, hi) -> int:
+    return max(lo, min(hi, int(x)))
+
+
+def _level_normal(level) -> dict | None:
+    """The level part: a curve over the house's periods and a jitter. A curve
+    flat at 100 and a jitter of nothing say nothing, and a rule that says
+    nothing is absent — the file writes it that way, so the store does too."""
+    level = level or {}
+    curve = {p: _clamp((level.get("curve") or {}).get(p, 100), 0, 200) for p in PERIODS}
+    jit = level.get("jitter", 0)
+    jit = list(jit)[:2] if isinstance(jit, (list, tuple)) else [jit, jit]
+    jit = sorted(_clamp(x, 0, JITTER_MAX) for x in (jit or [0, 0]))
+    out: dict = {}
+    if any(v != 100 for v in curve.values()):
+        out["curve"] = curve
+    if jit != [0, 0]:
+        out["jitter"] = jit[0] if jit[0] == jit[1] else jit
+    return out or None
+
+
+def _alive_normal(alive):
+    """How many candidate bulbs roam: nothing, a count, `all`, or a range the
+    day draws in (`[0, all]` is not `all` — one draws, the other is every
+    bulb)."""
+    if alive == "all":
+        return "all"
+    if isinstance(alive, (list, tuple)):
+        row = list(alive)[:2] or [0]
+        lo = max(0, int(row[0]))
+        hi = "all" if row[-1] == "all" else max(lo, int(row[-1]))
+        return (lo or None) if hi == lo else [lo, hi]
+    if not alive:
+        return None
+    return max(0, int(alive)) or None
+
+
+def _life_normal(life) -> dict | None:
+    """Life: the shapes that may fire, how often, and on what share of days. No
+    SHAPE is no life; a chance of nothing is life switched off, and the shapes
+    stay named — a family that turns the signs off for a week does not have to
+    pick them again (`draw` never fires them: `lf * 100 < chance` is never
+    true at 0)."""
+    life = life or {}
+    shapes = [str(s).strip() for s in (life.get("shapes") or []) if str(s).strip()]
+    if not shapes:
+        return None
+    every = [int(x) for x in list(life.get("every") or [120, 600])[:2]]
+    return {
+        "shapes": shapes,
+        "every": sorted(max(LIFE_EVERY_MIN, x) for x in (every or [120, 600])),
+        "chance": _clamp(life.get("chance", 100), 0, 100),
+    }
+
+
+def rules_normal(rules: dict | None) -> dict:
+    """THE DAY'S RULES IN ONE FORM — the FILE's own shape, filled out.
+
+    It is the store's document, the form the two sides compare under, and what
+    `regie pull` lays into `fx.yml` key by key. Every rule is named, `None`
+    where the rules say nothing (a key `set_leaf` then REMOVES from the file):
+    a rule the phone did not move is not touched, and one it moved back to
+    silence is unsaid rather than written flat.
+
+    What is NOT here: `turns` — « Change à » stays the family's own helper, one
+    of the five controls the dashboard carries — and `label`, the file's word
+    for the select's option, which no phone can move."""
+    r = dict(rules or {})
+    weights = r.get("harmonies") or {}
+    avoid = list(r.get("avoid") or DEFAULT_RULES["avoid"])[:2]
+    said = list(r.get("saturation") or DEFAULT_RULES["saturation"])[:2]
+    sat = sorted(_clamp(x, 0, 100) for x in said)
+    return {
+        "harmonies": {n: max(0, int(weights.get(n, DEFAULT_RULES["harmonies"][n]))) for n in ORDER},
+        "avoid": [int(x) % 360 for x in avoid],
+        "saturation": sat,
+        "level": _level_normal(r.get("level")),
+        "alive": _alive_normal(r.get("alive")),
+        "life": _life_normal(r.get("life")),
+    }
+
+
+def rules_refusal(rules: dict) -> str | None:
+    """What no rules may say, wherever they come from — a file or a phone.
+
+    The house's `check` refuses a rules block whose widest weighted harmony
+    cannot fit in what the avoided arc leaves, because such a day's arc would
+    have to cross the quarter that is never crossed. The engine said it alone
+    until 0.43; the STORE can be handed rules by a phone now, and a document
+    the files could never carry would put the house in a state the next
+    converge refuses — so the door says the same words, from the same numbers,
+    before it writes. The engine's `check` calls this, and adds what only a
+    house knows (the shapes that exist, the periods that exist)."""
+    weights = rules.get("harmonies") or {}
+    for name, weight in weights.items():
+        if name not in HARMONIES:
+            return f"harmony {name!r} is not one ({', '.join(ORDER)})"
+        if weight < 0:
+            return f"harmony {name} weighs less than nothing"
+    if not any(weights.get(n, 0) > 0 for n in ORDER):
+        return "no harmony weighs anything — nothing to draw"
+    avoid = rules.get("avoid") or DEFAULT_RULES["avoid"]
+    if len(avoid) != 2 or not all(0 <= a <= 360 for a in avoid):
+        return "avoid is [from, to] on the hue circle — it may wrap through 0°"
+    free = free_arc(avoid[0], avoid[1])
+    widest = max((HARMONIES[n][1] for n in ORDER if weights.get(n, 0) > 0), default=0)
+    if free < widest:
+        return f"the avoided arc leaves {free}° and the widest harmony wants {widest}°"
+    return None
+
+
+def describe_rules(a: dict | None, b: dict | None) -> str:
+    """The rules that differ between two readings, in a few words."""
+    a, b = a or {}, b or {}
+    moved = [f"{k} {a.get(k)} → {b.get(k)}" for k in RULE_KEYS if a.get(k) != b.get(k)]
+    return ", ".join(moved[:4]) + (f", +{len(moved) - 4}" if len(moved) > 4 else "") or "nothing"
 
 
 def _num(read, entity: str, default: float) -> float:
@@ -426,63 +514,3 @@ def _txt(read, entity: str) -> str:
     s = read(entity)
     v = (s or {}).get("state") if isinstance(s, dict) else None
     return "" if v in (None, "unknown", "unavailable") else str(v)
-
-
-def _shapes(text: str) -> list[str]:
-    return [w.strip() for w in text.replace(";", ",").split(",") if w.strip()]
-
-
-def rules_from_helpers(read, file_rules: dict) -> dict:
-    """The day's rules as the brain holds them (the family's edits), in the
-    shape `draw` takes; the file's rules fill what a helper cannot say."""
-    px = RULES_PREFIX
-    weights = {
-        n: int(_num(read, f"input_number.{px}_weight_{n}", file_rules["harmonies"].get(n, 0)))
-        for n in ORDER
-    }
-    curve = {p: int(_num(read, f"input_number.{px}_curve_{p}", 100)) for p in PERIODS}
-    a_min = int(_num(read, f"input_number.{px}_alive_min", 0))
-    a_max = int(_num(read, f"input_number.{px}_alive_max", 0))
-    a_all = _txt(read, f"input_boolean.{px}_alive_all") == "on"
-    alive = (
-        [a_min, "all"]
-        if a_all
-        else ([a_min, a_max] if a_max > 0 else (None if a_min == 0 else a_min))
-    )
-    shapes = _shapes(_txt(read, f"input_text.{px}_shapes"))
-    chance = int(_num(read, f"input_number.{px}_chance", 0))
-    life = (
-        {
-            "shapes": shapes,
-            "every": [
-                int(_num(read, f"input_number.{px}_every_min", 120)),
-                int(_num(read, f"input_number.{px}_every_max", 600)),
-            ],
-            "chance": chance,
-        }
-        if shapes and chance > 0
-        else None
-    )
-    turns = _txt(read, TURNS_ENTITY)[:5] or file_rules["turns"]
-    return {
-        "harmonies": weights,
-        "avoid": [
-            int(_num(read, f"input_number.{px}_avoid_from", 45)),
-            int(_num(read, f"input_number.{px}_avoid_to", 105)),
-        ],
-        "saturation": [
-            int(_num(read, f"input_number.{px}_saturation_min", 85)),
-            int(_num(read, f"input_number.{px}_saturation_max", 100)),
-        ],
-        "level": {
-            "curve": curve,
-            "jitter": [
-                int(_num(read, f"input_number.{px}_jitter_min", 0)),
-                int(_num(read, f"input_number.{px}_jitter_max", 0)),
-            ],
-        },
-        "alive": alive,
-        "life": life,
-        "turns": turns,
-        "label": file_rules.get("label"),
-    }

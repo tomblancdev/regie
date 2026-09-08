@@ -1,9 +1,10 @@
-"""The palette's store — the component's third tenant (0.42, the audit's V8a).
+"""The palette's store — the component's third tenant (0.42 → 0.43, V8a + V8b).
 
 Until 0.41 a kept palette was seventeen helpers in one of eight numbered
-slots, and `sensor.house_palette` a two-hundred-line Jinja template the engine
-generated so that the brain's draw could agree with Python's. Two hundred
-entities carried the word *palette*. This file is what replaced them:
+slots, `sensor.house_palette` a two-hundred-line Jinja template the engine
+generated so that the brain's draw could agree with Python's, and the day's
+rules twenty-one more helpers. Two hundred entities carried the word
+*palette*. This file is what replaced them:
 
 - **the documents.** `.storage/regie.palettes` holds one entry per kept
   palette, by an id derived from its first name, in the FILE's own shape
@@ -11,9 +12,17 @@ entities carried the word *palette*. This file is what replaced them:
   `fx.yml` as it stands, and the sensor reads it through `named_value`, the
   same door a palette named in the file goes through. No slot, no ceiling, no
   helper left behind by a deletion.
-- **the four doors.** `regie/palettes/list · save · delete · random` — what
-  the Atelier calls for « Nouvelle », « Enregistrer sous », « Supprimer » and
-  « Au hasard ». `save` with no id mints one; with an id it replaces.
+- **the day's rules** (0.43), one document beside them under the key `rules`,
+  in the FILE's own shape too (`rules_normal`) — so `regie pull` lays them
+  into `fx.yml`'s `palettes.today` key by key. ABSENT is the ordinary state:
+  the house then wears what the files say, and a file edited and converged
+  lands on the brain with nothing to seed and nothing to free. A hand moving a
+  slider in the Atelier writes the document; the converge frees it again the
+  moment the files carry the same word.
+- **the five doors.** `regie/palettes/list · save · delete · random · rules` —
+  what the Atelier calls for « Nouvelle », « Enregistrer sous », « Supprimer »,
+  « Au hasard » and every control of the rules tab. `save` with no id mints
+  one; with an id it replaces. `rules` with no block FREES the rules document.
 - **the value.** The sensor's state is the SOURCE the select names (`today`,
   a palette of the file, or a kept one) and its attributes are the palette
   itself, its label, and the rooms' own draws for the day. The arithmetic is
@@ -21,16 +30,23 @@ entities carried the word *palette*. This file is what replaced them:
   once now, and the test that kept two copies in step has nothing left to
   compare.
 
+THE SEED, AND WHY IT LIVES IN THE DOCUMENT. A kept palette's seed is
+definitional — the files either carry it or they do not. The rules are always
+declared by the files, so the same reading would say « by hand » every time a
+slider moved. The rules document therefore carries the files' word AS IT WAS
+WHEN THE HAND FIRST DEPARTED FROM IT, stamped once at birth: that is the third
+reading V4's rule wants, and it travels with the thing it describes.
+
 What is NOT here, by the rule H51 settled: the family's five controls stay
 rendered helpers — the select, « Change à », « Une autre », « Repeint » and
 the switch « Palette du jour ». They are on the dashboard, they are portable,
-and the file seeds them. The day's RULES are still helpers too; V8b moves
-them into this store under the same rule.
+and the file seeds them. « Change à » is a rule as much as a control, so it is
+read live here and pulled as a knob of its own.
 
 The Atelier keeps its own port of `draw` for the week strip it paints under
 the rules — a preview that must follow a slider as it moves, faster than a
-sensor recomputed on the helper's echo. It never says what the house wears:
-that is this file's answer alone.
+sensor recomputed on a round trip through the store. It never says what the
+house wears: that is this file's answer alone.
 """
 
 from __future__ import annotations
@@ -114,12 +130,17 @@ class Palettes:
         self.auto = conf.get("auto") or "Auto"
         self.kelvin = dict(conf.get("kelvin") or P.KELVIN)
         self.named: dict = dict(conf.get("named") or {})
-        self.rules: dict = dict(conf.get("rules") or P.DEFAULT_RULES)
-        self.rules.setdefault("harmonies", dict(P.DEFAULT_RULES["harmonies"]))
-        self.rules.setdefault("turns", P.DEFAULT_RULES["turns"])
+        # the day's rules the FILES declare, under the one grammar (0.43): the
+        # house wears them until a hand moves them on the phone, and they are
+        # what a moved document is compared against
+        raw_rules = dict(conf.get("rules") or P.DEFAULT_RULES)
+        self.file_rules: dict = P.rules_normal(raw_rules)
+        self.turns: str = str(raw_rules.get("turns") or P.DEFAULT_RULES["turns"])
         self.rooms: list[dict] = list(conf.get("rooms") or [])
         self.store: Store = Store(hass, STORE_VERSION, STORE_KEY)
         self.docs: dict[str, dict] = {}
+        self.rules_doc: dict | None = None  # the rules a hand moved, or None: the files
+        self.rules_seed: dict | None = None  # the files' word the hand departed from
         self._listeners: list = []
 
     # --- the documents -------------------------------------------------------
@@ -127,11 +148,22 @@ class Palettes:
         data = await self.store.async_load() or {}
         raw = data.get("palettes") or {}
         self.docs = {str(k): P.store_clean(v) for k, v in raw.items() if isinstance(v, dict)}
+        kept = data.get("rules")
+        if isinstance(kept, dict) and isinstance(kept.get("rules"), dict):
+            self.rules_doc = P.rules_normal(kept["rules"])
+            seed = kept.get("seed")
+            self.rules_seed = P.rules_normal(seed) if isinstance(seed, dict) else None
+
+    def _data(self) -> dict:
+        data: dict = {"palettes": self.docs}
+        if self.rules_doc is not None:
+            data["rules"] = {"rules": self.rules_doc, "seed": self.rules_seed}
+        return data
 
     async def _written(self, was: str) -> None:
         """Saved, then the two things a name change moves: the select's options
         and, when the palette in force is the one renamed, its own option."""
-        await self.store.async_save({"palettes": self.docs})
+        await self.store.async_save(self._data())
         await self.async_names(was)
         self.changed()
 
@@ -193,6 +225,38 @@ class Palettes:
         await self.save(pid, drawn)
         return self.docs[pid]
 
+    # --- the day's rules (0.43, the audit's V8b) ------------------------------
+    async def save_rules(self, rules: dict | None) -> dict | None:
+        """The day's rules moved on the phone — or FREED (`rules` None), which
+        is what the converge does when the files have caught up and what
+        `regie push` does when the files should win.
+
+        Rules the house's `check` would refuse are refused HERE too, from the
+        same numbers (`rules_refusal`): the phone may not leave the house
+        wearing a day the next converge would throw out.
+
+        THE SEED IS STAMPED WHEN THE DOCUMENT IS BORN, and never again: it is
+        the files' word the hand departed from, and it is the only thing that
+        tells « edited on the phone » from « the files moved too ». Re-stamping
+        it at every slider would erase that difference — the second hand would
+        silently adopt whatever the files had come to say."""
+        if rules is None:
+            self.rules_doc = self.rules_seed = None
+        else:
+            want = P.rules_normal(rules)
+            # what `check` would refuse in the file, the door refuses on the
+            # phone (0.43): a document nobody could ever converge would leave
+            # the house wearing an arc that crosses the quarter it never crosses
+            refusal = P.rules_refusal(want)
+            if refusal:
+                raise ValueError(refusal)
+            if self.rules_doc is None:
+                self.rules_seed = dict(self.file_rules)
+            self.rules_doc = want
+        await self.store.async_save(self._data())
+        self.changed()
+        return self.rules_doc
+
     # --- the brain's own readings --------------------------------------------
     def _read(self, entity: str):
         st = self.hass.states.get(entity)
@@ -202,9 +266,12 @@ class Palettes:
         return P._txt(self._read, entity)
 
     def live_rules(self) -> dict:
-        """The day's rules as the family holds them (the helpers), the file's
-        word filling what a helper cannot say."""
-        return P.rules_from_helpers(self._read, self.rules)
+        """The day's rules as the house wears them: the document a hand moved,
+        else the files' own word — and « Change à », which stays a helper the
+        family owns (one of the five the dashboard carries), read live."""
+        rules = dict(self.rules_doc or self.file_rules)
+        rules["turns"] = self._txt(P.TURNS_ENTITY)[:5] or self.turns
+        return rules
 
     def source(self) -> str:
         """What the select names — the day's draw when it names nothing we
@@ -278,7 +345,7 @@ class Palettes:
             fn()
 
 
-# --- the four doors the Atelier calls ------------------------------------------
+# --- the five doors the Atelier calls ------------------------------------------
 def _palettes(hass: HomeAssistant) -> Palettes | None:
     return hass.data.get(DATA_PALETTES)
 
@@ -292,7 +359,20 @@ async def ws_list(hass, connection, msg) -> None:
         return
     connection.send_result(
         msg["id"],
-        {"palettes": p.docs, "source": p.source(), "auto": p.auto},
+        {
+            "palettes": p.docs,
+            "source": p.source(),
+            "auto": p.auto,
+            # the rules the tab edits: the document when a hand moved them,
+            # else the files' word — with both said, so the card can show which
+            # it is and offer the way back
+            "rules": p.rules_doc or p.file_rules,
+            "rules_files": p.file_rules,
+            "rules_moved": p.rules_doc is not None,
+            # the third reading V4's rule wants: the files' word the hand
+            # departed from, stamped when the document was born
+            "rules_seed": p.rules_seed,
+        },
     )
 
 
@@ -346,6 +426,30 @@ async def ws_random(hass, connection, msg) -> None:
     connection.send_result(msg["id"], {"palette_id": msg["palette_id"], "palette": doc})
 
 
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "regie/palettes/rules",
+        # no block at all = FREE the document: the house follows the files
+        # again. It is « Suivre les fichiers » on the card, and what `regie
+        # push home.yml palettes` does from the conductor.
+        vol.Optional("rules"): vol.Any(None, dict),
+    }
+)
+@websocket_api.async_response
+async def ws_rules(hass, connection, msg) -> None:
+    p = _palettes(hass)
+    if p is None:
+        connection.send_error(msg["id"], "not_configured", "the house keeps no palette")
+        return
+    try:
+        doc = await p.save_rules(msg.get("rules"))
+    except ValueError as exc:
+        connection.send_error(msg["id"], "invalid_format", str(exc))
+        return
+    connection.send_result(msg["id"], {"rules": doc or p.file_rules, "moved": doc is not None})
+
+
 # --- the setup -----------------------------------------------------------------
 @callback
 def _free_the_entity_id(hass: HomeAssistant) -> None:
@@ -379,7 +483,7 @@ async def async_setup(hass: HomeAssistant, conf: dict, config: ConfigType) -> Pa
     await palettes.async_load()
     hass.data[DATA_PALETTES] = palettes
     _free_the_entity_id(hass)
-    for command in (ws_list, ws_save, ws_delete, ws_random):
+    for command in (ws_list, ws_save, ws_delete, ws_random, ws_rules):
         websocket_api.async_register_command(hass, command)
     hass.async_create_task(async_load_platform(hass, "sensor", DOMAIN, {}, config))
     return palettes

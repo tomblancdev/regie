@@ -14,13 +14,13 @@
 {# L'ATELIER DES PALETTES (0.25): a window that opens from this row - every part
    of a palette, the day's rules, the names; the plain rows left with it. Since
    0.42 the kept palettes are documents the card reads and writes through the
-   component's four websocket commands: no slot list to hand it #}
+   component's websocket commands, and since 0.43 the day's rules are one more:
+   no slot list to hand it, and no helper name either #}
 - type: custom:regie-palette-atelier
   select: input_select.house_palette
   auto_label: {{ palette.options[0].label | to_yaml }}
   salt: {{ h.salt }}
   rules:
-    prefix: {{ h.rules_prefix }}
     whites: {{ h.whites | tojson }}
   named:
 {% for n in h.named %}

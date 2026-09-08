@@ -101,6 +101,12 @@ class FakeHA(HomeAssistant):
         self.logbook: list[dict] = []
         # the palette's store (0.42): the component's documents, by id
         self.palettes: dict[str, dict] = {}
+        # the day's rules (0.43): the document a hand moved, the files' word the
+        # component read at its last start, and the seed stamped at the birth of
+        # the document — the three the `list` door hands the conductor
+        self.palette_rules: dict | None = None
+        self.palette_rules_seed: dict | None = None
+        self.palette_file_rules: dict | None = None
         self.version = "2026.8.3"  # what /api/config says
         self.config_result = "valid"  # what check_config says
         self.issues: list[dict] = []  # the repairs the brain opened
@@ -1032,13 +1038,29 @@ class FakeHA(HomeAssistant):
             assert any(p["id"] == payload["pipeline_id"] for p in self.pipelines)
             self.preferred = payload["pipeline_id"]
             return None
-        # the palette's store (0.42): the four doors the Atelier and the pull use
+        # the palette's store (0.42, the rules with it 0.43): the doors the
+        # Atelier and the pull use
         if type_ == "regie/palettes/list":
             return {
                 "palettes": {k: dict(v) for k, v in self.palettes.items()},
                 "source": "today",
                 "auto": "Auto",
+                "rules": self.palette_rules or self.palette_file_rules,
+                "rules_files": self.palette_file_rules,
+                "rules_moved": self.palette_rules is not None,
+                "rules_seed": self.palette_rules_seed,
             }
+        if type_ == "regie/palettes/rules":
+            from regie import palette as palette_mod
+
+            rules = payload.get("rules")
+            if rules is None:  # no block: the document is freed, the files stand
+                self.palette_rules = self.palette_rules_seed = None
+            else:
+                if self.palette_rules is None:  # stamped at BIRTH, never again
+                    self.palette_rules_seed = self.palette_file_rules
+                self.palette_rules = palette_mod.rules_normal(rules)
+            return {"rules": self.palette_rules, "moved": self.palette_rules is not None}
         if type_ == "regie/palettes/save":
             from regie import palette as palette_mod
 
@@ -1168,15 +1190,19 @@ def test_a_fresh_brain_is_onboarded_and_furnished(witness, secrets, tmp_path):
     assert st["assist rooms"] == "ok"  # nothing of the plan born yet: nothing to place
     hand = sum(1 for s in steps if s.state == "hand")
     # ok: the puck's cast row (served by the TV's entry), the exposure, the
-    # rooms, the ears' and the mouth's engines (0.34: their entries answered)
+    # rooms, the ears' and the mouth's engines (0.34: their entries answered),
+    # and the day's rules (0.43: no document, so the house follows the files and
+    # a fresh brain has nothing to seed for them — they were a `changed` group
+    # of twenty-one helpers until 0.42)
     ok = sum(1 for s in steps if s.state == "ok")
     # waiting: the mesh (no Zigbee2MQTT answers in a test — the walk's own half
     # has its own file, test_zigbee.py), the LLM's agent, the pipeline, the
     # phone's mic (no device registered yet)
     waiting = sum(1 for s in steps if s.state == "waiting")
-    assert ok == 5 and waiting == 4
+    assert ok == 6 and waiting == 4
+    assert st["the day's rules"] == "ok"
     assert summary(steps, False) == (
-        f"apply: {len(steps) - hand - ok - waiting} changed, 5 ok, {hand} by hand, "
+        f"apply: {len(steps) - hand - ok - waiting} changed, 6 ok, {hand} by hand, "
         f"{waiting} waiting"
     )
 

@@ -1685,11 +1685,15 @@ class House:
     def knobs(self) -> list[dict]:
         """Every helper the files have a word for (pull.py, 0.33). Two natures:
         a knob the file DECLARES A VALUE for — a period's hour, a room's look
-        for a stretch of the day, the day's palette rules (one group) — is
-        owned under the rule (`pull:` names the verb's kind, `leaf:` where the
-        pull writes it); a knob the file gives a BIRTH word to — a switch born
-        on, the mode the house is born in, the palette's select — is seeded
-        once and the family's after (`born`)."""
+        for a stretch of the day, the hour the palette turns — is owned under
+        the rule (`pull:` names the verb's kind, `leaf:` where the pull writes
+        it); a knob the file gives a BIRTH word to — a switch born on, the mode
+        the house is born in, the palette's select — is seeded once and the
+        family's after (`born`).
+
+        The day's palette rules were twenty-one knobs of a GROUP until 0.43:
+        they are one document in the component's store now, read by `pull` with
+        the kept palettes and not a helper any more."""
         out: list[dict] = []
         raw_modes = self.data.get("modes") or {}
         for a in self.areas:
@@ -1724,14 +1728,17 @@ class House:
             # the palette (0.20): the hour it turns and the select, seeded from
             # fx.yml once — the family owns them after
             pal = self.palettes()
+            # « Change à » — a rule of the day AND one of the family's five
+            # controls: it stays a helper (0.43) and is owned on its own, the
+            # file's word until the phone moves it
             out.append(
                 {
                     "entity": "input_datetime.house_palette_turns",
                     "action": "input_datetime/set_datetime",
                     "data": {"time": pal["today"]["turns"] + ":00"},
                     "value": pal["today"]["turns"],
-                    "group": "palette rules",
                     "pull": "palettes",
+                    "leaf": {"file": "fx", "path": ["palettes", "today", "turns"]},
                     "reads": lambda state: state[:5],
                 }
             )
@@ -1758,35 +1765,6 @@ class House:
                     "reads": lambda state: state,
                 }
             )
-            # the day's rules as helpers (0.24), ONE thing under the rule (0.33):
-            # seeded from fx.yml and following it; edited on the phone they are
-            # kept, `regie pull home.yml palettes` writes them back
-            for entity, value in palette_mod.rule_seeds(pal["today"], self.kelvin()).items():
-                domain = entity.split(".", 1)[0]
-                if domain == "input_number":
-                    knob = {
-                        "action": "input_number/set_value",
-                        "data": {"value": value},
-                        "value": str(value),
-                        "reads": lambda state: (
-                            str(float(state)) if state not in ("unknown", "unavailable") else state
-                        ),
-                    }
-                elif domain == "input_boolean":
-                    knob = {
-                        "action": f"input_boolean/turn_{value}",
-                        "data": {},
-                        "value": value,
-                        "reads": lambda state: state,
-                    }
-                else:
-                    knob = {
-                        "action": "input_text/set_value",
-                        "data": {"value": value},
-                        "value": value,
-                        "reads": lambda state: state,
-                    }
-                out.append({"entity": entity, "group": "palette rules", "pull": "palettes", **knob})
         m = self.modes()
         if not m:
             return out

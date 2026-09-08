@@ -1,16 +1,23 @@
-"""The templates La Régie generated until 0.41, frozen as an ORACLE (0.42).
+"""The templates and helper seeds La Régie generated until 0.42, frozen as an
+ORACLE (0.42 → 0.43).
 
 The palette's draw was written twice for two years — Python for `regie
 palette`, and this Jinja for `sensor.house_palette`, kept in step by a test
 over ten years of days. The audit's V8a moved the sensor into the component
-and left one copy; the proof H51 asked for is that the copy that stayed says
-EXACTLY what the copy that went said, for today and for every drawn day.
+and left one copy; V8b then moved the day's RULES off their twenty-one helpers
+and into a document of the same store. The proof H51 asked for, both times, is
+that what stayed says EXACTLY what went said.
 
-So the generators below are the 0.41 ones, verbatim, never imported by the
-product: a reference the suite renders and compares against, so that a change
-to the arithmetic that moved cannot pass unnoticed. They read the constants
-from the component's own module, which is the point — the numbers are the
-same on both sides, only the runtime differs.
+So the generators below are the 0.41/0.42 ones, verbatim, never imported by
+the product: a reference the suite renders and compares against, so that a
+change to the arithmetic that moved cannot pass unnoticed. `rule_seeds` is the
+0.42 mapping of the day's rules onto those twenty-one helpers, kept here for
+the same reason — the suite seeds the helpers from a rules block, renders the
+0.41 sensor that READ them, and holds it against the draw the component now
+makes from the document.
+
+They read the constants from the component's own module, which is the point —
+the numbers are the same on both sides, only the runtime differs.
 """
 
 from regie import palette as P
@@ -26,7 +33,9 @@ WARM_ACCENT = P.WARM_ACCENT
 COLD_ACCENT = P.COLD_ACCENT
 KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 PERIODS = P.PERIODS
-RULES_PREFIX = P.RULES_PREFIX
+RULES_PREFIX = "house_palette_today"  # the helpers' prefix until 0.42; gone at 0.43
+JITTER_MAX = P.JITTER_MAX
+LIFE_EVERY_MIN = P.LIFE_EVERY_MIN
 PAL_EXPR = P.PAL_EXPR
 salt_of = P.salt_of
 free_arc = P.free_arc
@@ -265,3 +274,70 @@ def jinja_body_live(salt: int, kelvin: dict) -> str:
         "'life': life, 'day': day, 'roll': roll} %}",
     ]
     return "\n".join(lines)
+
+
+# --- the day's rules as twenty-one helpers: the 0.42 seeding, verbatim -------------
+RULE_NUMBERS = {  # key: (min, max, step, default) — the helpers the render placed
+    "weight_degrade": (0, 20, 1, 5),
+    "weight_duo": (0, 20, 1, 3),
+    "weight_uni": (0, 20, 1, 2),
+    "weight_libre": (0, 20, 1, 0),
+    "avoid_from": (0, 360, 1, 45),
+    "avoid_to": (0, 360, 1, 105),
+    "saturation_min": (0, 100, 1, 85),
+    "saturation_max": (0, 100, 1, 100),
+    "jitter_min": (0, JITTER_MAX, 1, 0),
+    "jitter_max": (0, JITTER_MAX, 1, 0),
+    "curve_morning": (0, 200, 5, 100),
+    "curve_day": (0, 200, 5, 100),
+    "curve_evening": (0, 200, 5, 100),
+    "curve_night": (0, 200, 5, 100),
+    "alive_min": (0, 40, 1, 0),
+    "alive_max": (0, 40, 1, 0),
+    "every_min": (LIFE_EVERY_MIN, 3600, 10, 120),
+    "every_max": (LIFE_EVERY_MIN, 3600, 10, 600),
+    "chance": (0, 100, 5, 0),
+}
+
+
+def rule_seeds(rules: dict) -> dict:
+    """The day's rules as the helpers' values — what the conductor seeded."""
+    w = rules["harmonies"]
+    level = rules.get("level") or {}
+    jit = level.get("jitter", 0)
+    jit = jit if isinstance(jit, list) else [jit, jit]
+    alive = rules.get("alive")
+    if alive is None:
+        a_min, a_max, a_all = 0, 0, False
+    elif alive == "all":
+        a_min, a_max, a_all = 0, 0, True
+    elif isinstance(alive, list):
+        a_min = int(alive[0])
+        a_all = alive[1] == "all"
+        a_max = 0 if a_all else int(alive[1])
+    else:
+        a_min, a_max, a_all = int(alive), int(alive), False
+    life = rules.get("life") or {}
+    curve = level.get("curve") or {}
+    px = RULES_PREFIX
+    out = {f"input_number.{px}_weight_{n}": float(w.get(n, 0)) for n in ORDER}
+    out.update(
+        {
+            f"input_number.{px}_avoid_from": float(rules["avoid"][0]),
+            f"input_number.{px}_avoid_to": float(rules["avoid"][1]),
+            f"input_number.{px}_saturation_min": float(rules["saturation"][0]),
+            f"input_number.{px}_saturation_max": float(rules["saturation"][1]),
+            f"input_number.{px}_jitter_min": float(jit[0]),
+            f"input_number.{px}_jitter_max": float(jit[1]),
+            f"input_number.{px}_alive_min": float(a_min),
+            f"input_number.{px}_alive_max": float(a_max),
+            f"input_boolean.{px}_alive_all": "on" if a_all else "off",
+            f"input_text.{px}_shapes": ", ".join(life.get("shapes") or []),
+            f"input_number.{px}_every_min": float((life.get("every") or [120, 600])[0]),
+            f"input_number.{px}_every_max": float((life.get("every") or [120, 600])[1]),
+            f"input_number.{px}_chance": float(life.get("chance", 100) if life else 0),
+        }
+    )
+    for period in PERIODS:
+        out[f"input_number.{px}_curve_{period}"] = float(curve.get(period, 100))
+    return out

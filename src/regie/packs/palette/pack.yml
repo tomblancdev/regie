@@ -4,11 +4,12 @@
 # `palettes.today` (a pure function of the day, the roll and the house's
 # name: nothing stored, a restart changes nothing), or a palette named in
 # fx.yml. The hour it turns (« Change à ») and the roll (« Une autre ») are
-# helpers the family owns; the file seeds them once. The rooms' parts, the
-# life loop and the Atelier come with the next steps.
+# helpers the family owns; the file seeds them once. The day's RULES were
+# helpers too until 0.43 — they are one document of the component's store now,
+# with the kept palettes.
 name: palette
 hooks: hooks.py   # 0.38 (V9): the stores settled at every converge, on the brain
-summary: sensor.house_palette — the house's palette (Auto = the day's draw, or a named one), the select, the hour it turns, « Une autre », the switch « Palette du jour » (a state — what "on" means in every room with a part, never a light on or off)
+summary: sensor.house_palette — the house's palette (Auto = the day's draw within the day's rules, or a named one) and the family's five controls, nothing else — the select, the hour it turns, « Une autre », « Repeint les pièces », the switch « Palette du jour » (a state — what "on" means in every room with a part, never a light on or off)
 kinds: []
 services: []
 templates:

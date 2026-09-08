@@ -405,9 +405,9 @@ def test_the_manifest_remembers_the_objects_and_the_ones_gone(witness, secrets, 
     assert "scripts" not in m and "scripts_gone" not in m, "one memory, the objects"
     assert {"script.living_today", "script.living_default"} <= set(m["objects"])
     assert {"input_select.living_look", "input_select.house_palette"} <= set(m["objects"])
-    assert any(o.startswith("input_text.") for o in m["objects"]), (
-        "the helpers too — the palette's stores were its ghosts"
-    )
+    assert {"input_datetime.house_palette_turns", "counter.house_palette_roll"} <= set(
+        m["objects"]
+    ), "the helpers too, every object domain — the palette's stores were its ghosts"
     assert m["objects_gone"] == []
     # a script and a helper rendered once (the memory says so) and not any more
     m["objects"] = sorted(set(m["objects"]) | {"script.living_fantome", "input_number.fantome"})

@@ -362,15 +362,28 @@ def cmd_palette(args) -> int:
         return 0
     mine = P.draw(brain.get("day", 0), brain.get("roll", 0), salt, rules)
     same = all(mine.get(k) == brain.get(k) for k in keys)
+    if same:
+        print("AGREE")
+        return 0
     print(
-        "AGREE"
-        if same
-        else "DIFFER: "
+        "DIFFER: "
         + ", ".join(
             f"{k} {mine.get(k)}≠{brain.get(k)}" for k in keys if mine.get(k) != brain.get(k)
         )
     )
-    return 0 if same else 1
+    # the day's rules may have been moved on the phone (0.43): the file draws
+    # one thing and the house wears another until `regie pull` — say which,
+    # rather than leave a DIFFER that reads like a bug in the arithmetic
+    try:
+        with ha.ws() as ws:
+            if (ws.call("regie/palettes/list") or {}).get("rules_moved"):
+                print(
+                    "  the day's rules were edited on the phone and the files have not caught "
+                    "up — `regie pull home.yml palettes` writes them, `regie push` takes them back"
+                )
+    except HouseError:
+        pass
+    return 1
 
 
 def _brain(args):

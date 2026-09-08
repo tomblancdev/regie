@@ -606,36 +606,42 @@ def test_the_witness_house_gets_the_switch_the_flip_and_the_repaint(rendered, wi
         "states('input_select.living_look') in ['evening', 'today']"
         in branch["if"][0]["value_template"]
     )
-    # the day's rules, still the family's helpers (V8b moves them to the store)
-    for key in (
-        "weight_degrade",
-        "avoid_from",
-        "saturation_max",
-        "jitter_max",
-        "curve_evening",
-        "alive_max",
-        "every_min",
-        "chance",
-    ):
-        assert f"house_palette_today_{key}" in pkg["input_number"]
-    assert "house_palette_today_shapes" in pkg["input_text"]
+    # 0.43 (V8b): the day's rules left their twenty-one helpers for the store —
+    # no number, no text, no switch of the rules is rendered any more
+    assert "input_number" not in pkg and "input_text" not in pkg
+    assert not [e for e in pkg["input_boolean"] if e.startswith("house_palette_today")]
     # 0.42: no slot, no « les noms », no « Nouvelle » / « Au hasard » / « Supprimer »
     # automation — the documents and the select's options are the component's
-    assert not [e for e in pkg["input_number"] if "_k" in e.split("palette")[-1][:3]]
-    assert "house_palette_k2_name" not in pkg["input_text"]
     assert set(autos) == {
         "regie_house_palette_another",
         "regie_house_palette_repaint",
         "regie_house_palette_flip",
     }
+    # THE PALETTE'S OWN PLUMBING, COUNTED: the family's five controls, the roll
+    # behind « Une autre », the three automations, and the sensor the component
+    # makes — ten things, where 0.41 had two hundred and 0.42 thirty-one
+    mine = [
+        f"{domain}.{name}"
+        for domain in ("input_select", "input_datetime", "input_boolean", "counter", "input_button")
+        for name in (pkg.get(domain) or {})
+    ]
+    assert sorted(mine) == [
+        "counter.house_palette_roll",
+        "input_boolean.house_palette",
+        "input_boolean.house_palette_repaint",
+        "input_button.house_palette_another",
+        "input_datetime.house_palette_turns",
+        "input_select.house_palette",
+    ]
+    assert len(mine) + len(autos) + 1 == 10  # + sensor.house_palette, the component's
     knobs = {k["entity"]: k for k in witness.knobs()}
     assert knobs["input_boolean.house_palette_repaint"]["value"] == "on"
-    assert knobs["input_number.house_palette_today_weight_degrade"]["value"] == "5.0"
-    assert knobs["input_number.house_palette_today_weight_degrade"]["group"] == "palette rules"
-    assert knobs["input_number.house_palette_today_weight_degrade"]["pull"] == "palettes"
     assert knobs["input_boolean.house_palette_repaint"]["born"] is True
-    assert knobs["input_text.house_palette_today_shapes"]["value"] == "glitch"
-    assert knobs["input_number.house_palette_today_chance"]["value"] == "50.0"
+    assert not [e for e in knobs if "palette_today" in e], "the rules are not knobs any more"
+    # « Change à » is a rule AND a control: it stays a helper, owned on its own
+    turns = knobs["input_datetime.house_palette_turns"]
+    assert turns["pull"] == "palettes" and "group" not in turns
+    assert turns["leaf"] == {"file": "fx", "path": ["palettes", "today", "turns"]}
 
 
 def _brain(values: dict):
@@ -648,38 +654,87 @@ def _brain(values: dict):
     return env, now
 
 
-def _rules_values(rules: dict) -> dict:
-    return {e: (v if isinstance(v, str) else str(v)) for e, v in P.rule_seeds(rules).items()}
+def test_the_rules_are_a_document_that_draws_what_the_helpers_drew(witness):
+    """V8b's proof, the shape V8a's was: the day's rules left TWENTY-ONE
+    HELPERS for one document of the same store, and what the document draws is
+    byte for byte what the helpers drew.
 
-
-def test_the_rules_come_from_the_helpers_and_the_draw_follows(witness):
-    """The day's rules are still the family's helpers (V8b moves them into the
-    store): the sensor reads them at every draw, and so does the command that
-    compares."""
+    `frozen_0_41` keeps both halves of the old way verbatim — `rule_seeds`, the
+    mapping of a rules block onto the helpers, and the sensor's Jinja that READ
+    them. Seed the helpers from a rules block, render that sensor, and hold it
+    against the draw the component makes from `rules_normal` of the same
+    block."""
     rules = witness.palettes()["today"]
-    values = {"input_datetime.house_palette_turns": "06:30:00"}
-    values.update(_rules_values(rules))
-
-    def read(e):
-        return {"state": values[e]} if e in values else None
-
-    live = P.rules_from_helpers(read, rules)
-    assert P.rules_normal(live) == P.rules_normal(rules), "untouched helpers say the file"
-    # the family edits a rule on the phone: the draw follows the helper
-    values["input_number.house_palette_today_weight_degrade"] = "0.0"
-    values["input_number.house_palette_today_weight_uni"] = "9.0"
-    live = P.rules_from_helpers(read, rules)
-    assert live["harmonies"]["uni"] == 9 and live["harmonies"]["degrade"] == 0
-    assert P.draw(20700, 0, SALT, live)["harmony"] in ("uni", "duo")
-    # every helper the sensor watches is one the render places, and no other
-    assert set(P.rules_entities()) == (
-        {f"input_number.house_palette_today_{k}" for k in P.RULE_NUMBERS}
-        | {
-            "input_boolean.house_palette_today_alive_all",
-            "input_text.house_palette_today_shapes",
-            "input_datetime.house_palette_turns",
-        }
+    values = {e: (v if isinstance(v, str) else str(v)) for e, v in OLD.rule_seeds(rules).items()}
+    env, _ = _brain(values)
+    tpl = env.from_string(
+        "{% set day = D %}{% set roll = R %}"
+        + OLD.jinja_rules(witness.kelvin())
+        + OLD.jinja_body_live(SALT, witness.kelvin())
+        + "{{ palette | tojson }}"
     )
+    document = P.rules_normal(rules)
+    for day in SAMPLED:
+        for roll in (0, 3):
+            assert json.loads(tpl.render(D=day, R=roll)) == P.draw(
+                day, roll, SALT, document, witness.kelvin()
+            ), (day, roll)
+    # and a rule MOVED on the phone moves the draw the same way it did
+    moved = {**document, "harmonies": {"degrade": 0, "duo": 0, "uni": 9, "libre": 0}}
+    values.update(OLD.rule_seeds({**rules, "harmonies": moved["harmonies"]}))
+    assert json.loads(tpl.render(D=20700, R=0)) == P.draw(20700, 0, SALT, moved, witness.kelvin())
+    assert P.draw(20700, 0, SALT, moved)["harmony"] == "uni"
+
+
+def test_the_rules_normal_form_is_the_file_s_own_shape():
+    """One grammar for the two sides (0.43): the store's document, what the two
+    readings compare under, and what `regie pull` lays into `fx.yml` key by key
+    — a rule that says nothing is `None`, which `set_leaf` REMOVES."""
+    n = P.rules_normal(RULES)
+    assert set(n) == set(P.RULE_KEYS)
+    assert n["harmonies"] == P.DEFAULT_RULES["harmonies"]  # unsaid: the default weights
+    assert n["avoid"] == [45, 105] and n["saturation"] == [85, 100]
+    assert n["level"] == {
+        "curve": {"morning": 60, "day": 40, "evening": 100, "night": 100},
+        "jitter": [0, 15],
+    }
+    assert n["alive"] == [0, "all"] and n["life"]["chance"] == 50
+    # a rule the family switched off is None, not a flat zero written into the file
+    quiet = P.rules_normal({**RULES, "level": {"curve": {"day": 100}}, "alive": 0, "life": None})
+    assert quiet["level"] is None and quiet["alive"] is None and quiet["life"] is None
+    # `[0, all]` is not `all`: one draws between nothing and every bulb
+    assert P.rules_normal({"alive": "all"})["alive"] == "all"
+    assert P.rules_normal({"alive": [2, 2]})["alive"] == 2
+    # a shape picked while the chance is still nothing is KEPT, off — the family
+    # does not have to name its signs again after a quiet week
+    off = P.rules_normal({"life": {"shapes": ["glitch"], "every": [90, 400], "chance": 0}})
+    assert off["life"] == {"shapes": ["glitch"], "every": [90, 400], "chance": 0}
+    assert P.draw(20700, 0, SALT, {**P.rules_normal({}), "life": off["life"]})["life"] is None
+    # the file may write the same rules shorter: the same under the form
+    assert P.rules_normal({"level": {"jitter": 8}})["level"] == {"jitter": 8}
+    assert P.rules_normal({"level": {"jitter": [8, 8]}})["level"] == {"jitter": 8}
+    assert P.describe_rules(P.rules_normal({}), P.rules_normal({"avoid": [10, 20]})) == (
+        "avoid [45, 105] → [10, 20]"
+    )
+    assert P.describe_rules(n, n) == "nothing"
+    # the form is idempotent: what came out goes back in unchanged
+    assert P.rules_normal(n) == n
+
+
+def test_the_door_refuses_what_the_file_would_be_refused_for():
+    """What `check` refuses in `fx.yml`, the store's door refuses on the phone —
+    the SAME words, from the same numbers (0.43). Found by the live drill: a
+    weight the Atelier accepted made a document no converge could ever pass,
+    and the house wore it in the meantime."""
+    tight = {"harmonies": {"degrade": 0, "duo": 0, "uni": 1, "libre": 4}, "avoid": [142, 327]}
+    said = P.rules_refusal(P.rules_normal(tight))
+    assert said == "the avoided arc leaves 175° and the widest harmony wants 220°"
+    errors, _ = P.check(P.normalise({"today": tight}), {"glitch"}, None, None)
+    assert f"palette today: {said}" in errors, "one refusal, said once, in both places"
+    assert P.rules_refusal(P.rules_normal({"harmonies": dict.fromkeys(P.ORDER, 0)})) == (
+        "no harmony weighs anything — nothing to draw"
+    )
+    assert P.rules_refusal(P.rules_normal(RULES)) is None
 
 
 def test_a_kept_palette_is_a_document_the_file_could_have_written(witness):
@@ -741,21 +796,22 @@ def test_a_kept_palette_is_a_document_the_file_could_have_written(witness):
     assert P.named_value(doc, witness.kelvin())["lo"] == 330
 
 
-def test_the_rules_round_trip_through_the_helpers(witness):
+def test_a_rules_document_is_read_and_written_the_way_the_files_are(witness):
+    """The store's document IS the file's block: what `regie pull` lays into
+    `fx.yml`'s `palettes.today`, key by key, and what the house wears until
+    then. `turns` and `label` are not in it — « Change à » is the family's own
+    helper, and the label is a word only the file can say."""
     rules = witness.palettes()["today"]
-    raw = {e: (v if isinstance(v, str) else str(v)) for e, v in P.rule_seeds(rules).items()}
-    raw["input_datetime.house_palette_turns"] = "06:30"
-    same = P.rules_round_trip(raw, rules)
-    assert same == {e: P.knob_value(e, v) for e, v in raw.items()}
-    raw["input_number.house_palette_today_alive_max"] = "3.0"  # alive_all is on: unsaid
-    assert P.rules_round_trip(raw, rules) == same
-    raw["input_number.house_palette_today_weight_libre"] = "1.0"
-    assert P.rules_round_trip(raw, rules)["input_number.house_palette_today_weight_libre"] == "1.0"
-    assert P.rules_normal(rules)["turns"] == "06:30"
-    assert P.rules_normal({**rules, "level": None})["level"] == {
-        "curve": {"morning": 100, "day": 100, "evening": 100, "night": 100},
-        "jitter": [0, 0],
-    }
+    doc = P.rules_normal(rules)
+    assert "turns" not in doc and "label" not in doc
+    # the engine's config block still hands the component the file's own rules
+    conf = P.component_config(witness)
+    assert conf["rules"]["turns"] == "06:30" and "label" not in conf["rules"]
+    assert P.rules_normal(conf["rules"]) == doc
+    # a rule moved on the phone reads as a move, and only that rule moved
+    moved = {**doc, "saturation": [50, 60]}
+    assert P.describe_rules(doc, moved) == "saturation [85, 100] → [50, 60]"
+    assert [k for k in P.RULE_KEYS if doc[k] != moved[k]] == ["saturation"]
 
 
 def test_slug_and_a_look_saying_accent_is_told(house_with):
@@ -781,7 +837,9 @@ def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
     card = next(c for c in cards if c.get("type") == "custom:regie-palette-atelier")
     assert card["select"] == "input_select.house_palette" and card["auto_label"] == "Du jour"
     assert card["salt"] == witness.palette_salt()
-    assert card["rules"] == {"prefix": "house_palette_today", "whites": ["warm", "neutral", "cool"]}
+    assert card["rules"] == {"whites": ["warm", "neutral", "cool"]}, (
+        "0.43: the rules are a document, and the card has no helper name to be told"
+    )
     assert "stores" not in card, "0.42: the kept palettes come from the store, not a slot list"
     assert card["named"][0]["id"] == "nuit_bleue" and card["named"][0]["palette"]["lo"] == 200
     assert "glitch" in card["shapes"] and "lightning" in card["shapes"]
@@ -795,9 +853,12 @@ def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
     js = (rendered / "home-assistant/www/regie-atelier.js").read_text()
     assert 'customElements.define("regie-palette-atelier"' in js
     assert "const M = 2147483647, A = 16807;" in js  # the week strip's preview, ported
-    # the four doors the card calls (0.42): no helper behind a kept palette
-    for door in ("list", "save", "delete", "random"):
+    # the five doors the card calls (0.42, the rules' own since 0.43): no helper
+    # behind a kept palette, and none behind the day's rules either
+    for door in ("list", "save", "delete", "random", "rules"):
         assert f'"regie/palettes/{door}"' in js
+    assert "input_number.house_palette_today" not in js and "setNumber" not in js
+    assert card["labels"]["follow"] == "Suivre les fichiers"
 
 
 def test_the_avoided_arc_may_wrap_through_zero():

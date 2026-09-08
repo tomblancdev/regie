@@ -1,20 +1,22 @@
-# rendered by La Régie — the palette (pack palette, 0.20 → 0.42): ONE value every
+# rendered by La Régie — the palette (pack palette, 0.20 → 0.43): ONE value every
 # look may read, sensor.house_palette. The select says which source fills it:
-# Auto = the day's draw within the rules the family edits on the phone (seeded
-# from fx.yml, following the file until the phone touches them), a palette named
-# in fx.yml, or a palette KEPT on the phone under a free name.
+# Auto = the day's draw within the day's rules (the files', until a hand moves
+# them in the Atelier — a document in the component's store then, and the files'
+# again the moment `regie pull` writes them), a palette named in fx.yml, or a
+# palette KEPT on the phone under a free name.
 #
-# WHAT LEFT THIS FILE AT 0.42 (the audit's V8a): a kept palette was seventeen
-# helpers in one of eight numbered slots and the sensor a two-hundred-line
-# generated template. Both are the COMPONENT's now — the documents live in
-# `.storage/regie.palettes` behind four websocket commands the Atelier calls,
+# WHAT LEFT THIS FILE AT 0.42 AND 0.43 (the audit's V8a and V8b): a kept
+# palette was seventeen helpers in one of eight numbered slots, the sensor a
+# two-hundred-line generated template, and the day's rules twenty-one helpers
+# more. All three are the COMPONENT's now — the documents live in
+# `.storage/regie.palettes` behind five websocket commands the Atelier calls,
 # and the sensor is computed in Python from the arithmetic the engine reads by
 # path. The block `regie: palette:` below is what only the FILES can say.
-# What stays here is the family's own: the select, « Change à », « Une autre »,
-# « Repeint les pièces », the switch « Palette du jour » — and the day's RULES,
-# still helpers (V8b moves them into the same store).
+# WHAT STAYS HERE is the family's own five controls and nothing else: the
+# select, « Change à », « Une autre », « Repeint les pièces » and the switch
+# « Palette du jour » — with the roll behind « Une autre » and the two
+# automations that repaint.
 {% set h = palette.house %}
-{% set px = h.rules_prefix %}
 regie:
   # ONE JSON SCALAR, not a YAML block: Home Assistant merges a package's config
   # recursively and passes every LIST it meets through `cv.remove_falsy`, so
@@ -52,9 +54,6 @@ input_boolean:
     name: {{ labels.ui.palette_today | to_yaml }}
     icon: mdi:palette-swatch
 {% endif %}
-  {{ px }}_alive_all:
-    name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.atelier_alive ~ ' : ' ~ labels.ui.alive_all) | to_yaml }}
-    icon: mdi:motion
 counter:
   house_palette_roll:
     name: {{ labels.ui.palette_roll | to_yaml }}
@@ -66,21 +65,6 @@ input_button:
   house_palette_another:
     name: {{ labels.ui.palette_another | to_yaml }}
     icon: mdi:dice-multiple
-input_number:
-{% for key, spec in h.rule_numbers.items() %}
-  {{ px }}_{{ key }}:
-    name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui['rule_' ~ key]) | to_yaml }}
-    min: {{ spec[0] }}
-    max: {{ spec[1] }}
-    step: {{ spec[2] }}
-    mode: box
-    icon: mdi:tune-variant
-{% endfor %}
-input_text:
-  {{ px }}_shapes:
-    name: {{ (labels.ui.palette_rules ~ ' — ' ~ labels.ui.store_shapes) | to_yaml }}
-    icon: mdi:flash-alert-outline
-    max: 120
 automation:
   # « Une autre »: the roll moves, the day's draw changes — for the day (La Régie, pack palette)
   - id: regie_house_palette_another

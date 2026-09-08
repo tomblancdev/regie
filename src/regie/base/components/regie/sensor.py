@@ -6,11 +6,12 @@ attributes are the palette itself, the word the select shows, and every room's
 own draws for the day. A look's script reads them exactly as it read the
 template sensor's before — `state_attr('sensor.house_palette', 'palette')`.
 
-Recomputed on the same six events the template's triggers named: every minute
-(the hour the palette turns), at start, and when the select, the hour, the
-roll, the day's rules or the store move. Nothing is stored between two reads:
-the value is a function of the clock, the helpers and the documents, so a
-restart mid-day changes nothing — the property the draw has always had.
+Recomputed on the same events the template's triggers named: every minute (the
+hour the palette turns), at start, when the select, the hour (« Change à ») or
+the roll move, and when the store is told a document moved — a kept palette or,
+since 0.43, the day's rules. Nothing is stored between two reads: the value is
+a function of the clock, three helpers and the documents, so a restart mid-day
+changes nothing — the property the draw has always had.
 """
 
 from __future__ import annotations
@@ -71,7 +72,7 @@ class HousePalette(SensorEntity):
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass,
-                [P.SELECT_ENTITY, P.ROLL_ENTITY, *P.rules_entities()],
+                [P.SELECT_ENTITY, P.ROLL_ENTITY, P.TURNS_ENTITY],
                 self._moved,
             )
         )
