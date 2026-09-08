@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.43.1 — une photographie se déclare (2026-09-08)
+
+**V12 de l'audit.** La suite mélangeait deux choses depuis deux versions sans
+rien dire : un **test**, qui dit ce que le produit doit faire AUJOURD'HUI, et
+une **photographie**, qui dit ce qu'il FAISAIT — de l'autre côté du `assert`,
+une réplique de code que le produit a supprimé, gardée le temps que la
+réécriture qu'elle garde soit crue, et le jour où elle part la maison ne perd
+aucun comportement. `tests/frozen_0_41.py` était posé au milieu de trente-huit
+tests ordinaires ; V8a puis V8b en avaient rajouté. Rien ne disait lequel
+était lequel, et les deux se ressemblent de loin alors qu'ils valent le
+contraire : un test rouge, c'est une maison cassée ; une photographie rouge,
+c'est une réécriture qui a déplacé une valeur qu'elle jurait de ne pas
+toucher.
+
+**La marque.** `@pytest.mark.photograph`, déclarée dans `pyproject.toml` sous
+`--strict-markers` — une faute de frappe est une erreur de collecte, pas une
+photographie gardée par accident une fois de plus. `pytest -m photograph` est
+la liste de tout ce que la suite tient encore contre un dessin mort ;
+`pytest -m "not photograph"` est le produit tel qu'il est.
+
+**Et la suite se tient elle-même à la règle** (`tests/test_photographs.py`,
+six vérifications, chacune prouvée rouge sur une casse volontaire) : un test
+qui lit un module `frozen_*` porte la marque, et un test marqué en lit un — la
+marque n'est jamais une décoration et une photographie n'est jamais muette ;
+une photographie dit dans sa docstring ce qu'elle garde, ce qui est ce qui dit
+au lecteur quand elle peut partir ; `src/` n'importe jamais un oracle ; un
+module gelé ne définit aucun test ; et **il ne porte que ce qu'une photographie
+compare encore**.
+
+**Ce que cette dernière règle a trouvé :** `frozen_0_41` avait grossi de trois
+morceaux que plus rien ne comparait — `jinja_day`, `helper_palette_jinja` et la
+table min/max/pas des vingt et un helpers, plus lus depuis le jour où ils ont
+été gelés. Du poids mort dans le seul module dont tout le travail est d'être
+comparé : un oracle contre lequel personne ne tient rien n'est pas une preuve,
+c'est une copie. 343 → 274 lignes.
+
+**Un test coupé en deux.** `test_the_avoided_arc_may_wrap_through_zero` était
+les deux à la fois : il vérifiait l'arc évité qui passe par zéro (vivant) ET
+rendait le template gelé (mort). Marqué en bloc, `-m "not photograph"` aurait
+laissé tomber une garantie vivante. Il est coupé : le test dit seul ce que le
+produit doit encore faire le jour où la photographie partira, et
+`test_a_wrapped_arc_draws_what_the_template_drew` porte la marque.
+
+**Ce qui n'est PAS une photographie**, et que la marque sépare : une donnée
+ancienne lue par du code actuel (un manifeste de la forme que 0.31 écrivait,
+une mémoire de rechargement de 0.28) est un comportement que le produit doit
+toujours avoir — supprimer ces tests-là casse une vraie maison sur un vieil
+arbre. Et une version dans une docstring (`0.17:`, `0.28:`) dit quand le
+comportement est arrivé, pas qu'il est parti.
+
+La règle est dite une fois pour un lecteur, dans le README
+(« A test, and a photograph »). Rien de rendu ne change : **456 tests au vert
+en 8 min 45** (422 fonctions dans 30 fichiers), dont **huit photographies
+venant de quatre fonctions** — `pytest -m photograph`, 23 s.
+
 ## 0.43.0 — les règles du jour sont un document, et le fichier redevient la parole (2026-09-08)
 
 **V8b de l'audit, troisième et dernière marche de H51.** Les règles du jour —

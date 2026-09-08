@@ -42,3 +42,9 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src/regie/packs"]
+# a marker nobody registered is a typo, and a typo on `photograph` is a
+# photograph kept by accident again — which is the whole point of the mark
+addopts = "--strict-markers"
+markers = [
+  "photograph: holds the product against code it NO LONGER RUNS (a `frozen_*` replica in the suite), never against what it must do today — see README, « A test, and a photograph »",
+]

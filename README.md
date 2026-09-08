@@ -176,6 +176,41 @@ pip install -e ".[dev]"
 ruff check . && ruff format --check . && pytest -q
 ```
 
+### A test, and a photograph
+
+**A test says what the product must do TODAY. A photograph says what it USED TO
+do** — the other side of its `assert` is a replica of code the product has
+deleted, kept in the suite only until the rewrite it guards is trusted, and the
+day it goes the house loses no behaviour. That one sentence is the whole
+criterion, and the suite holds itself to it
+([`tests/test_photographs.py`](tests/test_photographs.py)):
+
+* a replica of dead code lives in a module named `frozen_<version>.py`, which
+  defines no test of its own and is never imported by `src/`;
+* every test that reads one carries `@pytest.mark.photograph`, and every marked
+  test reads one — the mark is never decoration, and a photograph is never
+  silent;
+* a marked test says in its docstring what it guards, which is what tells a
+  reader when it may go;
+* a frozen module carries only what a photograph still compares — an oracle
+  nobody holds anything against is not a proof, it is a copy.
+
+```sh
+pytest -m photograph          # everything the suite still holds to a dead design
+pytest -m "not photograph"    # the product as it stands
+```
+
+Two kinds of test are NOT photographs, and the mark is what keeps them apart.
+**Old data read by current code** — a manifest of the shape 0.31 wrote, a reload
+memory from 0.28 — is behaviour the product must still have: delete those tests
+and a real house with an old tree breaks. And **a version in a docstring** —
+`0.17:`, `0.28:` — says when the behaviour arrived, not that it is gone.
+
+One photograph is too big for the suite and lives beside the house that runs it:
+the palette's value was written down on the brain for eleven rolls before the
+0.42 landing and read back after (`scripts/palette-proof/` in the lab's own
+repo). Same idea, same rule — it goes when the rewrite is trusted.
+
 The profile pins the versions this release was tested against
 (Home Assistant 2026.8.3, Mosquitto 2.0.22, Zigbee2MQTT 2.13.0); a house may
 override them under `pins:` and `doctor` says so. A bump of the product

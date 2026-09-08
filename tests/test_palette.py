@@ -5,6 +5,11 @@ Since 0.42 (the audit's V8a) the draw is written ONCE, in the component's own
 template is gone. The proof H51 asked for is here: `frozen_0_41.py` carries the
 generators as they stood, and the arithmetic that stayed must say byte for byte
 what the arithmetic that went said, over ten years of days and every roll.
+
+The four tests that read it are marked `@pytest.mark.photograph`: they hold the
+product against code it NO LONGER RUNS, and the day the rewrite is trusted they
+go with the oracle, costing the house nothing. Every other test in this file
+says what the palette must do TODAY (README, « A test, and a photograph »).
 """
 
 import ast
@@ -75,6 +80,7 @@ def test_life_comes_on_about_half_the_days():
     assert p["life"] == {"shapes": ["glitch"], "every": [120, 600]}
 
 
+@pytest.mark.photograph
 def test_the_draw_is_byte_for_byte_the_template_it_replaced():
     """V8a's proof: the sensor left its generated Jinja and became Python, and
     the value did not move — the 0.41 template, frozen, against the draw the
@@ -302,6 +308,7 @@ def _room_env(sensor: dict):
     return env
 
 
+@pytest.mark.photograph
 @pytest.mark.parametrize("alive", [None, "all", 2, [0, "all"], [1, 3]])
 def test_the_rooms_draw_is_byte_for_byte_the_template_it_replaced(alive):
     """The other half of V8a's proof: a room's draws left their generated Jinja
@@ -654,6 +661,7 @@ def _brain(values: dict):
     return env, now
 
 
+@pytest.mark.photograph
 def test_the_rules_are_a_document_that_draws_what_the_helpers_drew(witness):
     """V8b's proof, the shape V8a's was: the day's rules left TWENTY-ONE
     HELPERS for one document of the same store, and what the document draws is
@@ -861,10 +869,18 @@ def test_the_window_is_a_card_on_reglages_fed_with_the_house(rendered, witness):
     assert card["labels"]["follow"] == "Suivre les fichiers"
 
 
+def _wrapped_rules() -> dict:
+    """The ring's sharp case: 300° through 0° to 180° avoided, 120° free, and
+    weights that fit in it. Built fresh on every call — the test below and the
+    photograph beside it must not be able to move each other's rules."""
+    rules = P.normalise({"today": {"avoid": [300, 180]}})["today"]
+    rules["harmonies"] = {"degrade": 0, "duo": 3, "uni": 2, "libre": 0}
+    return rules
+
+
 def test_the_avoided_arc_may_wrap_through_zero():
     """Tom, on the ring: avoid 300° through 0° to 180° — the free arc is then
-    180° → 300°, and every draw sits inside it, in Python and in the template."""
-    rules = P.normalise({"today": {"avoid": [300, 180]}})["today"]
+    180° → 300°, and every draw sits inside it."""
     assert P.free_arc(300, 180) == 120 and P.free_arc(45, 105) == 300 and P.free_arc(10, 10) == 360
     assert P.in_arc(350, 300, 180) and P.in_arc(20, 300, 180) and not P.in_arc(200, 300, 180)
     errors, _ = P.check(
@@ -880,15 +896,25 @@ def test_the_avoided_arc_may_wrap_through_zero():
     assert any(
         "the widest harmony wants 150°" in e for e in errors
     )  # 120° free, dégradé up to 150°
-    rules["harmonies"] = {"degrade": 0, "duo": 3, "uni": 2, "libre": 0}
+    rules = _wrapped_rules()
+    for day in range(20700, 20700 + 200):
+        p = P.draw(day, 0, SALT, rules)
+        assert not any(P.in_arc(h, 300, 180) for h in _arc(p)), (day, p)
+
+
+@pytest.mark.photograph
+def test_a_wrapped_arc_draws_what_the_template_drew():
+    """The wrapped arc's half of V8a's proof: modulo 360 is where a rewrite of
+    the draw would break first, so the 0.41 template gets asked the sharp case
+    too (0.43.1 — it was the tail of the test above, which now says on its own
+    what the product must still do the day this photograph goes)."""
+    rules = _wrapped_rules()
     body = OLD.jinja_body(rules, SALT)
     tpl = jinja2.Environment().from_string(
         "{% set day = D %}{% set roll = R %}" + body + "{{ palette | tojson }}"
     )
     for day in range(20700, 20700 + 200):
-        p = P.draw(day, 0, SALT, rules)
-        assert not any(P.in_arc(h, 300, 180) for h in _arc(p)), (day, p)
-        assert json.loads(tpl.render(D=day, R=0)) == p
+        assert json.loads(tpl.render(D=day, R=0)) == P.draw(day, 0, SALT, rules), day
 
 
 # --- « Palette du jour » is a state (0.26) ---------------------------------------

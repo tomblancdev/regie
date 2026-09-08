@@ -1,6 +1,13 @@
 """The templates and helper seeds La Régie generated until 0.42, frozen as an
 ORACLE (0.42 → 0.43).
 
+THIS MODULE IS A PHOTOGRAPH'S OTHER SIDE, and that is a shape the suite
+declares: a `frozen_*.py` module holds a replica of code the product NO LONGER
+RUNS, defines no test of its own, is never imported by `src/`, and is read only
+by tests marked `@pytest.mark.photograph`. Everything about it is temporary —
+it lives until the rewrite it guards is trusted, and the day it goes the house
+loses no behaviour. (README, « A test, and a photograph ».)
+
 The palette's draw was written twice for two years — Python for `regie
 palette`, and this Jinja for `sensor.house_palette`, kept in step by a test
 over ten years of days. The audit's V8a moved the sensor into the component
@@ -17,7 +24,11 @@ the same reason — the suite seeds the helpers from a rules block, renders the
 makes from the document.
 
 They read the constants from the component's own module, which is the point —
-the numbers are the same on both sides, only the runtime differs.
+the numbers are the same on both sides, only the runtime differs. And the
+module carries ONLY what a photograph still compares: `jinja_day`,
+`helper_palette_jinja` and the twenty-one helpers' min/max/step table went at
+0.43.1, unread since the day they were frozen — an oracle nobody holds
+anything against is not a proof, it is a copy.
 """
 
 from regie import palette as P
@@ -34,8 +45,6 @@ COLD_ACCENT = P.COLD_ACCENT
 KELVIN = {"warm": 2700, "neutral": 4000, "cool": 5500}
 PERIODS = P.PERIODS
 RULES_PREFIX = "house_palette_today"  # the helpers' prefix until 0.42; gone at 0.43
-JITTER_MAX = P.JITTER_MAX
-LIFE_EVERY_MIN = P.LIFE_EVERY_MIN
 PAL_EXPR = P.PAL_EXPR
 salt_of = P.salt_of
 free_arc = P.free_arc
@@ -111,24 +120,6 @@ def jinja_body(rules: dict, salt: int, kelvin: dict | None = None) -> str:
     return "\n".join(lines)
 
 
-def jinja_day(turns_entity: str, roll_entity: str, default_turns: str) -> str:
-    """`day` and `roll` from the brain: the hour the palette turns and the roll
-    knob — both helpers, both the family's."""
-    h, m = default_turns.split(":")
-    return "\n".join(
-        [
-            "{% set t = now() %}",
-            f"{{% set turns = states('{turns_entity}') %}}",
-            f"{{% set tsec = ((turns[0:2] | int({int(h)})) * 3600 "
-            f"+ (turns[3:5] | int({int(m)})) * 60) "
-            f"if turns not in ['unknown', 'unavailable'] else {int(h) * 3600 + int(m) * 60} %}}",
-            "{% set day = ((as_timestamp(t) + t.utcoffset().total_seconds() - tsec) // 86400) "
-            "| int %}",
-            f"{{% set roll = states('{roll_entity}') | int(0) %}}",
-        ]
-    )
-
-
 def room_jinja(
     salt: int, room: str, alive, n_candidates: int, n_targets: int, jitter_expr: str
 ) -> str:
@@ -172,36 +163,6 @@ def room_jinja(
         "{{ {'count': count, 'offset': offset, 'alive': ns.alive, 'scatter': ns.scatter} }}"
     )
     return "\n".join(lines)
-
-
-def helper_palette_jinja(prefix: str, kelvin: dict) -> str:
-    """A kept palette read from its store's helpers, as the sensor's `palette`
-    dict — the same keys as a draw."""
-    return (
-        f"{{% set lo = states('input_number.{prefix}_start') | int(0) %}}"
-        f"{{% set width = states('input_number.{prefix}_width') | int(120) %}}"
-        f"{{% set white = states('input_select.{prefix}_white') %}}"
-        f"{{% set shapes = states('input_text.{prefix}_shapes') "
-        "| replace(';', ',') | replace(' ', '') %}"
-        "{% set shapes = shapes.split(',') | reject('eq', '') | list "
-        "if shapes not in ['unknown', 'unavailable'] else [] %}"
-        f"{{% set curve = {{"
-        + ", ".join(f"'{p}': states('input_number.{prefix}_curve_{p}') | int(100)" for p in PERIODS)
-        + "} %}"
-        f"{{% set palette = {{'harmony': none, 'lo': lo % 360, 'hi': (lo + width) % 360, "
-        f"'width': width, 'accent': states('input_number.{prefix}_accent') | int(30), "
-        f"'saturation': states('input_number.{prefix}_saturation') | int(100), "
-        f"'white': white if white in {_j(list(kelvin))} else 'warm', "
-        f"'white_kelvin': {_j(kelvin)}.get(white, {kelvin['warm']}), "
-        f"'curve': curve, 'jitter': states('input_number.{prefix}_jitter') | int(0), "
-        f"'alive': ('all' if is_state('input_boolean.{prefix}_alive_all', 'on') else "
-        f"(none if (states('input_number.{prefix}_alive') | int(0)) == 0 "
-        f"else states('input_number.{prefix}_alive') | int(0))), "
-        "'life': ({'shapes': shapes, 'every': "
-        f"[states('input_number.{prefix}_every_min') | int(120), "
-        f"states('input_number.{prefix}_every_max') | int(600)]}} if shapes else none), "
-        f"'day': day, 'roll': roll}} %}}"
-    )
 
 
 def jinja_rules(kelvin: dict) -> str:
@@ -277,29 +238,6 @@ def jinja_body_live(salt: int, kelvin: dict) -> str:
 
 
 # --- the day's rules as twenty-one helpers: the 0.42 seeding, verbatim -------------
-RULE_NUMBERS = {  # key: (min, max, step, default) — the helpers the render placed
-    "weight_degrade": (0, 20, 1, 5),
-    "weight_duo": (0, 20, 1, 3),
-    "weight_uni": (0, 20, 1, 2),
-    "weight_libre": (0, 20, 1, 0),
-    "avoid_from": (0, 360, 1, 45),
-    "avoid_to": (0, 360, 1, 105),
-    "saturation_min": (0, 100, 1, 85),
-    "saturation_max": (0, 100, 1, 100),
-    "jitter_min": (0, JITTER_MAX, 1, 0),
-    "jitter_max": (0, JITTER_MAX, 1, 0),
-    "curve_morning": (0, 200, 5, 100),
-    "curve_day": (0, 200, 5, 100),
-    "curve_evening": (0, 200, 5, 100),
-    "curve_night": (0, 200, 5, 100),
-    "alive_min": (0, 40, 1, 0),
-    "alive_max": (0, 40, 1, 0),
-    "every_min": (LIFE_EVERY_MIN, 3600, 10, 120),
-    "every_max": (LIFE_EVERY_MIN, 3600, 10, 600),
-    "chance": (0, 100, 5, 0),
-}
-
-
 def rule_seeds(rules: dict) -> dict:
     """The day's rules as the helpers' values — what the conductor seeded."""
     w = rules["harmonies"]
