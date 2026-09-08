@@ -12,6 +12,7 @@ from pathlib import Path
 
 import yaml
 
+from . import yamlio
 from .errors import HouseError
 
 ENV_PREFIX = "REGIE_SECRET_"
@@ -52,7 +53,7 @@ def load_secrets(path: Path | None, environ: dict | None = None) -> dict:
     values: dict = {}
     if path is not None:
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data = yamlio.load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError) as exc:
             raise HouseError(f"secrets {path}: {exc}") from exc
         if not isinstance(data, dict):
@@ -63,7 +64,7 @@ def load_secrets(path: Path | None, environ: dict | None = None) -> dict:
         if not key.startswith(ENV_PREFIX):
             continue
         name = key[len(ENV_PREFIX) :].lower()
-        values[name] = yaml.safe_load(raw) if _structured(name) else raw
+        values[name] = yamlio.load(raw) if _structured(name) else raw
     return values
 
 

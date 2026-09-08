@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from . import yamlio
 
 HERE = Path(__file__).parent / "labels"
 
@@ -26,7 +26,7 @@ class Labels:
         self.found = path.exists()
         if not self.found:
             path = HERE / "en.yml"
-        self.data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        self.data = yamlio.load(path.read_text(encoding="utf-8")) or {}
 
     @staticmethod
     def known() -> list[str]:

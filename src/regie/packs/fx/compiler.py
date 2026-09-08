@@ -31,8 +31,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 
-import yaml
-
+from regie import yamlio
 from regie.errors import HouseError
 from regie.house import KELVIN  # warm / neutral / cool: the HOUSE's white words
 from regie.share import as_yaml  # the one dump every travelling file is written with
@@ -84,7 +83,7 @@ def _ct_note(value, backend: dict, notes: list[str], where: str) -> None:
 def _library() -> dict[str, dict]:
     out = {}
     for p in sorted(SHAPES.glob("*.yml")):
-        out[p.stem] = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        out[p.stem] = yamlio.load(p.read_text(encoding="utf-8")) or {}
     return out
 
 
@@ -113,7 +112,7 @@ def load_backend(name: str) -> dict:
     path = BACKENDS / name / "backend.yml"
     if not path.is_file():
         raise HouseError(f"fx: unknown backend {name!r} — known: {', '.join(known_backends())}")
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = yamlio.load(path.read_text(encoding="utf-8")) or {}
     data.setdefault("name", name)
     return data
 

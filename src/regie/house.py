@@ -20,6 +20,7 @@ from jsonschema import Draft202012Validator
 
 from . import palette as palette_mod
 from . import theme as theme_lib
+from . import yamlio
 from .errors import HouseError
 from .include import merge_includes
 from .labels import Labels
@@ -2721,7 +2722,7 @@ def _cross_check(house: House) -> tuple[list[str], list[str]]:
 def load_house(path: Path) -> House:
     path = Path(path)
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yamlio.load(path.read_text(encoding="utf-8"))
     except OSError as exc:
         raise HouseError(f"{path}: {exc.strerror}") from exc
     except yaml.YAMLError as exc:

@@ -11,9 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
-from . import verbs
+from . import verbs, yamlio
 from .errors import HouseError
 
 BEHAVIOURS_DIR = Path(__file__).parent / "packs" / "hands" / "behaviours"
@@ -116,7 +114,7 @@ def load_behaviour(name: str) -> dict:
     if not path.is_file():
         known = sorted(p.stem for p in BEHAVIOURS_DIR.glob("*.yml"))
         raise HouseError(f"behaviour {name!r} is not on the shelf — {', '.join(known)}")
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return yamlio.load(path.read_text(encoding="utf-8")) or {}
 
 
 def fill(value, fields: dict, where: str):

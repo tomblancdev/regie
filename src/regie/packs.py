@@ -26,8 +26,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
-
+from . import yamlio
 from .errors import HouseError
 
 HERE = Path(__file__).parent / "packs"
@@ -204,7 +203,7 @@ def house_packs(house_dir: Path, rel: str | None) -> dict[str, Path]:
 
 
 def _load(name: str, path: Path, origin: str) -> Pack:
-    data = yaml.safe_load((path / "pack.yml").read_text(encoding="utf-8")) or {}
+    data = yamlio.load((path / "pack.yml").read_text(encoding="utf-8")) or {}
     if data.get("name") != name:
         raise HouseError(
             f"pack {path}: pack.yml says name {data.get('name')!r}, the folder says {name!r}"

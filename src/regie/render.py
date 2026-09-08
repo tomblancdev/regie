@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, PrefixLoader, StrictUndefined
 
-from . import __version__, dash
+from . import __version__, dash, yamlio
 from . import palette as palette_mod
 from . import theme as skin
 from .errors import HouseError
@@ -28,7 +29,7 @@ MANIFEST = ".regie/manifest.json"
 
 def to_yaml(value) -> str:
     """A scalar or a flow-style collection, as YAML — quoted only when it must be."""
-    text = yaml.safe_dump(value, default_flow_style=True, allow_unicode=True, width=10**6)
+    text = yamlio.dump(value, default_flow_style=True, allow_unicode=True, width=10**6)
     if text.endswith("...\n"):
         text = text[:-4]
     return text.strip()
@@ -37,7 +38,7 @@ def to_yaml(value) -> str:
 def to_block(value, indent: int = 0) -> str:
     """A structure the engine built (a script, an automation), as block YAML,
     keys in the order they were given, indented under the template's key."""
-    text = yaml.safe_dump(
+    text = yamlio.dump(
         value, default_flow_style=False, allow_unicode=True, sort_keys=False, width=10**6
     )
     pad = " " * indent
@@ -54,19 +55,26 @@ class Rendered:
     removed: list[Path] = field(default_factory=list)
 
 
+@cache
+def _base() -> dict:
+    """base.yml, read once while this module lives (V11): three callers each
+    re-read and re-parsed it, a few times a render."""
+    return yamlio.load((BASE / "base.yml").read_text(encoding="utf-8"))
+
+
 def base_plan() -> list[dict]:
-    return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8"))["templates"]
+    return _base()["templates"]
 
 
 def base_components() -> dict:
     """The custom components the product pins (base.yml), by domain."""
-    return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8")).get("components", {})
+    return _base().get("components", {})
 
 
 def base_default_config() -> list[str]:
     """What Home Assistant's `default_config:` loads at the version the product
     tests against (base.yml) - rendered explicitly when a house drops `my`."""
-    return yaml.safe_load((BASE / "base.yml").read_text(encoding="utf-8")).get("default_config", [])
+    return _base().get("default_config", [])
 
 
 def make_env(house: House) -> Environment:
@@ -221,7 +229,7 @@ def _pack_cards(
                 if not text.strip():
                     continue
                 try:
-                    loaded = yaml.safe_load(text)
+                    loaded = yamlio.load(text)
                 except yaml.YAMLError as exc:
                     raise HouseError(f"pack {p.name}: {c['src']} is not YAML — {exc}") from exc
                 cards = loaded if isinstance(loaded, list) else [loaded]
@@ -402,7 +410,7 @@ def rendered_objects(out: Path, files: set[str]) -> set[str]:
         if not rel.startswith("home-assistant/packages/") or not rel.endswith(".yaml"):
             continue
         try:
-            pkg = yaml.safe_load((out / rel).read_text(encoding="utf-8")) or {}
+            pkg = yamlio.load((out / rel).read_text(encoding="utf-8")) or {}
         except yaml.YAMLError:
             continue  # a package the brain will refuse says so in its own test
         if not isinstance(pkg, dict):

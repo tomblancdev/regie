@@ -22,10 +22,10 @@ runtime, and the family's phones never call a font server.
 from __future__ import annotations
 
 import base64
+from functools import cache
 from pathlib import Path
 
-import yaml
-
+from . import yamlio
 from .errors import HouseError
 
 FONTS = Path(__file__).parent / "base" / "fonts"
@@ -69,12 +69,14 @@ SHADOW = {
 }
 
 
+@cache
 def library() -> dict[str, dict]:
     """The themes the product carries, by name. A house picks one with `use:`
     and overrides only what it wants: the library holds the DESIGN, the house
-    holds its deviations — the same split as the packs."""
+    holds its deviations — the same split as the packs. Read once while this
+    module lives (V11): `resolve()` alone reads it four times a render."""
     return {
-        p.stem: yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        p.stem: yamlio.load(p.read_text(encoding="utf-8")) or {}
         for p in sorted(LIBRARY.glob("*.yml"))
     }
 

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 
+from . import yamlio
 from .errors import HouseError
 
 KINDS = ("rooms", "modes", "fx", "scenarios", "plan", "scenes")
@@ -39,7 +40,7 @@ def _files(base: Path, pattern: str) -> list[Path]:
 
 def _load(path: Path) -> dict:
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yamlio.load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise HouseError(f"{path.name}: not YAML — {exc}") from exc
     if not isinstance(data, dict):

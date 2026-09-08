@@ -7,8 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
+from . import yamlio
 from .errors import HouseError
 
 HERE = Path(__file__).parent / "profiles"
@@ -68,5 +67,5 @@ def load_profile(name: str) -> Profile:
     path = HERE / name
     if not (path / "profile.yml").is_file():
         raise HouseError(f"unknown profile {name!r} — known: {', '.join(known_profiles())}")
-    data = yaml.safe_load((path / "profile.yml").read_text(encoding="utf-8")) or {}
+    data = yamlio.load((path / "profile.yml").read_text(encoding="utf-8")) or {}
     return Profile(name, path, data)

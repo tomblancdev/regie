@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.45.1 — le rendu retrouve le C qui dormait à côté (2026-09-08)
+
+**V11, le rendu sous les trois secondes.** L'audit avait mesuré un rendu à
+huit secondes — assis au milieu de chaque converge et de chaque passage de
+suite, la taxe de tout atterrissage à venir. La lecture d'abord (`cProfile`,
+puis un traçage site par site de chaque appel YAML sur un rendu du témoin) :
+**les deux tiers du temps** vivaient dans `yaml.safe_load`/`safe_dump` — le
+chargeur et l'écrivain **purs Python**, alors que le venv du produit
+embarque déjà libyaml (`yaml.__with_libyaml__` vrai, dans le toolbox comme
+sur ce portable) et que `yaml.safe_load`/`safe_dump` ne le savent jamais :
+ils construisent un `SafeLoader`/`SafeDumper` pur Python à chaque appel,
+huit fois plus lent que `CSafeLoader`/`CSafeDumper` sur les mêmes données
+(656 ms → 78 ms pour lire les 21 paquets d'un rendu, mesuré à part).
+
+**`yamlio.py`** : deux fonctions, `load`/`dump`, qui passent
+`Loader=yaml.CSafeLoader` / `Dumper=yaml.CSafeDumper` — mêmes balises, mêmes
+règles que `SafeLoader`/`SafeDumper`, seul le moteur dessous change — posées
+sur chaque site du chemin `load_house`/`render` : `house.py`, `include.py`,
+`theme.py`, `packs.py`, `labels.py`, `profiles.py`, `hands.py`,
+`secrets.py`, `render.py`, et le `compiler.py` du pack fx lui-même (importé
+par chemin, `from regie import yamlio` — comme `regie.errors`/`regie.house`
+déjà).
+
+**Deux relectures trouvées à côté, sur le précédent que fx pose déjà**
+(`_library()` est `@cache` depuis 0.44, avec sa propre note : « relu à
+chaque appel jusqu'à 0.44 — 200 ms la fois ») : `theme.library()` relisait
+les six fichiers du thème **quatre fois par rendu** (`context()` appelle
+`house.theme()` quatre fois — une fois nommée, trois fois dans des lambdas
+qui en refont chacune le calcul) ; `render.base_plan()` /
+`base_components()` / `base_default_config()` relisaient chacune
+`base.yml` séparément. Un seul `@cache` par fichier statique du produit
+suffit — rien de ce qu'il tient ne change sous un process.
+
+**LA PREUVE, la méthode de V14 :** le rendu du témoin, **54 fichiers,
+identiques octet pour octet** avant et après ; la sortie de `regie check`,
+**identique ligne à ligne** ; 481 tests verts. Dans le conteneur
+python:3.13-slim de la release : la suite **5 min 10** (contre environ
+8 minutes avant, l'ordre de grandeur porté par V9 puis V12) ; un `regie
+render` en processus frais — import, lecture, rendu, les trois étapes
+mesurées à part — **≈1,4 à 2,0 s**, contre **≈3,1 à 3,5 s** avant.
+
+**V15, lu et laissé ouvert.** « Pas de page Réglages pour une pièce sans
+lumière » : la lecture trouve le bouton « Réglages » de `_room()` (dash.py)
+posé sans aucune condition, et la vue elle-même construite dès que
+`health_cards()` ou une carte de pack répond quelque chose — ce qui reste
+vrai dès qu'une pièce porte NE SERAIT-CE QU'une chose, lumière ou non. Un
+essai construit (une pièce « Cave », un seul capteur, aucune lumière)
+montre la page entière, pas de lien mort — donc pas le bug qu'on pourrait
+craindre, plutôt une page qui existe et ne règle rien. La lecture ne
+tranche pas seule si « Réglages » doit se fermer aux pièces sans lumière
+précisément, ou plus largement aux pièces sans rien à régler (les rôles
+d'une pièce ne sont pas tous des lumières — écran, enceinte…) : une
+décision de Tom, pas un fichier à changer à l'aveugle. Laissé pour une
+prochaine session.
+
 ## 0.45.0 — une chose voyage seule (2026-09-08)
 
 **H52, atterrissage 1 — et le cinquième crochet.** L'audit demandait si un
