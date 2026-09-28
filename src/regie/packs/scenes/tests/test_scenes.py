@@ -387,3 +387,90 @@ def test_a_group_takes_its_members_backend(witness):
     # walking the slowest rung while its own model took legs beside it)
     alone = house.walk_backend("light.living_lamp", [house.thing("living_floor_lamp")])
     assert alone["backend"] == "zigbee" and alone["topic"] == "zigbee2mqtt/living_floor_lamp"
+
+
+# --- 0.46: a look that fades in, and the off that fades ----------------------
+
+
+def bedroom_with_a_wake(house_with, secrets, tmp_path):
+    from regie.house import load_house
+    from regie.render import render
+
+    path = house_with(lambda d: None)
+    (path.parent / "rooms" / "bedroom_a.yml").write_text(
+        "id: bedroom_a\nroles: { main: {} }\nscenes:\n"
+        "  evening: { main: { brightness: 40, ct: warm } }\n"
+        "  night:   { main: { brightness: 5, ct: warm } }\n"
+        "  wake:    { main: { brightness: 40, ct: warm, transition: 60 } }\n"
+        "defaults: { dark: evening, dim: evening, bright: evening, night: night }\n",
+        encoding="utf-8",
+    )
+    render(load_house(path), tmp_path, secrets)
+    return load(tmp_path, "bedroom_a")["script"]
+
+
+def ha(states: dict, **variables):
+    import jinja2
+
+    env = jinja2.Environment()
+    env.globals["is_state"] = lambda e, s: states.get(e) == s
+    env.tests["is_state"] = lambda e, s: states.get(e) == s
+    return lambda tpl: env.from_string(tpl).render(**variables)
+
+
+def test_a_look_that_fades_in_rises_from_dark_and_gives_way_to_a_fade(
+    house_with, secrets, tmp_path
+):
+    scripts = bedroom_with_a_wake(house_with, secrets, tmp_path)
+    wake = scripts["bedroom_a_wake"]
+    (main,) = looks(wake)
+    assert main["data"] == {
+        "brightness_pct": 40,
+        "color_temp_kelvin": 2700,
+        "transition": "{{ fade if fade is defined else 60 }}",
+    }
+    assert ha({})(main["data"]["transition"]) == "60", "a click takes the written minute"
+    assert ha({}, fade=0.4)(main["data"]["transition"]) == "0.4", "a turn lands it now"
+    seq = wake["sequence"]
+    rise = next(s for s in seq if "if" in s and s["then"][0].get("action") == "light.turn_on")
+    assert seq.index(rise) < seq.index(next(s for s in seq if "parallel" in s)), (
+        "the floor first, then the rise"
+    )
+    (then,) = rise["then"]
+    assert then["action"] == "light.turn_on"
+    assert then["data"] == {"brightness_pct": 1, "transition": 0, "color_temp_kelvin": 2700}, (
+        "the look's own white at the floor, at once"
+    )
+    cond = rise["if"][0]["value_template"]
+    assert ha({"light.bedroom_a_main": "off"})(cond) == "True"
+    assert ha({"light.bedroom_a_main": "on"})(cond) == "False", "a lit light rises from where it is"
+    target = then["target"]["entity_id"]
+    assert ha({"light.bedroom_a_main": "off"})(target) == "['light.bedroom_a_main']"
+    evening = scripts["bedroom_a_evening"]
+    assert not any(
+        "if" in s and s["then"][0].get("action") == "light.turn_on" for s in evening["sequence"]
+    ), "a look with no transition: no floor"
+    assert "transition" not in looks(evening)[0]["data"]
+
+
+def test_the_off_fades_its_lit_lights_to_the_floor_when_asked_then_goes_off(
+    house_with, secrets, tmp_path
+):
+    scripts = bedroom_with_a_wake(house_with, secrets, tmp_path)
+    off = scripts["bedroom_a_off"]
+    fade = next(
+        s for s in off["sequence"] if "if" in s and s["then"][0].get("action") == "light.turn_on"
+    )
+    cond = fade["if"][0]["value_template"]
+    lit, dark = {"light.bedroom_a_main": "on"}, {"light.bedroom_a_main": "off"}
+    assert ha(lit)(cond) == "False", "asked no fade, the off is the plain off"
+    assert ha(lit, fade=5)(cond) == "True"
+    assert ha(dark, fade=5)(cond) == "False", "nothing lit, nothing to fade"
+    sink, wait = fade["then"]
+    assert sink["action"] == "light.turn_on" and sink["data"] == {
+        "brightness_pct": 1,
+        "transition": "{{ fade }}",
+    }, "a Matter light's off takes no transition: the level fades, the off follows"
+    assert ha(lit)(sink["target"]["entity_id"]) == "['light.bedroom_a_main']"
+    assert wait == {"delay": {"seconds": "{{ fade }}"}}
+    assert [s["action"] for s in looks(off)] == ["light.turn_off"], "then the off itself"

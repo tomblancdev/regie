@@ -89,6 +89,7 @@ script:
 {% for p in plans %}
 {% set spal = scene_palette(area, p) %}
 {% set steps = [] %}
+{% set rises = [] %}
 {% if spal %}
 {# a look that reads a palette (0.21): every number is a template read at
    recall — the arc, the accent, the white from sensor.house_palette (or a
@@ -102,10 +103,23 @@ script:
 {% else %}
 {% for r in p.roles %}
 {% set data = {} %}
-{% for k, v in r.look.items() if k != 'on' %}{% set _ = data.update({k: v}) %}{% endfor %}
+{# a look's own transition gives way to its caller's `fade` (0.46): a wheel's
+   turn lands the look now, a click takes the written minute #}
+{% for k, v in r.look.items() if k != 'on' %}{% set _ = data.update({k: ('{{ fade if fade is defined else ' ~ v ~ ' }}') if k == 'transition' else v}) %}{% endfor %}
 {% set step = {'action': r.domain ~ '.turn_' ~ ('on' if r.look.on else 'off'), 'target': {'entity_id': r.entities}} %}
 {% if r.look.on and data and r.domain == 'light' %}{% set _ = step.update({'data': data}) %}{% endif %}
 {% set _ = steps.append(step) %}
+{% if r.look.on and r.domain == 'light' and 'transition' in r.look %}
+{# A LOOK THAT FADES IN FADES IN FROM DARK (0.46): a Matter bulb's level
+   transition starts from the level it last held, not from nothing (read live
+   2026-09-28: an applique asked 80 % over 20 s from off opened at a quarter),
+   so what of the role is off first takes the floor in the look's own white or
+   colour, at once — then the transition rises from there #}
+{% set floor = {'brightness_pct': 1, 'transition': 0} %}
+{% for k, v in r.look.items() if k in ('color_temp_kelvin', 'rgb_color') %}{% set _ = floor.update({k: v}) %}{% endfor %}
+{% set dark = (r.entities | tojson | replace('"', "'")) ~ " | select('is_state', 'off') | list" %}
+{% set _ = rises.append({'if': [{'condition': 'template', 'value_template': '{{ (' ~ dark ~ ') | count > 0 }}'}], 'then': [{'action': 'light.turn_on', 'target': {'entity_id': '{{ ' ~ dark ~ ' }}'}, 'data': floor}]}) %}
+{% endif %}
 {% endfor %}
 {% endif %}
 {% set named = [] %}
@@ -132,6 +146,19 @@ script:
 {% set _ = seq.append({'action': 'input_boolean.turn_off', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_lit_by_motion'}}) %}
 {% endif %}
 {% if spal %}{% set _ = seq.append({'variables': spal.variables}) %}{% endif %}
+{% if p.id == 'off' %}
+{% set lights = [] %}
+{% for r in p.roles if r.domain == 'light' %}{% for e in r.entities %}{% set _ = lights.append(e) %}{% endfor %}{% endfor %}
+{% if lights %}
+{# THE OFF THAT FADES (0.46): asked a `fade`, the room's lit lights sink to the
+   floor over it, THEN go off. A Matter light's off takes no transition (read
+   live 2026-09-28: Home Assistant sent the applique a plain onOff.off for an
+   off asked over 5 s), so the fade is a level's, and the off follows it #}
+{% set lit = (lights | tojson | replace('"', "'")) ~ " | select('is_state', 'on') | list" %}
+{% set _ = seq.append({'if': [{'condition': 'template', 'value_template': '{{ fade is defined and (fade | float(0)) > 0 and (' ~ lit ~ ') | count > 0 }}'}], 'then': [{'action': 'light.turn_on', 'target': {'entity_id': '{{ ' ~ lit ~ ' }}'}, 'data': {'brightness_pct': 1, 'transition': '{{ fade }}'}}, {'delay': {'seconds': '{{ fade }}'}}]}) %}
+{% endif %}
+{% endif %}
+{% for x in rises %}{% set _ = seq.append(x) %}{% endfor %}
 {% set _ = seq.append({'parallel': steps}) %}
 {% if moving(area, p) %}
 {% set _ = seq.append({'action': 'input_boolean.turn_on', 'target': {'entity_id': 'input_boolean.' ~ area.id ~ '_' ~ p.id ~ '_drift'}}) %}

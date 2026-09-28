@@ -403,3 +403,145 @@ def test_the_arrows_walk_the_looks_the_remote_names_and_alarm_never_by_default(
     with pytest.raises(HouseError) as exc:
         load_house(path)
     assert "looks names 'disco' — the room has none" in str(exc.value)
+
+
+# --- 0.46: a channel of looks, and the first press after a restart -----------
+
+BED = """id: bedroom_a
+roles: { main: {} }
+scenes:
+  evening: { main: { brightness: 40, ct: warm } }
+  night:   { main: { brightness: 5, ct: warm } }
+  wake:    { main: { brightness: 40, ct: warm, transition: 60 } }
+defaults: { dark: evening, dim: evening, bright: evening, night: night }
+hands:
+  bedroom_a_wheel:
+    behaviour: dimmer_wheel
+    channels:
+      1:
+        looks: [night, wake, evening]
+        click: { look: evening }
+        double: { look: off, fade: 5 }
+        hold: { look: wake }
+"""
+
+
+def bed_wheel(house_with, secrets, tmp_path, room=BED):
+    from regie.render import render
+
+    path = house_with(lambda d: d["things"].append(WHEEL))
+    (path.parent / "rooms" / "bedroom_a.yml").write_text(room, encoding="utf-8")
+    house = load_house(path)
+    render(house, tmp_path, secrets)
+    (auto,) = load(tmp_path, "bedroom_a")["automation"]
+    return house, auto
+
+
+def ha(states: dict, **extra):
+    """Home Assistant's template helpers, enough to run what the hands render."""
+    import jinja2
+
+    env = jinja2.Environment()
+    env.globals["states"] = lambda e: states.get(e, "unknown")
+    env.globals["is_state"] = lambda e, s: states.get(e) == s
+    env.tests["is_state"] = lambda e, s: states.get(e) == s
+    env.globals.update(extra)
+    return env
+
+
+def walked(action: str, look: str, lit: bool) -> str:
+    """The look a step lands on, from the room's memory and its lights."""
+    tpl = action.removeprefix("script.bedroom_a_")
+    states = {
+        "input_select.bedroom_a_look": look,
+        "light.bedroom_a_lights": "on" if lit else "off",
+    }
+    return ha(states).from_string(tpl).render()
+
+
+def test_a_channel_of_looks_walks_them_one_at_a_time_dimmest_first(house_with, secrets, tmp_path):
+    house, auto = bed_wheel(house_with, secrets, tmp_path)
+    assert any("the turn walks off · night · wake · evening" in h for h in house.hints)
+    b = branches(auto)
+    (up,) = b[("ep1",)]
+    assert up["data"] == {"fade": 0.4}, "a turn lands the look now"
+    assert up["continue_on_error"] is True
+    gate, down = b[("ep2",)]
+    assert gate == {
+        "condition": "template",
+        "value_template": "{{ not is_state('light.bedroom_a_lights', 'off') }}",
+    }, "a turn down from a dark room has nowhere to go"
+    assert down["data"] == {"fade": 0.4}
+    # up: from dark the first · one at a time · the top holds · from a look
+    # outside the walk, the first; a room whose lights are all off stands at off
+    assert walked(up["action"], "off", lit=False) == "night"
+    assert walked(up["action"], "evening", lit=False) == "night", "its lights are off"
+    assert walked(up["action"], "night", lit=True) == "wake"
+    assert walked(up["action"], "evening", lit=True) == "evening"
+    assert walked(up["action"], "day", lit=True) == "night"
+    # down: one at a time · below the first is off · outside the walk, the first
+    assert walked(down["action"], "evening", lit=True) == "wake"
+    assert walked(down["action"], "night", lit=True) == "off"
+    assert walked(down["action"], "day", lit=True) == "night"
+
+
+def test_a_channel_of_looks_keeps_every_other_gesture_the_houses(house_with, secrets, tmp_path):
+    _, auto = bed_wheel(house_with, secrets, tmp_path)
+    b = branches(auto)
+    ev = "{{ trigger.to_state.attributes.event_type == '%s' }}"
+    assert b[("ep3", ev % "multi_press_1")] == [{"action": "script.bedroom_a_evening"}]
+    assert b[("ep3", ev % "multi_press_2")] == [
+        {"action": "script.bedroom_a_off", "data": {"fade": 5}}
+    ], "the off that fades, any time"
+    assert b[("ep3", ev % "long_press")] == [{"action": "script.bedroom_a_wake"}], (
+        "a named look takes its own transition: no fade handed"
+    )
+    assert ("ep3", ev % "multi_press_3") not in b, "a gesture the room does not say is none"
+
+
+def test_the_first_press_after_a_restart_counts_and_a_return_never(house_with, secrets, tmp_path):
+    import datetime as dt
+
+    _, auto = bed_wheel(house_with, secrets, tmp_path)
+    guard = auto["conditions"][0]["value_template"]
+    now = dt.datetime(2026, 9, 18, 2, 26, 39, tzinfo=dt.UTC)
+
+    class S:
+        def __init__(self, state, ago=0.0):
+            self.state, self.last_changed = state, now - dt.timedelta(seconds=ago)
+
+    def counts(frm, to):
+        trig = {"from_state": frm, "to_state": to}
+        env = ha({}, trigger=trig, as_timestamp=lambda t: t.timestamp())
+        return env.from_string(guard).render() == "True"
+
+    press = S("2026-09-18T02:26:39.537+00:00")
+    # the case read live: `unknown` since the restart nine hours before
+    assert counts(S("unknown", ago=9 * 3600), press), "the first press after a restart"
+    assert not counts(S("unknown", ago=5), press), "what lands seconds after a return"
+    assert not counts(S("unavailable", ago=9 * 3600), press), "unavailable and back"
+    assert not counts(S("2026-09-17T10:00:00+00:00", ago=60), S("unknown")), "to unknown"
+    assert counts(S("2026-09-17T10:00:00+00:00", ago=60), press), "one time to the next"
+    assert not counts(S(press.state, ago=60), press), "the same time is no press"
+    assert not counts(None, press), "a trigger with no before (Home Assistant starting)"
+
+
+@pytest.mark.parametrize(
+    ("channel", "said"),
+    [
+        ("{ looks: [night], role: main }", "names looks: or a target, not both"),
+        ("{ looks: [] }", "looks: a list of the room's looks"),
+        ("{ looks: [night, disco] }", "looks names 'disco' — the room renders no such look"),
+        ("{ looks: [night], double: { look: off, fade: -1 } }", "fade takes seconds"),
+        ("{ role: main, click: { toggle: default, fade: 2 } }", "fade: rides a look, not a toggle"),
+    ],
+)
+def test_check_refuses_a_channel_of_looks_it_cannot_keep(house_with, secrets, channel, said):
+    path = house_with(lambda d: d["things"].append(WHEEL))
+    room = BED.split("hands:")[0] + (
+        f"hands:\n  bedroom_a_wheel: {{ behaviour: dimmer_wheel, channels: {{ 1: {channel} }} }}\n"
+    )
+    (path.parent / "rooms" / "bedroom_a.yml").write_text(room, encoding="utf-8")
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert said in str(exc.value)

@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.46.0 — la molette du lit (2026-09-28)
+
+**« Les molettes muettes », lu sur la maison vivante.** La molette du lit
+recevait les gestes de Tom et n'allumait rien : son canal 1 visait un rôle
+que rien ne remplit, son canal 2 un projecteur débranché, et son canal 3
+perdait chaque premier geste — le 18 à 04:26, deux clics dans le noir, tous
+deux jetés. Tom, ensuite : « let's think about what I do when I'm on my bed
+exactly : read, wakeup, sleep time ». Quatre choses, une par ce que la nuit
+a montré.
+
+**Le premier geste après un redémarrage compte.** Une entité `event.*` lit
+`unknown` après chaque démarrage de Home Assistant, et la garde des remotes
+Matter refusait toute nouvelle heure qui en sortait — le premier geste de
+chaque bouton, jusqu'au redémarrage suivant. Ce que la garde craignait (un
+nœud qui revient et rejoue) se lit `unavailable → unknown`, jamais une heure :
+une heure sortie d'un `unknown` tenu plus d'une minute (`REPLAY_S`) est un
+geste ; `unavailable` et le retour ne le sont toujours pas.
+
+**Un canal de looks.** Un canal de molette peut nommer `looks:` au lieu d'un
+rôle ou d'une chose : il parle pour la pièce de la molette. Le tour marche ces
+looks un par tour, du plus sombre au plus clair (le mot neuf `look: step`) —
+en haut il tient, sous le premier c'est l'extinction, un tour vers le bas
+depuis une pièce éteinte ne fait rien, et une pièce dont les lumières sont
+toutes éteintes est à `off` quoi que dise sa mémoire. Le clic est le look de
+l'heure (le rayon `scenes` de `dimmer_wheel`) ; double, triple, maintien, la
+pièce les dit. `check` refuse un canal qui nomme les deux, une liste vide, un
+look que la pièce ne rend pas, et dit ce que le tour marche.
+
+**L'extinction qui s'estompe.** `look: off` prend `fade:` (secondes, 0–600) :
+les lumières allumées de la pièce descendent au plancher sur ce temps, PUIS
+s'éteignent. Lu en direct le 28 : Home Assistant envoie à une lumière Matter
+un `onOff.off` nu pour une extinction demandée sur 5 s — la transition est
+perdue ; la rampe est donc celle du niveau, l'extinction la suit.
+
+**Un look qui s'allume en fondu part du noir.** Un rôle dont le look écrit une
+`transition` monte depuis le plancher (1 %, dans le blanc ou la couleur du
+look, d'un coup) quand sa lumière est éteinte — lu le même soir : une applique
+Govee à qui l'on demandait 80 % sur 20 s depuis l'extinction s'ouvrait au
+quart, le niveau qu'elle avait tenu en dernier. Et le `fade` d'un appelant
+remplace la transition écrite : un tour de molette pose le look tout de suite
+(`STEP_FADE`, 0,4 s), un clic prend la minute.
+
+**LA PREUVE :** 482 → 492 tests ; la garde, cas par cas sous jinja avec un
+témoin (l'ancienne garde rendait `False` pour le seul cas qui change —
+`unknown` tenu neuf heures —, la neuve `True`) ; le rendu de la vraie maison
+(sur le cerveau, dans `/tmp`, secrets factices) comparé au rendu vivant :
+seules changent la garde des deux remotes Matter et le bloc de fondu des six
+scripts d'extinction, inerte tant qu'on ne demande rien.
+
 ## 0.45.2 — le bouton et la page se répondent (2026-09-08)
 
 **V15, le dernier verdict de l'audit.** « Pas de page Réglages pour une

@@ -15,7 +15,10 @@ from dataclasses import dataclass, field
 
 from .errors import HouseError
 
-LOOK_WORDS = ("default", "before", "off", "prev", "next")
+LOOK_WORDS = ("default", "before", "off", "prev", "next", "step")
+# the fade a wheel's step asks of the look it lands on (0.46): a turn is a hand
+# choosing, so the look arrives now, not over the transition written for a click
+STEP_FADE = 0.4
 VERBS = (
     "look",
     "toggle",
@@ -52,15 +55,40 @@ class Ctx:
     modifiers: dict = field(default_factory=dict)
 
 
-def look_action(room: str, look, ctx: Ctx | None = None) -> dict:
+def look_action(room: str, look, ctx: Ctx | None = None, fade=None) -> dict:
     """One room takes one look: the look's own script, waited for. `before`
     reads the room's memory (0.17); `prev`/`next` walk the room's looks in the
-    file's order from the memory; a LIST cycles through those looks."""
+    file's order from the memory; a LIST cycles through those looks. `step`
+    (0.46, a wheel's turn): one look up or down the walk (`ctx.sign`), the
+    dimmest first — the top holds, below the bottom is off, and a room whose
+    lights are all off stands at off whatever its memory says. `fade` (0.46)
+    is handed to the script: the seconds its off fades in, and the transition
+    of a look that writes one."""
+    act = _look_action(room, look, ctx)
+    if fade is not None:
+        act["data"] = {"fade": fade}
+    return act
+
+
+def _look_action(room: str, look, ctx: Ctx | None) -> dict:
     if look == "before":
         return {
             "action": f"script.{room}_{{{{ states('input_select.{room}_look_before') }}}}",
             "continue_on_error": True,
         }
+    if look == "step":
+        names = json.dumps(list(walk_looks(ctx, room))).replace('"', "'")
+        head = (
+            f"{{% set looks = {names} %}}"
+            f"{{% set cur = 'off' if is_state('light.{room}_lights', 'off') "
+            f"else states('input_select.{room}_look') %}}"
+            f"{{% set i = looks.index(cur) if cur in looks else -1 %}}"
+        )
+        if ctx is None or ctx.sign >= 0:
+            pick = "{{ looks[[i + 1, (looks | length) - 1] | min] }}"
+        else:
+            pick = "{{ 'off' if i == 0 else looks[i - 1] if i > 0 else looks[0] }}"
+        return {"action": f"script.{room}_{head}{pick}", "continue_on_error": True}
     if look in ("prev", "next") or isinstance(look, list):
         looks = look if isinstance(look, list) else walk_looks(ctx, room)
         step = -1 if look == "prev" else 1
@@ -168,9 +196,23 @@ def _look(verb: dict, ctx: Ctx) -> list[dict]:
     (check hints; a room a person NAMES is refused there instead)."""
     look = verb["look"]
     one = look if not isinstance(look, list) else None
-    return [
-        look_action(room, look, ctx) for room in rooms_of(ctx, verb, one) if renders(ctx, room, one)
-    ]
+    fade = verb.get("fade")
+    if look == "step" and fade is None:
+        fade = STEP_FADE
+    out = []
+    for room in rooms_of(ctx, verb, one):
+        if not renders(ctx, room, one):
+            continue
+        if look == "step" and ctx.sign < 0:
+            # a turn down from a dark room has nowhere to go
+            out.append(
+                {
+                    "condition": "template",
+                    "value_template": f"{{{{ not is_state('light.{room}_lights', 'off') }}}}",
+                }
+            )
+        out.append(look_action(room, look, ctx, fade))
+    return out
 
 
 def _toggle(verb: dict, ctx: Ctx) -> list[dict]:

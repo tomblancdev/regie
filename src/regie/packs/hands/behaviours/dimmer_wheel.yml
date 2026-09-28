@@ -3,6 +3,10 @@
 # player. A turn steps the level (or the volume) by the notches turned at
 # once; a click toggles the look of the hour (or play/pause); a hold walks
 # the whites (or stops). `double:` is the room's to say.
+# A channel that names `looks:` instead (0.46) speaks for the remote's own
+# room: a turn walks those looks one at a time, dimmest first (below the
+# first = off, the top holds), a click is the look of the hour or off; the
+# rest — double, triple, hold — the room file says.
 profiles: [bilresa_wheel]
 channels:
   light:
@@ -13,3 +17,6 @@ channels:
     turn:   { volume: step }
     click:  { media: play_pause }
     hold:   { media: stop }
+  scenes:
+    turn:   { look: step }
+    click:  { toggle: default }

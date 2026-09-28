@@ -174,7 +174,9 @@ def gestures_of(house, area: dict, thing: dict, spec: dict, pname: str, profile:
 def channels_of(house, area: dict, thing: dict, spec: dict, pname: str, profile: dict) -> dict:
     """A wheel: per channel, the target (a role or a thing) picks the behaviour's
     `light` or `media` gestures; the house's overrides on top (`double:` a look
-    or a list = a look verb, `walk:` = the hold's walk)."""
+    or a list = a look verb, `walk:` = the hold's walk). A channel that names
+    `looks:` instead (0.46) is a channel of the remote's own room: its turn
+    walks those looks, dimmest first, and every other gesture is the house's."""
     where = f"{area['id']}: hands {thing['id']}"
     b = load_behaviour(spec["behaviour"])
     if pname not in (b.get("profiles") or []):
@@ -189,10 +191,21 @@ def channels_of(house, area: dict, thing: dict, spec: dict, pname: str, profile:
             raise HouseError(f"{where}: channel {n} — a {pname} has {profile['channels']}")
         ch = dict(ch or {})
         target = {k: ch.pop(k) for k in ("role", "thing") if k in ch}
-        if len(target) != 1:
-            raise HouseError(f"{where}: channel {n} names exactly one of role: / thing:")
+        walk = ch.pop("looks", None)
+        if walk is not None:
+            if target:
+                raise HouseError(f"{where}: channel {n} names looks: or a target, not both")
+            if not isinstance(walk, list) or not walk:
+                raise HouseError(f"{where}: channel {n} looks: a list of the room's looks")
+            walk = [word(lk) for lk in walk]
+        elif len(target) != 1:
+            raise HouseError(
+                f"{where}: channel {n} names exactly one of role: / thing: (or looks:)"
+            )
         kind = "light"
-        if "thing" in target:
+        if walk is not None:
+            kind = "scenes"
+        elif "thing" in target:
             t = house.thing(target["thing"])
             kind = "media" if t["kind"] in verbs.MEDIA_KINDS else "light"
         base = {word(k): words(v) for k, v in ((b.get("channels") or {}).get(kind) or {}).items()}
@@ -213,7 +226,7 @@ def channels_of(house, area: dict, thing: dict, spec: dict, pname: str, profile:
         for g, verb in base.items():
             if isinstance(verb, dict) and "role" not in verb and "thing" not in verb:
                 base[g] = {**target, **verb}
-        out[n] = {"target": target, "kind": kind, "gestures": base}
+        out[n] = {"target": target, "kind": kind, "gestures": base, "looks": walk}
     return out
 
 
@@ -224,7 +237,8 @@ def pin_lifts(gestures: dict) -> bool:
 def sequence(house, area: dict, verb: dict, ctx_kw: dict, lifts: bool, spec=None) -> list[dict]:
     kw = dict(ctx_kw)
     if spec and spec.get("looks"):
-        kw["modifiers"] = {**kw.get("modifiers", {}), "looks": list(spec["looks"])}
+        # a wheel channel's own looks: (0.46) win over the remote's line
+        kw["modifiers"] = {"looks": list(spec["looks"]), **kw.get("modifiers", {})}
     ctx = verbs.Ctx(house, area["id"], **kw)
     out = verbs.render(verb, ctx)
     if lifts and out:
@@ -260,17 +274,29 @@ def plan_styrbar(house, area, thing, spec, pname, profile) -> dict:
     return {"triggers": triggers, "conditions": [], "branches": branches}
 
 
+# how long `unknown` must have held before a new time out of it is a press
+# (0.46): a node's return reads unavailable → unknown, and anything the radio
+# replayed would land within seconds of it
+REPLAY_S = 60
+
+
 def matter_guard(entities: list[str]) -> list[dict]:
     """An event entity's state is the last event's time: a new time is a new
-    press; going unavailable and back is not, nor is a restart."""
+    press; going unavailable and back is not, nor is a restart. Out of
+    `unknown` — what every event entity reads after Home Assistant starts — a
+    new time IS a press once `unknown` has held a minute (0.46: read live
+    2026-09-28, the bed wheel's clicks at 04:26 were each the first of their
+    button since a restart nine hours before, and the guard dropped them)."""
     return [
         {
             "condition": "template",
             "value_template": (
                 "{{ trigger.from_state is not none and trigger.to_state.state not in "
-                "['unavailable', 'unknown'] and trigger.from_state.state not in "
-                "['unavailable', 'unknown'] and "
-                "trigger.to_state.state != trigger.from_state.state }}"
+                "['unavailable', 'unknown'] and trigger.from_state.state != 'unavailable' and "
+                "trigger.to_state.state != trigger.from_state.state and "
+                "(trigger.from_state.state != 'unknown' or "
+                "(as_timestamp(trigger.to_state.last_changed) - "
+                f"as_timestamp(trigger.from_state.last_changed)) > {REPLAY_S}) }}}}"
             ),
         }
     ]
@@ -290,20 +316,21 @@ def plan_wheel(house, area, thing, spec, pname, profile) -> dict:
     for n, ch in sorted(channels.items()):
         up, down, button = 3 * n - 2, 3 * n - 1, 3 * n
         g = ch["gestures"]
+        own = {"modifiers": {"looks": ch["looks"]}} if ch["looks"] else {}
         for ep in (up, down, button):
             triggers.append(
                 {"trigger": "state", "entity_id": f"event.{thing['id']}_{ep}", "id": f"ep{ep}"}
             )
         if "turn" in g:
             for ep, sign in ((up, 1), (down, -1)):
-                seq = sequence(house, area, g["turn"], {"k": K, "sign": sign}, lifts, spec)
+                seq = sequence(house, area, g["turn"], {"k": K, "sign": sign, **own}, lifts, spec)
                 if seq:
                     branches.append(
                         {"conditions": [{"condition": "trigger", "id": f"ep{ep}"}], "sequence": seq}
                     )
         for raw, word in profile["clicks"].items():
             if word in g:
-                seq = sequence(house, area, g[word], {}, lifts, spec)
+                seq = sequence(house, area, g[word], own, lifts, spec)
                 if seq:
                     branches.append(
                         {
@@ -315,7 +342,7 @@ def plan_wheel(house, area, thing, spec, pname, profile) -> dict:
                         }
                     )
         if "hold" in g:
-            seq = sequence(house, area, g["hold"], {}, lifts, spec)
+            seq = sequence(house, area, g["hold"], own, lifts, spec)
             if seq:
                 branches.append(
                     {
@@ -439,6 +466,17 @@ def check_hands(house, area: dict) -> tuple[list[str], list[str]]:
                     hints.append(f"{where}: a wheel with no channels: drives nothing yet")
                 verb_sets = [(f"channel {n}", c["gestures"]) for n, c in channels.items()]
                 for n, c in channels.items():
+                    if c["looks"]:
+                        rendered = verbs.room_looks(house, area["id"])
+                        for lk in c["looks"]:
+                            if lk not in rendered:
+                                errors.append(
+                                    f"{where}: channel {n} looks names {lk!r} — "
+                                    "the room renders no such look"
+                                )
+                        hints.append(
+                            f"{where}: channel {n}: the turn walks off · " + " · ".join(c["looks"])
+                        )
                     if "role" in c["target"]:
                         role = c["target"]["role"]
                         if role not in house.declared_roles(area):
@@ -559,6 +597,12 @@ def check_verb(house, area: dict, verb: dict, where: str, hints: list[str]) -> l
                         )
                     else:
                         hints.append(said + " — the gesture waits (renders nothing)")
+    if "fade" in verb:
+        f = verb["fade"]
+        if name != "look":
+            errors.append(f"{where}: fade: rides a look, not a {name}")
+        elif isinstance(f, bool) or not isinstance(f, (int, float)) or not 0 < f <= 600:
+            errors.append(f"{where}: fade takes seconds, above 0 and at most 600")
     if name == "level" and verb["level"] not in ("up", "down", "step"):
         errors.append(f"{where}: level takes up, down or step")
     if name == "walk" and verb["walk"] not in ("whites", "colours"):
