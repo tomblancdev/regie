@@ -43,8 +43,10 @@ ENTITY_DOMAINS = frozenset(
     time timer update vacuum valve water_heater weather zone""".split()
 )
 # a lookahead, so the matches overlap: `states.sensor.house_period.state`
-# offers `sensor.house_period` too, not `states.sensor` alone
-REF_RE = re.compile(r"(?=(?<!\w)([a-z_]+)\.([a-z0-9_]+)(?![\w{]))")
+# offers `sensor.house_period` too, not `states.sensor` alone. What follows
+# `trigger.` is the trigger's own path, never an entity (0.47: a wheel's
+# `trigger.event.data.notches` read as `event.data`, and the doctor went red)
+REF_RE = re.compile(r"(?=(?<!\w)(?<!trigger\.)([a-z_]+)\.([a-z0-9_]+)(?![\w{]))")
 RECORDER_DB = "home-assistant/home-assistant_v2.db"
 
 

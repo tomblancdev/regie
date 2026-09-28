@@ -233,6 +233,19 @@ def test_a_brain_that_cannot_be_asked_is_red_not_green(witness, rendered_fresh, 
     assert "the conductor's token is refused" in report.red[0].detail
 
 
+def test_a_triggers_own_path_is_no_reference(tmp_path):
+    """`trigger.event.data.notches` (a wheel's turn, 0.47) names the trigger's
+    data, not an entity `event.data`; the entity beside it still counts."""
+    (tmp_path / "a.yaml").write_text(
+        "automation:\n  - triggers: [{ trigger: event, event_type: regie_turn }]\n"
+        "    actions:\n      - action: light.turn_on\n"
+        "        target: { entity_id: light.hall_main }\n"
+        '        data: { brightness_step_pct: "{{ 5 * (trigger.event.data.notches | int(1)) }}" }\n'
+    )
+    named = references([tmp_path / "a.yaml"], {"light", "event"}, {"light": {"turn_on"}})
+    assert named == {"light.hall_main": {"a.yaml"}}
+
+
 def test_references_read_what_the_files_name(tmp_path):
     """A `domain.object` in a value or a key is a reference; a service of the
     domain is not (light.turn_on), nor a template's prefix

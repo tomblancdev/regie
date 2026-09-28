@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.47.1 — le docteur lit le chemin du déclencheur (2026-09-28)
+
+**Le premier converge de 0.47 : la maison posée, le docteur rouge.** Sa
+recherche des références (`doctor.py`, `REF_RE`) prenait tout `domaine.objet`
+d'un paquet pour une entité, et `event` est un domaine : le nouveau
+`trigger.event.data.notches` d'un tour de molette se lisait `event.data`,
+« une entité que les fichiers nomment et que le cerveau n'a pas » — rouge, et
+la flotte stricte arrêtait la pièce après l'`apply` (lu en direct, 22:03).
+Ce qui suit `trigger.` est le chemin du déclencheur lui-même, jamais une
+entité : un regard en arrière de plus dans le motif.
+
+**LA PREUVE :** un test (`test_a_triggers_own_path_is_no_reference`) ; le
+docteur corrigé lancé sur le cerveau, en lecture seule, depuis les sources :
+« 239 entities the files name, all in the brain », 11 verts, 0 rouge — le
+même cerveau que le docteur de 0.47.0 disait rouge une minute avant.
+
 ## 0.47.0 — la molette qui tourne (2026-09-28)
 
 **La vraie raison des molettes muettes, lue à la source.** Tom a essayé la
