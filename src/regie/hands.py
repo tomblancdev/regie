@@ -78,6 +78,11 @@ PROFILES: dict[str, dict] = {
 }
 NOT_FROM = ["unavailable", "unknown"]
 K = "trigger.to_state.attributes.event_type.split('_')[-1] | int(1)"
+# a wheel's turn, as the component's ear says it (0.47): the notches gathered
+# since its last step, uncapped — Home Assistant's event entity drops a total
+# above 8, so a real spin of 10–18 notches never came through the one above
+K_TURN = "trigger.event.data.notches | int(1)"
+TURN_EVENT = "regie_turn"
 
 
 def word(x):
@@ -310,22 +315,37 @@ def event_is(kind: str) -> dict:
 
 
 def plan_wheel(house, area, thing, spec, pname, profile) -> dict:
+    """A wheel is two automations (0.47): its button's gestures (restart mode,
+    the next gesture ends a hold) and its TURNS, heard from the component's
+    ear (`regie_turn`, notch by notch) and queued — a turn arrives as a few
+    steps a second, and a restart would cancel a light's command in flight
+    (helpers/script.py 2026.8.3: a stopped run cancels its long action)."""
     channels = channels_of(house, area, thing, spec, pname, profile)
     triggers, branches = [], []
+    turn_triggers, turn_branches = [], []
     lifts = any(pin_lifts(c["gestures"]) for c in channels.values())
     for n, ch in sorted(channels.items()):
         up, down, button = 3 * n - 2, 3 * n - 1, 3 * n
         g = ch["gestures"]
         own = {"modifiers": {"looks": ch["looks"]}} if ch["looks"] else {}
-        for ep in (up, down, button):
-            triggers.append(
-                {"trigger": "state", "entity_id": f"event.{thing['id']}_{ep}", "id": f"ep{ep}"}
-            )
+        triggers.append(
+            {"trigger": "state", "entity_id": f"event.{thing['id']}_{button}", "id": f"ep{button}"}
+        )
         if "turn" in g:
             for ep, sign in ((up, 1), (down, -1)):
-                seq = sequence(house, area, g["turn"], {"k": K, "sign": sign, **own}, lifts, spec)
+                seq = sequence(
+                    house, area, g["turn"], {"k": K_TURN, "sign": sign, **own}, lifts, spec
+                )
                 if seq:
-                    branches.append(
+                    turn_triggers.append(
+                        {
+                            "trigger": "event",
+                            "event_type": TURN_EVENT,
+                            "event_data": {"entity_id": f"event.{thing['id']}_{ep}"},
+                            "id": f"ep{ep}",
+                        }
+                    )
+                    turn_branches.append(
                         {"conditions": [{"condition": "trigger", "id": f"ep{ep}"}], "sequence": seq}
                     )
         for raw, word in profile["clicks"].items():
@@ -353,7 +373,12 @@ def plan_wheel(house, area, thing, spec, pname, profile) -> dict:
                         "sequence": seq,
                     }
                 )
-    return {"triggers": triggers, "conditions": matter_guard([]), "branches": branches}
+    return {
+        "triggers": triggers,
+        "conditions": matter_guard([]),
+        "branches": branches,
+        "turns": {"triggers": turn_triggers, "branches": turn_branches},
+    }
 
 
 def plan_dual(house, area, thing, spec, pname, profile) -> dict:
@@ -431,9 +456,30 @@ def hands_plan(house, area: dict) -> list[dict]:
                     "conditions": plan["conditions"],
                     "actions": [{"choose": plan["branches"]}],
                 },
+                "turns": _turns_automation(area, thing_id, label, plan.get("turns")),
             }
         )
     return out
+
+
+def _turns_automation(area: dict, thing_id: str, label: str, turns: dict | None) -> dict | None:
+    """A wheel's turns (0.47): the ear's `regie_turn`, queued, so every step's
+    command lands before the next is asked."""
+    if not turns or not turns["branches"]:
+        return None
+    return {
+        "id": f"regie_{area['id']}_{thing_id}_turns",
+        "alias": f"{area['label']} — {label} · tours",
+        "description": (
+            f"the turns of {label}, notch by notch from the component's ear (regie_turn) — "
+            f"rooms/{area['id']}.yml hands: (La Régie, pack hands)"
+        ),
+        "mode": "queued",
+        "max": 10,
+        "max_exceeded": "silent",
+        "triggers": turns["triggers"],
+        "actions": [{"choose": turns["branches"]}],
+    }
 
 
 def check_hands(house, area: dict) -> tuple[list[str], list[str]]:
@@ -474,9 +520,17 @@ def check_hands(house, area: dict) -> tuple[list[str], list[str]]:
                                     f"{where}: channel {n} looks names {lk!r} — "
                                     "the room renders no such look"
                                 )
-                        hints.append(
-                            f"{where}: channel {n}: the turn walks off · " + " · ".join(c["looks"])
-                        )
+                        turn = c["gestures"].get("turn") or {}
+                        if turn.get("look") == "step":
+                            hints.append(
+                                f"{where}: channel {n}: the turn walks off · "
+                                + " · ".join(c["looks"])
+                            )
+                        elif turn.get("lit"):
+                            hints.append(
+                                f"{where}: channel {n}: the turn dims what is lit — "
+                                f"from dark, {c['looks'][0]}"
+                            )
                     if "role" in c["target"]:
                         role = c["target"]["role"]
                         if role not in house.declared_roles(area):
@@ -603,6 +657,10 @@ def check_verb(house, area: dict, verb: dict, where: str, hints: list[str]) -> l
             errors.append(f"{where}: fade: rides a look, not a {name}")
         elif isinstance(f, bool) or not isinstance(f, (int, float)) or not 0 < f <= 600:
             errors.append(f"{where}: fade takes seconds, above 0 and at most 600")
+    if "lit" in verb and (
+        name != "level" or verb.get("level") != "step" or "role" in verb or "thing" in verb
+    ):
+        errors.append(f"{where}: lit: rides a level: step on the room, with no role: or thing:")
     if name == "level" and verb["level"] not in ("up", "down", "step"):
         errors.append(f"{where}: level takes up, down or step")
     if name == "walk" and verb["walk"] not in ("whites", "colours"):

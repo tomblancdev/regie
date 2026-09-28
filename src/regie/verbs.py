@@ -249,9 +249,57 @@ def _toggle(verb: dict, ctx: Ctx) -> list[dict]:
     ]
 
 
+def room_lights(ctx: Ctx, room: str) -> list[str]:
+    """The room's light roles, as the groups a look lights them by."""
+    house = ctx.house
+    area = next(a for a in house.areas if a["id"] == room)
+    out: list[str] = []
+    for role in house.roles_in(room):
+        t = house.role_target(area, role)
+        if t and t["domain"] == "light":
+            out += [e for e in t["entities"] if e not in out]
+    return out
+
+
+def _lit_level(verb: dict, ctx: Ctx) -> list[dict]:
+    """`lit: true` (0.47, the bed wheel): the level of what is LIT in the room
+    and nothing else — the room's group would light every light of it. Down to
+    the floor is off (Home Assistant turns off a light a step takes to 0); up
+    from dark lights the first of the channel's `looks:` when it has some,
+    else does nothing."""
+    room = verb.get("room", ctx.room)
+    lights = room_lights(ctx, room)
+    if not lights:
+        return []
+    names = json.dumps(lights).replace('"', "'")
+    lit = f"{names} | select('is_state', 'on') | list"
+    pct = f"{{{{ {ctx.sign * NOTCH_PCT} * ({ctx.k or 1}) }}}}"
+    step = {
+        "action": "light.turn_on",
+        "target": {"entity_id": f"{{{{ {lit} }}}}"},
+        "data": {"brightness_step_pct": pct},
+    }
+    dark = f"{{{{ ({lit}) | count == 0 }}}}"
+    first = ((ctx.modifiers or {}).get("looks") or [None])[0]
+    if ctx.sign > 0 and first and renders(ctx, room, first):
+        return [
+            {
+                "if": [{"condition": "template", "value_template": dark}],
+                "then": [look_action(room, first, ctx)],
+                "else": [step],
+            }
+        ]
+    return [
+        {"condition": "template", "value_template": f"{{{{ ({lit}) | count > 0 }}}}"},
+        step,
+    ]
+
+
 def _level(verb: dict, ctx: Ctx) -> list[dict]:
     """`up`/`down` while held: steps until the next gesture ends the loop;
     `step`: a wheel's notch, `k` notches at once."""
+    if verb.get("lit") and verb["level"] == "step":
+        return _lit_level(verb, ctx)
     target = target_of(ctx, verb)
     if target is None:
         return []

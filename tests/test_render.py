@@ -53,6 +53,9 @@ EXPECTED = {
     "home-assistant/custom_components/regie/conversation.py",
     "home-assistant/custom_components/regie/walk.py",
     "home-assistant/custom_components/regie/walker.py",
+    # the ear (0.47): a wheel's turn notch by notch, heard from the Matter server
+    "home-assistant/custom_components/regie/ear.py",
+    "home-assistant/custom_components/regie/turns.py",
     "home-assistant/custom_components/regie/palette.py",
     "home-assistant/custom_components/regie/palettes.py",
     "home-assistant/custom_components/regie/sensor.py",

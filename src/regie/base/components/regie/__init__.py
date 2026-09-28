@@ -1,13 +1,15 @@
 """La Régie — the product's own component inside the brain (0.31).
 
 The pieces rendered YAML cannot say live here, each a tenant of one domain
-`regie:` that the packages configure and the brain reads once at start. Three
+`regie:` that the packages configure and the brain reads once at start. Four
 tenants so far: the porter (conversation.py, porter.py), a conversation agent
 in front of the house's LLM, the walker (walker.py, walk.py), which runs a
-look's colour walks one order per leg (0.39, the audit's V7), and the palette
+look's colour walks one order per leg (0.39, the audit's V7), the palette
 (palettes.py, sensor.py, palette.py), whose kept palettes AND whose day's rules
 are documents in a store of ours and whose sensor is computed here from the
-arithmetic the engine reads by path (0.42 and 0.43, the audit's V8a and V8b).
+arithmetic the engine reads by path (0.42 and 0.43, the audit's V8a and V8b),
+and the ear (ear.py, turns.py), which hears a wheel's turn notch by notch from
+the Matter server itself and fires `regie_turn` (0.47).
 
 The component SHIPS WITH EVERY HOUSE since 0.39: `configuration.yaml` carries
 the bare `regie:` that loads it, and a pack that has something to configure —
@@ -67,9 +69,10 @@ CONFIG_SCHEMA = vol.Schema(
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     conf = config.get(DOMAIN) or {}
     hass.data[DOMAIN] = conf
-    from . import walker
+    from . import ear, walker
 
     await walker.async_setup(hass)
+    await ear.async_setup(hass)
     if "palette" in conf:
         from . import palettes
 

@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.47.0 — la molette qui tourne (2026-09-28)
+
+**La vraie raison des molettes muettes, lue à la source.** Tom a essayé la
+molette du lit de 0.46 et l'a tournée comme on tourne une molette : 17, 18
+crans d'un coup. Rien. Un cran : oui. Home Assistant 2026.8.3 plafonne la
+liste des pressions multiples d'un bouton Matter à huit
+(`components/matter/event.py` : `min(MultiPressMax, 8)`) et **rend en silence
+un total au-dessus** (`if event_type not in self.event_types: return`, aucune
+ligne de journal) — un vrai tour de BILRESA fait 10 à 18 crans : les deux
+molettes de la maison avaient perdu chaque vrai tour depuis leur appairage.
+
+**L'oreille, quatrième locataire du composant** (`ear.py`, son arithmétique
+dans `turns.py`, que la suite lit telle quelle — `tests/test_ear.py`). Elle
+écoute le serveur Matter lui-même par le client Matter de Home Assistant
+(celui de ses entités `event`), cran par cran : le premier cran à l'instant,
+puis ce qui s'est amassé au plus toutes les `THROTTLE` secondes (0,3 : une
+lumière Matter met 0,1 à 0,5 s à dire oui), et le reste quand le tour
+s'achève — un tour de 18 fait 18 crans, dits en une poignée de pas. Elle tire
+`regie_turn {entity_id, notches}`, le point nommé par sa propre entité
+`event`. Trouvé par le test avant la maison : un minuteur posé à `last +
+THROTTLE` se lit un cheveu sous `THROTTLE` en virgule flottante et redemande
+1e-17 s plus tard pour toujours — à une milliseconde près, c'est l'heure
+(`EARLY`).
+
+**Une molette, deux automations.** Les gestes du bouton restent sur
+l'entité `event` (mode restart : le geste suivant finit un maintien) ; les
+TOURS ont la leur, `regie_<pièce>_<molette>_turns`, sur `regie_turn`, en
+file (`queued`) — un tour arrive en quelques pas par seconde, et un redémarrage
+annule la commande d'une lumière en vol (`helpers/script.py` 2026.8.3 : une
+exécution arrêtée annule son action longue).
+
+**`level: step, lit: true`** — le niveau de ce qui est ALLUMÉ dans la pièce,
+et de rien d'autre (le groupe de la pièce allumerait chacune de ses
+lumières). Jusqu'au plancher, c'est l'extinction (Home Assistant éteint une
+lumière qu'un pas mène à 0, lu à la source) ; depuis le noir, un tour vers le
+haut allume le premier des `looks:` du canal. La molette du lit de Tom : son
+canal 1 est la main sur la lumière, « me controlling the light up/down ».
+`check` refuse `lit` ailleurs que sur un `level: step` de la pièce.
+
+**LA PREUVE :** 492 → 499 tests ; l'oreille importée dans l'image épinglée de
+Home Assistant et la signature de `subscribe_events` lue sur la bibliothèque
+réelle ; le rendu de la vraie maison comparé au vivant : les deux molettes
+passent leurs tours à `regie_turn`, les autres télécommandes ne changent que
+d'une ligne de commentaire.
+
 ## 0.46.0 — la molette du lit (2026-09-28)
 
 **« Les molettes muettes », lu sur la maison vivante.** La molette du lit

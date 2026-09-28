@@ -98,21 +98,27 @@ def test_a_wheel_reads_its_endpoints_by_channel_and_a_turn_by_its_notches(
     house_with, secrets, tmp_path
 ):
     rendered = matter_hands(house_with, secrets, tmp_path)
-    (auto,) = load(rendered, "bedroom_a")["automation"]
+    auto, turns = load(rendered, "bedroom_a")["automation"]
     ents = [t["entity_id"] for t in auto["triggers"]]
-    assert ents == ["event.bedroom_a_wheel_1", "event.bedroom_a_wheel_2", "event.bedroom_a_wheel_3"]
+    assert ents == ["event.bedroom_a_wheel_3"], "the button's gestures, on its event entity"
     assert (
         "trigger.to_state.state != trigger.from_state.state"
         in auto["conditions"][0]["value_template"]
     ), "a new time is a new press; unavailable and back is not"
+    # the turns (0.47): heard notch by notch from the component's ear, queued
+    assert turns["id"] == "regie_bedroom_a_bedroom_a_wheel_turns"
+    assert turns["mode"] == "queued", "a restart would cancel a light's command in flight"
+    assert [(t["trigger"], t["event_type"], t["event_data"]) for t in turns["triggers"]] == [
+        ("event", "regie_turn", {"entity_id": "event.bedroom_a_wheel_1"}),
+        ("event", "regie_turn", {"entity_id": "event.bedroom_a_wheel_2"}),
+    ], "the endpoint named by its own event entity"
     b = branches(auto)
-    up = b[("ep1",)][0]
+    t = branches(turns)
+    up = t[("ep1",)][0]
     assert up["target"] == {"entity_id": "light.bedroom_a_main"}, "the channel's role"
-    assert (
-        up["data"]["brightness_step_pct"]
-        == "{{ 5 * (trigger.to_state.attributes.event_type.split('_')[-1] | int(1)) }}"
-    )
-    assert b[("ep2",)][0]["data"]["brightness_step_pct"].startswith("{{ -5 * ")
+    assert up["data"]["brightness_step_pct"] == "{{ 5 * (trigger.event.data.notches | int(1)) }}"
+    assert t[("ep2",)][0]["data"]["brightness_step_pct"].startswith("{{ -5 * ")
+    assert ("ep1",) not in b, "a turn never rides the button's automation"
     click = b[("ep3", "{{ trigger.to_state.attributes.event_type == 'multi_press_1' }}")]
     assert click[0]["if"][0]["entity_id"] == "light.bedroom_a_main", "the channel's role"
     assert click[0]["then"] == [{"action": "script.bedroom_a_default"}], "the look of the hour"
@@ -433,8 +439,10 @@ def bed_wheel(house_with, secrets, tmp_path, room=BED):
     (path.parent / "rooms" / "bedroom_a.yml").write_text(room, encoding="utf-8")
     house = load_house(path)
     render(house, tmp_path, secrets)
-    (auto,) = load(tmp_path, "bedroom_a")["automation"]
-    return house, auto
+    autos = load(tmp_path, "bedroom_a")["automation"]
+    auto = autos[0]
+    turns = autos[1] if len(autos) > 1 else None
+    return house, auto, turns
 
 
 def ha(states: dict, **extra):
@@ -460,9 +468,9 @@ def walked(action: str, look: str, lit: bool) -> str:
 
 
 def test_a_channel_of_looks_walks_them_one_at_a_time_dimmest_first(house_with, secrets, tmp_path):
-    house, auto = bed_wheel(house_with, secrets, tmp_path)
+    house, _, turns = bed_wheel(house_with, secrets, tmp_path)
     assert any("the turn walks off · night · wake · evening" in h for h in house.hints)
-    b = branches(auto)
+    b = branches(turns)
     (up,) = b[("ep1",)]
     assert up["data"] == {"fade": 0.4}, "a turn lands the look now"
     assert up["continue_on_error"] is True
@@ -486,7 +494,7 @@ def test_a_channel_of_looks_walks_them_one_at_a_time_dimmest_first(house_with, s
 
 
 def test_a_channel_of_looks_keeps_every_other_gesture_the_houses(house_with, secrets, tmp_path):
-    _, auto = bed_wheel(house_with, secrets, tmp_path)
+    _, auto, _ = bed_wheel(house_with, secrets, tmp_path)
     b = branches(auto)
     ev = "{{ trigger.to_state.attributes.event_type == '%s' }}"
     assert b[("ep3", ev % "multi_press_1")] == [{"action": "script.bedroom_a_evening"}]
@@ -502,7 +510,7 @@ def test_a_channel_of_looks_keeps_every_other_gesture_the_houses(house_with, sec
 def test_the_first_press_after_a_restart_counts_and_a_return_never(house_with, secrets, tmp_path):
     import datetime as dt
 
-    _, auto = bed_wheel(house_with, secrets, tmp_path)
+    _, auto, _ = bed_wheel(house_with, secrets, tmp_path)
     guard = auto["conditions"][0]["value_template"]
     now = dt.datetime(2026, 9, 18, 2, 26, 39, tzinfo=dt.UTC)
 
@@ -545,3 +553,46 @@ def test_check_refuses_a_channel_of_looks_it_cannot_keep(house_with, secrets, ch
     with pytest.raises(HouseError) as exc:
         load_house(path)
     assert said in str(exc.value)
+
+
+def test_a_room_channel_can_dim_what_is_lit_and_light_its_first_look_from_dark(
+    house_with, secrets, tmp_path
+):
+    room = BED.replace(
+        "        looks: [night, wake, evening]\n",
+        "        looks: [night]\n        turn: { level: step, lit: true }\n",
+    )
+    house, _, turns = bed_wheel(house_with, secrets, tmp_path, room)
+    assert any("the turn dims what is lit — from dark, night" in h for h in house.hints)
+    t = branches(turns)
+    (up,) = t[("ep1",)]
+    dark = up["if"][0]["value_template"]
+    assert up["then"] == [{"action": "script.bedroom_a_night"}], "from dark, the first look"
+    (step,) = up["else"]
+    assert step["data"] == {
+        "brightness_step_pct": "{{ 5 * (trigger.event.data.notches | int(1)) }}"
+    }
+    on, off = {"light.bedroom_a_main": "on"}, {"light.bedroom_a_main": "off"}
+    assert ha(off).from_string(dark).render() == "True"
+    assert ha(on).from_string(dark).render() == "False"
+    assert ha(on).from_string(step["target"]["entity_id"]).render() == "['light.bedroom_a_main']"
+    assert ha(off).from_string(step["target"]["entity_id"]).render() == "[]", (
+        "only what is lit: the room's group would light every light of it"
+    )
+    gate, down = t[("ep2",)]
+    assert ha(off).from_string(gate["value_template"]).render() == "False", "down from dark: none"
+    assert down["data"]["brightness_step_pct"].startswith("{{ -5 * "), (
+        "down to the floor is off — Home Assistant turns off a light a step takes to 0"
+    )
+
+
+def test_check_refuses_lit_where_it_means_nothing(house_with):
+    path = house_with(lambda d: d["things"].append(WHEEL))
+    room = BED.split("hands:")[0] + (
+        "hands:\n  bedroom_a_wheel: { behaviour: dimmer_wheel, channels: "
+        "{ 1: { role: main, turn: { level: step, lit: true } } } }\n"
+    )
+    (path.parent / "rooms" / "bedroom_a.yml").write_text(room, encoding="utf-8")
+    with pytest.raises(HouseError) as exc:
+        load_house(path)
+    assert "lit: rides a level: step on the room" in str(exc.value)

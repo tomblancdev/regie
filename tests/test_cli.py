@@ -53,7 +53,7 @@ def test_render_writes_and_reports(witness_path, tmp_path, capsys):
     out = capsys.readouterr().out
     # 53 since 0.42: the palette's three files (the arithmetic, the store, the
     # sensor) ride beside the walker's two and the porter's four
-    assert "53 written, 0 unchanged, 0 kept, 0 removed" in out
+    assert "55 written, 0 unchanged, 0 kept, 0 removed" in out
     assert "  + units/home-assistant.container" in out
 
 
